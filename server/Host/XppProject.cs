@@ -80,7 +80,8 @@ namespace XppVsCode.Server.Host
             return true;
         }
 
-        private XDocument Load() => XDocument.Load(FullName, LoadOptions.PreserveWhitespace);
+        // Visual Studio writes project files indented with two spaces; XDocument.Save matches that.
+        private XDocument Load() => XDocument.Load(FullName);
 
         private static string FolderFor(string objectType)
         {
@@ -112,7 +113,13 @@ namespace XppVsCode.Server.Host
                 case "AxFormExtension": return "Form Extensions";
                 case "AxEnumExtension": return "Base Enum Extensions";
                 case "AxEdtExtension": return "Extended Data Type Extensions";
-                default: return objectType.StartsWith("Ax") ? objectType.Substring(2) : objectType;
+                case "AxDataEntityViewExtension": return "Data Entity Extensions";
+                case "AxSecurityDutyExtension": return "Security Duty Extensions";
+                case "AxSecurityRoleExtension": return "Security Role Extensions";
+                default:
+                    // e.g. AxMenuItemDisplayExtension -> "Menu Item Display Extensions"
+                    string bare = objectType.StartsWith("Ax") ? objectType.Substring(2) : objectType;
+                    return System.Text.RegularExpressions.Regex.Replace(bare, "(?<=[a-z])(?=[A-Z])", " ") + "s";
             }
         }
     }
