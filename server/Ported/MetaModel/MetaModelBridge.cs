@@ -70,6 +70,12 @@ namespace XppVsCode.Server.MetaModel
                 case "AxEnumExtension":
                 case "AxEdtExtension":
                 case "AxFormExtension":
+                case "AxSecurityPrivilege":
+                case "AxSecurityDuty":
+                case "AxSecurityRole":
+                case "AxSecurityDutyExtension":
+                case "AxSecurityRoleExtension":
+                case "AxDataEntityViewExtension":
                     return true;
                 default:
                     return false;
@@ -88,6 +94,9 @@ namespace XppVsCode.Server.MetaModel
 
             try
             {
+                string preError = PreValidateCreate(request);
+                if (preError != null) return Fail(preError);
+
                 MetaModelResult result;
                 switch (request.ObjectType)
                 {
@@ -114,6 +123,9 @@ namespace XppVsCode.Server.MetaModel
                     case "AxEnumExtension":  result = CreateEnumExtension(request, saveInfo); break;
                     case "AxEdtExtension":   result = CreateEdtExtension(request, saveInfo); break;
                     case "AxFormExtension":  result = CreateFormExtension(request, saveInfo); break;
+                    case "AxSecurityDutyExtension": result = CreateSecurityDutyExtension(request, saveInfo); break;
+                    case "AxSecurityRoleExtension": result = CreateSecurityRoleExtension(request, saveInfo); break;
+                    case "AxDataEntityViewExtension": result = CreateDataEntityViewExtension(request, saveInfo); break;
 
                     default:
                         result = Fail("Unsupported object type: " + request.ObjectType); break;
@@ -187,6 +199,18 @@ namespace XppVsCode.Server.MetaModel
                         result = UpdateEdtExtension(request); break;
                     case "AxFormExtension":
                         result = UpdateFormExtension(request); break;
+                    case "AxSecurityPrivilege":
+                        result = UpdateSecurityPrivilege(request); break;
+                    case "AxSecurityDuty":
+                        result = UpdateSecurityDuty(request); break;
+                    case "AxSecurityRole":
+                        result = UpdateSecurityRole(request); break;
+                    case "AxSecurityDutyExtension":
+                        result = UpdateSecurityDutyExtension(request); break;
+                    case "AxSecurityRoleExtension":
+                        result = UpdateSecurityRoleExtension(request); break;
+                    case "AxDataEntityViewExtension":
+                        result = UpdateDataEntityViewExtension(request); break;
                     default:
                         result = UpdateGenericByTypedApi(request); break;
                 }
@@ -341,6 +365,7 @@ namespace XppVsCode.Server.MetaModel
                         var priv = MetaService.GetSecurityPrivilege(objectName);
                         if (priv == null) return new ReadObjectResult { Message = "SecurityPrivilege '" + objectName + "' not found." };
                         PopulateReadResultFromGenericObject(result, objectType, priv);
+                        result.EntryPoints = ExtractEntryPoints(priv);
                         result.ModelName = GetObjectModelName(objectType, objectName);
                         break;
 
@@ -954,8 +979,7 @@ namespace XppVsCode.Server.MetaModel
                     if (!string.IsNullOrEmpty(ep.ObjectName) &&
                         !string.Equals(ep.ObjectName, actual.ObjectName, StringComparison.OrdinalIgnoreCase))
                         mismatches.Add("EntryPoint '" + ep.Name + "'.ObjectName: expected '" + ep.ObjectName + "', actual '" + (actual.ObjectName ?? "") + "'");
-                    if (!string.IsNullOrEmpty(ep.Grant) &&
-                        !string.Equals(ep.Grant, actual.Grant, StringComparison.OrdinalIgnoreCase))
+                    if (!string.IsNullOrEmpty(ep.Grant) && !GrantsEqual(ep.Grant, actual.Grant))
                         mismatches.Add("EntryPoint '" + ep.Name + "'.Grant: expected '" + ep.Grant + "', actual '" + (actual.Grant ?? "") + "'");
                 }
             }
@@ -1817,25 +1841,19 @@ namespace XppVsCode.Server.MetaModel
 
         private MetaModelResult CreateSecurityPrivilege(CreateObjectRequest req, ModelSaveInfo saveInfo)
         {
-            var priv = new AxSecurityPrivilege { Name = req.ObjectName };
-            ApplyTypedMetadata(priv, req);
-            MetaService.CreateSecurityPrivilege(priv, saveInfo);
+            MetaService.CreateSecurityPrivilege(new AxSecurityPrivilege { Name = req.ObjectName }, saveInfo);
             return Ok("Created AxSecurityPrivilege '" + req.ObjectName + "'.");
         }
 
         private MetaModelResult CreateSecurityDuty(CreateObjectRequest req, ModelSaveInfo saveInfo)
         {
-            var duty = new AxSecurityDuty { Name = req.ObjectName };
-            ApplyTypedMetadata(duty, req);
-            MetaService.CreateSecurityDuty(duty, saveInfo);
+            MetaService.CreateSecurityDuty(new AxSecurityDuty { Name = req.ObjectName }, saveInfo);
             return Ok("Created AxSecurityDuty '" + req.ObjectName + "'.");
         }
 
         private MetaModelResult CreateSecurityRole(CreateObjectRequest req, ModelSaveInfo saveInfo)
         {
-            var role = new AxSecurityRole { Name = req.ObjectName };
-            ApplyTypedMetadata(role, req);
-            MetaService.CreateSecurityRole(role, saveInfo);
+            MetaService.CreateSecurityRole(new AxSecurityRole { Name = req.ObjectName }, saveInfo);
             return Ok("Created AxSecurityRole '" + req.ObjectName + "'.");
         }
 
@@ -2168,7 +2186,8 @@ namespace XppVsCode.Server.MetaModel
         {
             return Fail("Update for type '" + req.ObjectType + "' is not yet supported via the typed API. "
                 + "Supported types: AxClass, AxTable, AxForm, AxEdt, AxEnum, AxView, AxQuery, AxDataEntityView, AxMenu, "
-                + "AxTableExtension, AxEnumExtension, AxEdtExtension, AxFormExtension.");
+                + "AxSecurityPrivilege, AxSecurityDuty, AxSecurityRole, AxTableExtension, AxEnumExtension, AxEdtExtension, "
+                + "AxFormExtension, AxDataEntityViewExtension, AxSecurityDutyExtension, AxSecurityRoleExtension.");
         }
 
         // ── Utility methods ──
@@ -2369,7 +2388,10 @@ namespace XppVsCode.Server.MetaModel
                     if (modelInfo != null) break;
                 }
 
+                // The service has no model lookup for some types (e.g. data entity extensions); every provider does.
                 string modelName = modelInfo?.Name;
+                if (modelName == null)
+                    ReadViaMetadataProvider(objectType, objectName, out modelName);
                 
                 // Cache the result
                 _objectModelNameCache[cacheKey] = new CachedModelName
@@ -2587,7 +2609,10 @@ namespace XppVsCode.Server.MetaModel
                 (target as AxTableExtension)?.PropertyModifications
                 ?? (target as AxEnumExtension)?.PropertyModifications
                 ?? (target as AxEdtExtension)?.PropertyModifications
-                ?? (target as AxFormExtension)?.PropertyModifications;
+                ?? (target as AxFormExtension)?.PropertyModifications
+                ?? (target as AxDataEntityViewExtension)?.PropertyModifications
+                ?? (target as AxSecurityDutyExtension)?.PropertyModifications
+                ?? (target as AxSecurityRoleExtension)?.PropertyModifications;
             if (mods == null) return false;
             if (props == null) return true;
 
@@ -2601,37 +2626,6 @@ namespace XppVsCode.Server.MetaModel
                     mods.Add(new AxPropertyModification { Name = kvp.Key, Value = kvp.Value });
             }
             return true;
-        }
-
-        private static void ApplyEntryPoints(object secObj, List<EntryPointDto> entryPoints)
-        {
-            if (entryPoints == null) return;
-            // Use reflection to access EntryPoints/Privileges collections
-            var epProp = secObj.GetType().GetProperty("EntryPoints");
-            if (epProp != null)
-            {
-                var collection = epProp.GetValue(secObj);
-                var addMethod = collection?.GetType().GetMethod("Add");
-                if (addMethod != null)
-                {
-                    foreach (var ep in entryPoints)
-                    {
-                        if (string.IsNullOrEmpty(ep.Name)) continue;
-                        var axEp = new AxSecurityEntryPointReference { Name = ep.Name };
-                        if (!string.IsNullOrEmpty(ep.ObjectName))
-                            axEp.ObjectName = ep.ObjectName;
-                        try
-                        {
-                            if (!string.IsNullOrEmpty(ep.ObjectType))
-                                axEp.ObjectType = (EntryPointType)Enum.Parse(typeof(EntryPointType), ep.ObjectType, true);
-                        }
-                        catch { }
-                        if (!string.IsNullOrEmpty(ep.Grant))
-                            TrySetPropertyValue(axEp, ep.Grant, "Grant");
-                        addMethod.Invoke(collection, new object[] { axEp });
-                    }
-                }
-            }
         }
 
         private void ApplyTypedMetadata(object target, CreateObjectRequest req)
@@ -2702,6 +2696,7 @@ namespace XppVsCode.Server.MetaModel
             if (target is AxQuerySimple axQuery)
                 ApplyQueryDataSources(axQuery, req.DataSources);
             ApplyEntryPoints(target, req.EntryPoints);
+            ApplySecurityReferences(target, req);
 
             // Scalar properties last - references to fields/indexes/etc. are now valid.
             if (!ApplyPropertyModifications(target, req.Properties))

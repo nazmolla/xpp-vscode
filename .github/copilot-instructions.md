@@ -54,7 +54,8 @@ Target environments: unified developer environments (UDE, Power Platform hosted)
 ## Status (2026-10-20)
 - Done: scaffold; all 18 tools ported and passing the read-only smoke test (8 s); extension registers the MCP server and passes the project.
 - Not yet verified: write tools (`xpp_create_object`, `xpp_update_object`, `xpp_add_to_project`, `xpp_create_label`) — need test objects in `testcust` (ask the user first); speed of `MetadataHost.Reset()` after each write; loading the extension in VS Code (F5 / Extension Development Host) and Copilot picking up the server.
-- Known gaps (also in the VS extension): no data entity extensions (`AxDataEntityViewExtension`), no tool to create a label file (`AxLabelFile`), no delete tool.
+- Known gaps (also in the VS extension): no tool to create a label file (`AxLabelFile`), no delete tool.
+- Data entity extensions (`AxDataEntityViewExtension` with `entityFields`, auto-extends the staging table) and security (privilege entry points with real grants, data entity permissions, duty/role extensions, `removeSecurityItems`) were added in both repos and tested on `XvsTest*` objects in `testcust`. `scripts/call.ps1 -CallsFile <json>` runs ad-hoc tool calls.
 
 ## Next steps (in order)
 1. Verify the write tools on `Xvs*` test objects in `testcust` (with the user's OK); measure and, if slow, make `Reset()` cheaper.

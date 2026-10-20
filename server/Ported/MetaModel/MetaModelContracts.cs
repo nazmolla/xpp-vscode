@@ -55,6 +55,23 @@ namespace XppVsCode.Server.MetaModel
         public string Grant { get; set; }
     }
 
+    public sealed class DataEntityPermissionDto
+    {
+        public string Name { get; set; }
+        public string Grant { get; set; }
+        public string IntegrationMode { get; set; }
+    }
+
+    // A field added by a data entity extension, mapped to a field of one of the entity's data sources.
+    public sealed class EntityFieldDto
+    {
+        public string Name { get; set; }
+        public string DataSource { get; set; }
+        public string DataField { get; set; }
+        public string Label { get; set; }
+        public bool? Mandatory { get; set; }
+    }
+
     public sealed class QueryRangeDto
     {
         public string Field { get; set; }
@@ -122,6 +139,11 @@ namespace XppVsCode.Server.MetaModel
         public List<QueryDataSourceDto> DataSources { get; set; }
         public List<FormControlDto> Controls { get; set; }
         public List<ControlModificationDto> ControlModifications { get; set; }
+        public List<string> Privileges { get; set; }
+        public List<string> Duties { get; set; }
+        public List<DataEntityPermissionDto> DataEntityPermissions { get; set; }
+        public List<EntityFieldDto> EntityFields { get; set; }
+        public bool SkipStagingTable { get; set; }
 
         /// <summary>
         /// Convert to an UpdateObjectRequest so Create can delegate metadata
@@ -146,7 +168,12 @@ namespace XppVsCode.Server.MetaModel
                 EntryPoints = EntryPoints,
                 DataSources = DataSources,
                 Controls = Controls,
-                ControlModifications = ControlModifications
+                ControlModifications = ControlModifications,
+                Privileges = Privileges,
+                Duties = Duties,
+                DataEntityPermissions = DataEntityPermissions,
+                EntityFields = EntityFields,
+                SkipStagingTable = SkipStagingTable
             };
         }
     }
@@ -172,6 +199,13 @@ namespace XppVsCode.Server.MetaModel
         public List<QueryDataSourceDto> DataSources { get; set; }
         public List<FormControlDto> Controls { get; set; }
         public List<ControlModificationDto> ControlModifications { get; set; }
+        public List<string> Privileges { get; set; }
+        public List<string> Duties { get; set; }
+        public List<DataEntityPermissionDto> DataEntityPermissions { get; set; }
+        public List<EntityFieldDto> EntityFields { get; set; }
+        public bool SkipStagingTable { get; set; }
+        // Entry points, privileges, duties or data entity permissions to remove, by name.
+        public List<string> RemoveSecurityItems { get; set; }
     }
 
     // ── Result DTOs ──

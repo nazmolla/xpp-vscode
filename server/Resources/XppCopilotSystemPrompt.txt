@@ -425,7 +425,9 @@ For EACH object, follow these three steps:
     Call the CREATE OBJECT tool with:
       - ObjectType: AxClass, AxTable, AxEdt, AxEnum, AxForm, AxMenuItemDisplay,
         AxMenuItemOutput, AxMenuItemAction, AxMenuExtension, AxQuery,
-        AxSecurityPrivilege, AxTableExtension, AxEnumExtension, AxEdtExtension
+        AxSecurityPrivilege, AxSecurityDuty, AxSecurityRole, AxTableExtension, AxEnumExtension,
+        AxEdtExtension, AxFormExtension, AxDataEntityViewExtension, AxSecurityDutyExtension,
+        AxSecurityRoleExtension
         (match the object kind)
       - ObjectName: the name from your plan (following the model's prefix convention).
         For extensions: '<BaseObject>.<Suffix>' (e.g. CustTable.MyModelExtension) — the
@@ -439,7 +441,11 @@ For EACH object, follow these three steps:
       - indexes: [{"name": "...", "allowDuplicates": false, "fields": ["FieldName"]}]
       - fieldGroups: [{"name": "...", "label": "...", "fields": ["FieldName"]}]
       - relations: [{"name": "...", "relatedTable": "...", "constraints": [{"field": "...", "relatedField": "..."}]}]
-      - entryPoints: [{"name": "...", "objectType": "...", "objectName": "..."}] for security
+      - entryPoints: [{"name": "...", "objectType": "MenuItemDisplay", "objectName": "...", "grant": "Read"}]
+        for privileges (grant: Read, Update, Create, Correct, Delete, Invoke, All; comma-separated)
+      - privileges: ["PrivName"] for duties/roles; duties: ["DutyName"] for roles
+      - dataEntityPermissions: [{"name": "EntityName", "grant": "Read,Update"}] for privileges
+      - entityFields: [{"name": "...", "dataSource": "...", "dataField": "..."}] for data entity extensions
     TIP: Use xpp_read_object on an existing similar object to discover exact property names
     and see the formatted output you can reuse as a template.
     Include ALL metadata — do not leave anything for manual designer configuration.
@@ -654,6 +660,34 @@ Enum extensions:
 
 EDT extensions:
   - Modify properties like StringSize, label, help text
+
+DATA ENTITY EXTENSIONS — ENTITY AND STAGING TABLE TOGETHER (MANDATORY):
+  A field added to a data entity must also exist on the entity's staging table, or data
+  management import/export breaks. The tools do both in one call:
+  1. Make sure each source field exists on the table behind the entity data source (add it with
+     an AxTableExtension first if it is new).
+  2. xpp_read_object the entity (AxDataEntityView) to see its data sources and staging table.
+  3. xpp_create_object objectType=AxDataEntityViewExtension, objectName='<Entity>.<Suffix>',
+     entityFields=[{"name":"XvsDemoOrderNumber","dataSource":"SalesTable","dataField":"XvsDemoOrderNumber"}].
+     Everything is validated before saving: the data source must be on the entity, the field must
+     exist on its table or a table extension, and the name must be unused on the entity.
+  4. The staging table extension '<StagingTable>.<Suffix>' is created (or updated) automatically
+     with the same fields, copying type/EDT/enum from the source field. Read the "Staging table"
+     line in the result; add both extensions to the project.
+  Add more fields later with xpp_update_object on the same entity extension.
+  For dual-write, extend the entity that the dual-write map uses (e.g. SalesOrderHeaderV2Entity,
+  SalesOrderLineV2Entity) and tell the user to refresh the map in Power Platform.
+
+SECURITY — WHAT CAN BE CHANGED AND HOW:
+  - Standard privileges CANNOT be extended. Create your own AxSecurityPrivilege with entryPoints
+    (and dataEntityPermissions for entities), then add it to the standard duty or role with an
+    AxSecurityDutyExtension / AxSecurityRoleExtension named '<StandardDutyOrRole>.<Suffix>'
+    (privileges: [...], duties: [...]).
+  - Your own privileges/duties/roles: change them with xpp_update_object (entryPoints are added
+    or updated by name; removeSecurityItems removes entry points, permissions, privileges, duties).
+  - Grants: menu item display/output → Read (view) or Read,Update,Create,Delete (maintain);
+    menu item action → Invoke. Omitted grants default to Read (Invoke for actions).
+  - Every referenced menu item, privilege, duty and entity is checked before saving.
 
 ────────────────────────────────────────────────────────
 2. CODE EXTENSIONS — Chain of Command (CoC)

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace XppVsCode.Server.MetaModel
@@ -116,7 +117,12 @@ namespace XppVsCode.Server.MetaModel
                 EntryPoints = ParseEntryPoints(body),
                 DataSources = ParseDataSources(body),
                 Controls = ParseFormControls(body, "controls"),
-                ControlModifications = ParseControlModifications(body)
+                ControlModifications = ParseControlModifications(body),
+                Privileges = ExtractJsonStringArray(body, "privileges")?.ToList(),
+                Duties = ExtractJsonStringArray(body, "duties")?.ToList(),
+                DataEntityPermissions = ParseDataEntityPermissions(body),
+                EntityFields = ParseEntityFields(body),
+                SkipStagingTable = "true".Equals(ExtractJsonString(body, "skipStagingTable"), StringComparison.OrdinalIgnoreCase)
             };
 
             // Reject any formatted markup in declaration or methods
@@ -191,7 +197,13 @@ namespace XppVsCode.Server.MetaModel
                 EntryPoints = ParseEntryPoints(body),
                 DataSources = ParseDataSources(body),
                 Controls = ParseFormControls(body, "controls"),
-                ControlModifications = ParseControlModifications(body)
+                ControlModifications = ParseControlModifications(body),
+                Privileges = ExtractJsonStringArray(body, "privileges")?.ToList(),
+                Duties = ExtractJsonStringArray(body, "duties")?.ToList(),
+                DataEntityPermissions = ParseDataEntityPermissions(body),
+                EntityFields = ParseEntityFields(body),
+                SkipStagingTable = "true".Equals(ExtractJsonString(body, "skipStagingTable"), StringComparison.OrdinalIgnoreCase),
+                RemoveSecurityItems = ExtractJsonStringArray(body, "removeSecurityItems")?.ToList()
             };
 
             // Reject any formatted markup in declaration or methods
@@ -1434,6 +1446,47 @@ namespace XppVsCode.Server.MetaModel
             return result.Count > 0 ? result : null;
         }
 
+        private System.Collections.Generic.List<DataEntityPermissionDto> ParseDataEntityPermissions(string body)
+        {
+            string arrayJson = ExtractJsonArray(body, "dataEntityPermissions");
+            if (arrayJson == null) return null;
+            var result = new System.Collections.Generic.List<DataEntityPermissionDto>();
+            foreach (string obj in SplitJsonObjects(arrayJson))
+            {
+                string name = ExtractJsonString(obj, "name");
+                if (string.IsNullOrEmpty(name)) continue;
+                result.Add(new DataEntityPermissionDto
+                {
+                    Name = name,
+                    Grant = ExtractJsonString(obj, "grant"),
+                    IntegrationMode = ExtractJsonString(obj, "integrationMode")
+                });
+            }
+            return result.Count > 0 ? result : null;
+        }
+
+        private System.Collections.Generic.List<EntityFieldDto> ParseEntityFields(string body)
+        {
+            string arrayJson = ExtractJsonArray(body, "entityFields");
+            if (arrayJson == null) return null;
+            var result = new System.Collections.Generic.List<EntityFieldDto>();
+            foreach (string obj in SplitJsonObjects(arrayJson))
+            {
+                string name = ExtractJsonString(obj, "name");
+                if (string.IsNullOrEmpty(name)) continue;
+                string mandatory = ExtractJsonString(obj, "mandatory");
+                result.Add(new EntityFieldDto
+                {
+                    Name = name,
+                    DataSource = ExtractJsonString(obj, "dataSource"),
+                    DataField = ExtractJsonString(obj, "dataField"),
+                    Label = ExtractJsonString(obj, "label"),
+                    Mandatory = mandatory == null ? (bool?)null : "true".Equals(mandatory, StringComparison.OrdinalIgnoreCase)
+                });
+            }
+            return result.Count > 0 ? result : null;
+        }
+
         private System.Collections.Generic.List<FormControlDto> ParseFormControls(string json, string key)
         {
             string arrayJson = ExtractJsonArray(json, key);
@@ -1562,7 +1615,8 @@ namespace XppVsCode.Server.MetaModel
             {
                 "objectType", "objectName", "modelName", "declaration", "methods",
                 "enumValues", "fields", "indexes", "fieldGroups", "relations",
-                "entryPoints", "dataSources", "typedMetadata", "properties", "action"
+                "entryPoints", "dataSources", "typedMetadata", "properties", "action",
+                "privileges", "duties", "dataEntityPermissions", "entityFields", "skipStagingTable", "removeSecurityItems"
             };
 
         private static System.Collections.Generic.Dictionary<string, string> ExtractFlatProperties(string json)
