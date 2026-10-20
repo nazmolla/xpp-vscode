@@ -2,42 +2,47 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using XppVsCode.Server.Host;
+using XppVsCode.Server.MetaModel;
+using XppVsCode.Server.Tools;
 
 namespace XppVsCode.Server
 {
     internal static class Program
     {
-        public const string Version = "0.0.1";
+        public const string Version = "0.1.0";
 
         private static int Main(string[] args)
         {
-            string configFile = ArgValue(args, "--config");
-            XppConfig config;
-            try
+            DynamicsConfigurationReader.ConfigFileOverride = ArgValue(args, "--config");
+            var config = DynamicsConfigurationReader.ReadActiveConfiguration();
+            if (string.IsNullOrEmpty(config.FrameworkDirectory) || !config.HasReference)
             {
-                config = XppConfig.Load(configFile);
-            }
-            catch (Exception ex)
-            {
-                Log.Write(ex.Message);
+                Log.Write("No usable D365FO configuration (" + (config.ConfigurationFilePath ?? "none found") + ").");
                 return 1;
             }
 
-            string bin = config.BinDirectory;
+            string bin = Path.Combine(config.FrameworkDirectory, "bin");
             AppDomain.CurrentDomain.AssemblyResolve += (s, e) =>
             {
                 string path = Path.Combine(bin, new AssemblyName(e.Name).Name + ".dll");
                 return File.Exists(path) ? Assembly.LoadFrom(path) : null;
             };
 
-            Log.Write("xpp-vscode server " + Version + " using " + config.ConfigFile);
-            Run(config);
+            string project = ArgValue(args, "--project");
+            Log.Write("xpp-vscode server " + Version + " | config " + config.ConfigurationFilePath + " | project " + (project ?? "none"));
+            Run(config, project);
             return 0;
         }
 
-        // Kept separate so D365FO types are only JIT-resolved after AssemblyResolve is registered.
+        // Kept separate so D365FO types are only resolved after AssemblyResolve is registered.
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static void Run(XppConfig config) => new McpServer(new ToolRouter(config), Version).Run();
+        private static void Run(DynamicsMetadataConfig config, string projectFile)
+        {
+            var bridge = new MetaModelBridge(new MetadataHost(config), new LabelStore(config), projectFile);
+            var router = new ToolRouter(new BridgeClient(new MetaModelBridgeServer(bridge)));
+            new McpStdioServer(router, Version).Run();
+        }
 
         private static string ArgValue(string[] args, string name)
         {
