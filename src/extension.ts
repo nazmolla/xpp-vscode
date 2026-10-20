@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { readActiveEnvironment } from './environment';
 import { registerMcpProvider } from './mcpProvider';
+import { checkEnvironmentConnection } from './ude';
 
 export function activate(context: vscode.ExtensionContext): void {
     const log = vscode.window.createOutputChannel('X++');
@@ -17,6 +18,8 @@ export function activate(context: vscode.ExtensionContext): void {
             vscode.window.showErrorMessage((err as Error).message);
         }
     }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('xpp.checkEnvironment', () => checkEnvironmentConnection(log)));
 }
 
 export function deactivate(): void { }

@@ -33,6 +33,11 @@
         "command": "xpp.showEnvironment",
         "title": "Show Active Environment",
         "category": "X++"
+      },
+      {
+        "command": "xpp.checkEnvironment",
+        "title": "Check Environment Connection",
+        "category": "X++"
       }
     ],
     "configuration": {
@@ -42,6 +47,16 @@
           "type": "string",
           "default": "",
           "description": "Full path of the D365FO project (.rnrproj) that new objects are added to. Defaults to the first .rnrproj in the workspace."
+        },
+        "xpp.environmentUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Dataverse URL of your unified developer environment, e.g. https://yourorg.crm.dynamics.com."
+        },
+        "xpp.auth.clientId": {
+          "type": "string",
+          "default": "",
+          "description": "Optional Microsoft Entra app (client) ID to sign in with, if your tenant does not allow VS Code's default sign-in for Dataverse."
         }
       }
     }

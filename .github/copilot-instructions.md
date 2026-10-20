@@ -61,7 +61,7 @@ Target environments: unified developer environments (UDE, Power Platform hosted)
 1. Verify the write tools on `Xvs*` test objects in `testcust` (with the user's OK); measure and, if slow, make `Reset()` cheaper.
 2. Run the extension in an Extension Development Host; confirm Copilot lists and calls the X++ tools.
 3. Add data entity extensions and label file creation (port back to the VS extension).
-4. "X++: Connect to environment" command implementing the UDE setup above (spike sign-in first: does a VS Code Microsoft auth session token for the Dataverse scope work against the DevTools service?).
+4. "X++: Connect to environment" command implementing the UDE setup above. Read-only first part is built: `src/ude.ts`, command "X++: Check Environment Connection" (sign-in via `vscode.authentication` 'microsoft' with `<dataverseUrl>/.default`, optional `xpp.auth.clientId`; Dataverse actions; DevTools download links + sizes). Needs a manual run with F5 (user interaction for sign-in) to confirm the token is accepted; then implement download/unzip/XRef restore/config/junctions/registry.
 5. Build/deploy/sync commands over `pac`.
 6. X++ language server client (syntax, IntelliSense).
 7. Debugging spike through DebuggerProxy in vsdbg mode.
