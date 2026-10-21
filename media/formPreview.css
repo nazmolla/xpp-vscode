@@ -1,41 +1,110 @@
-/* Form preview shared by the form layout view and the element designer. */
-.form { border: 1px solid var(--vscode-panel-border); padding: 8px; min-height: 100%; box-sizing: border-box; background: var(--vscode-editor-background); }
-.form-title { font-size: 1.3em; margin-bottom: 8px; }
-.tab { margin: 6px 0; border: 1px solid transparent; }
-.tab-headers { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--vscode-panel-border); }
-.tab-header { background: transparent; color: var(--vscode-foreground); border: none; border-bottom: 2px solid transparent; padding: 3px 10px; cursor: pointer; }
-.tab-header.active { border-bottom-color: var(--vscode-focusBorder); font-weight: 600; }
-fieldset { border: 1px solid var(--vscode-panel-border); margin: 6px 0; padding: 6px 8px; }
-fieldset.page { border-top: none; }
-legend { font-weight: 600; padding: 0 4px; }
-.flow { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: flex-start; }
-.flow > fieldset.group { flex: 1 1 260px; }
-.field { display: flex; flex-direction: column; min-width: 160px; border: 1px solid transparent; padding: 2px; cursor: pointer; }
-.field label { font-size: 0.9em; color: var(--vscode-descriptionForeground); }
-.input {
-    height: 20px;
-    background: var(--vscode-input-background);
-    border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
-    text-align: right;
-    padding-right: 4px;
+/* Form preview styled after the finance and operations web client (light theme, like Visual Studio's preview). */
+.form {
+    --fo-accent: #0078d4;
+    --fo-text: #212121;
+    --fo-muted: #605e5c;
+    --fo-border: #c8c6c4;
+    --fo-input: #ffffff;
+    --fo-bg: #ffffff;
+    --fo-subtle: #f3f2f1;
+    background: var(--fo-bg);
+    color: var(--fo-text);
+    font-family: "Segoe UI", "Segoe UI Web (West European)", system-ui, -apple-system, sans-serif;
+    font-size: 13px;
+    padding: 12px 24px 24px;
+    min-height: 100%;
+    box-sizing: border-box;
 }
-.input.checkbox { width: 16px; height: 16px; }
-.grid { overflow-x: auto; margin: 6px 0; border: 1px solid transparent; }
-.grid table { border-collapse: collapse; min-width: 100%; }
-.grid th, .grid td { border: 1px solid var(--vscode-panel-border); padding: 2px 6px; text-align: left; white-space: nowrap; }
-.actionpane, .buttongroup { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 4px; border: 1px solid transparent; }
-.actionpane { background: var(--vscode-sideBar-background); margin-bottom: 6px; }
-.apt-caption { font-weight: 600; margin-right: 6px; }
+.form-title { font-size: 24px; font-weight: 600; margin: 12px 0 16px; }
+.form .muted { color: var(--fo-muted); font-size: 12px; }
+
+/* action pane */
+.actionpane { border-bottom: 1px solid var(--fo-border); margin: -12px -24px 0; padding: 0 24px; background: var(--fo-subtle); }
+.actionpane-strip { display: flex; gap: 18px; padding-top: 6px; }
+.actionpane-tab { font-weight: 600; padding: 4px 0; color: var(--fo-text); border-bottom: 2px solid transparent; cursor: pointer; }
+.actionpane-tab.active { border-bottom-color: var(--fo-accent); }
+.actionpane-body { display: flex; flex-wrap: wrap; gap: 16px; padding: 6px 0; }
+.buttongroup { display: flex; flex-direction: column; gap: 2px; }
+.buttongroup-caption { font-size: 11px; color: var(--fo-muted); text-transform: uppercase; }
+.buttongroup-buttons { display: flex; flex-wrap: wrap; gap: 4px; }
 .fake-button {
+    background: transparent;
+    color: var(--fo-text);
+    border: 1px solid transparent;
+    padding: 2px 8px;
+    font: inherit;
     cursor: pointer;
-    background: var(--vscode-button-secondaryBackground);
-    color: var(--vscode-button-secondaryForeground);
-    border: none;
-    padding: 3px 10px;
 }
-.other { border: 1px dotted var(--vscode-panel-border); padding: 2px 4px; margin: 2px 0; }
-.other .type { color: var(--vscode-descriptionForeground); }
-.form .selected, .form.selected { outline: 2px solid var(--vscode-focusBorder) !important; outline-offset: 1px; }
-.form .added { border-style: dashed !important; border-color: var(--vscode-charts-green) !important; }
+.fake-button:hover { background: #e1dfdd; }
+
+/* vertical tabs (table of contents) */
+.vtabs { display: grid; grid-template-columns: 160px 1fr; gap: 16px; }
+.vtabs-nav { display: flex; flex-direction: column; border-right: 1px solid var(--fo-border); padding-right: 8px; }
+.vtab { padding: 8px 10px; cursor: pointer; color: var(--fo-text); border-left: 3px solid transparent; }
+.vtab.active { border-left-color: var(--fo-accent); background: var(--fo-subtle); font-weight: 600; }
+.vtab:hover { background: #edebe9; }
+
+/* horizontal tabs */
+.tab-headers { display: flex; gap: 16px; border-bottom: 1px solid var(--fo-border); margin-bottom: 8px; }
+.tab-header { padding: 6px 2px; cursor: pointer; border-bottom: 2px solid transparent; }
+.tab-header.active { border-bottom-color: var(--fo-accent); font-weight: 600; }
+
+/* fast tabs */
+.fasttabs { display: flex; flex-direction: column; gap: 8px; }
+.fasttab { border: 1px solid var(--fo-border); background: var(--fo-bg); }
+.fasttab-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 1px solid var(--fo-subtle);
+}
+.fasttab-toggle { border: 1px solid var(--fo-border); width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+.fasttab-body { padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 4px 32px; align-items: flex-start; }
+
+/* groups */
+.tabpage { display: flex; flex-wrap: wrap; gap: 4px 32px; align-items: flex-start; }
+.group { min-width: 220px; margin-bottom: 8px; break-inside: avoid; }
+.group-container { flex-basis: 100%; }
+.group-caption { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; margin: 6px 0 4px; }
+.group-body { display: flex; flex-direction: column; gap: 6px; }
+.group-container > .group-body { flex-direction: row; flex-wrap: wrap; gap: 4px 32px; }
+.static-text { color: var(--fo-text); margin: 4px 0 8px; flex-basis: 100%; }
+
+/* fields */
+.field { display: flex; flex-direction: column; gap: 2px; width: 220px; cursor: pointer; border: 1px solid transparent; padding: 1px; }
+.field label { font-size: 12px; color: var(--fo-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.input {
+    height: 24px;
+    box-sizing: border-box;
+    background: var(--fo-input);
+    border: 1px solid #8a8886;
+    padding: 2px 6px;
+    display: flex;
+    align-items: center;
+}
+.input.num { justify-content: flex-end; }
+.input.with-icon { justify-content: flex-end; color: var(--fo-muted); }
+.toggle-row { display: flex; align-items: center; gap: 8px; height: 24px; }
+.toggle { width: 36px; height: 18px; border-radius: 9px; border: 1px solid #605e5c; position: relative; box-sizing: border-box; }
+.toggle::after { content: ""; position: absolute; width: 10px; height: 10px; border-radius: 50%; background: #605e5c; top: 3px; left: 4px; }
+.toggle-text { color: var(--fo-text); }
+
+/* grids */
+.grid { overflow-x: auto; margin: 6px 0; flex-basis: 100%; border: 1px solid transparent; }
+.grid table { border-collapse: collapse; min-width: 100%; }
+.grid th { text-align: left; font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--fo-border); white-space: nowrap; }
+.grid td { padding: 6px 8px; border-bottom: 1px solid var(--fo-subtle); height: 14px; }
+.grid td.num { text-align: right; }
+.grid-check { width: 16px; }
+
+.other { border: 1px dotted var(--fo-border); padding: 2px 4px; margin: 2px 0; }
+.other .type { color: var(--fo-muted); }
+
+/* designer states */
+.form .selected, .form.selected { outline: 2px solid var(--fo-accent) !important; outline-offset: 1px; }
+.form .added { outline: 1px dashed #107c10; }
 .form .hidden { opacity: 0.45; }
-.muted { color: var(--vscode-descriptionForeground); }

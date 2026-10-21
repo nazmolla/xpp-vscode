@@ -25,6 +25,7 @@ namespace XppVsCode.Server.MetaModel
 
             string model = GetObjectModelName("AxForm", formName);
             int count = 0;
+            var render = NewRenderContext(effective.Form);
             return json.Serialize(new Dictionary<string, object>
             {
                 ["success"] = true,
@@ -43,12 +44,12 @@ namespace XppVsCode.Server.MetaModel
                     ["linkType"] = ds.LinkType.ToString(),
                     ["addedBy"] = effective.DataSourceAddedBy.TryGetValue(ds.Name, out string by) ? by : null,
                 }).ToList(),
-                ["root"] = DesignerNode(effective.Root, ref count),
+                ["root"] = DesignerNode(effective.Root, ref count, render),
                 ["truncated"] = count > MaxDesignerNodes,
             });
         }
 
-        private Dictionary<string, object> DesignerNode(FormControlNode node, ref int count)
+        private Dictionary<string, object> DesignerNode(FormControlNode node, ref int count, RenderContext render)
         {
             count++;
             var ctl = node.Control as AxFormControl;
@@ -57,17 +58,35 @@ namespace XppVsCode.Server.MetaModel
             foreach (var child in node.Children)
             {
                 if (count > MaxDesignerNodes) break;
-                children.Add(DesignerNode(child, ref count));
+                children.Add(DesignerNode(child, ref count, render));
             }
+            string dataField = GetStringProperty(node.Control, "DataField");
+            string dataGroup = GetStringProperty(node.Control, "DataGroup");
+            string table = RenderTable(render, EffectiveDataSource(node));
+            // Reference groups and segmented entries bind through ReferenceField instead of DataField.
+            var field = RenderField(render, table, dataField ?? GetStringProperty(node.Control, "ReferenceField"));
+            string groupLabel = null;
+            var groupFields = GroupFields(render, table, dataGroup, out groupLabel);
+            if (node.Children.Count > 0)
+                groupFields = null;
+            string shown = ResolveLabel(label);
+            if (string.IsNullOrEmpty(shown))
+                shown = field != null ? FieldLabel(render, field) : groupLabel ?? MenuItemLabel(render, node.Control);
             return new Dictionary<string, object>
             {
                 ["name"] = node.Name,
                 ["type"] = ctl?.Type.ToString() ?? "Design",
-                ["label"] = ResolveLabel(label),
+                ["label"] = shown,
                 ["labelId"] = label != null && label.StartsWith("@") ? label : null,
                 ["dataSource"] = GetStringProperty(node.Control, "DataSource"),
-                ["dataField"] = GetStringProperty(node.Control, "DataField"),
-                ["dataGroup"] = GetStringProperty(node.Control, "DataGroup"),
+                ["dataField"] = dataField,
+                ["dataGroup"] = dataGroup,
+                ["fieldKind"] = FieldKind(field),
+                ["groupFields"] = groupFields,
+                ["style"] = PropertyText(node.Control, "Style"),
+                ["columns"] = PropertyText(node.Control, "Columns"),
+                ["frameType"] = PropertyText(node.Control, "FrameType"),
+                ["showLabel"] = PropertyText(node.Control, "ShowLabel"),
                 ["visible"] = GetStringProperty(node.Control, "Visible") ?? node.Control?.GetType().GetProperty("Visible")?.GetValue(node.Control)?.ToString(),
                 ["pattern"] = GetStringProperty(node.Control, "Pattern"),
                 ["addedBy"] = node.AddedBy,

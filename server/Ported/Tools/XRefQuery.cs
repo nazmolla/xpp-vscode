@@ -101,6 +101,58 @@ namespace XppVsCode.Server.Tools
             }
         }
 
+        /// <summary>Where-used as JSON for the VS Code extension's references list.</summary>
+        public string QueryJson(string objectType, string objectName, string memberName, int max)
+        {
+            var json = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+            if (!TypeToFolder.TryGetValue(objectType ?? "", out string folder))
+                return json.Serialize(new Dictionary<string, object> { ["success"] = false, ["message"] = "Where-used is not available for " + objectType + "." });
+
+            var health = GetHealth();
+            if (!health.Usable)
+                return json.Serialize(new Dictionary<string, object> { ["success"] = false, ["message"] = health.Problem });
+
+            string objectPath = "/" + folder + "/" + objectName;
+            try
+            {
+                using (var conn = Open(health.Server, health.Database))
+                {
+                    if (!TargetExists(conn, objectPath, memberName))
+                        return json.Serialize(new Dictionary<string, object> { ["success"] = false, ["message"] = NotIndexedMessage(conn, health, objectType, objectName, objectPath, memberName) });
+
+                    var rows = QueryReferences(conn, objectPath, memberName, 0, max + 1);
+                    var references = rows.Take(max).Select(r =>
+                    {
+                        var parts = r.Source.TrimStart('/').Split('/');
+                        string type = parts.Length >= 2 ? TypeToFolder.FirstOrDefault(kv => kv.Value.Equals(parts[0], StringComparison.OrdinalIgnoreCase)).Key : null;
+                        return new Dictionary<string, object>
+                        {
+                            ["objectType"] = type,
+                            ["objectName"] = parts.Length >= 2 ? parts[1] : r.Source,
+                            ["memberPath"] = parts.Skip(2).ToArray(),
+                            ["member"] = Member(r.Source),
+                            ["target"] = Member(r.Target, objectLevel: "(type)"),
+                            ["kind"] = KindName(r.Kind),
+                            ["line"] = r.Line,
+                            ["module"] = r.Module,
+                        };
+                    }).ToList();
+                    return json.Serialize(new Dictionary<string, object>
+                    {
+                        ["success"] = true,
+                        ["references"] = references,
+                        ["more"] = rows.Count > max,
+                        ["warnings"] = health.Warnings,
+                    });
+                }
+            }
+            catch (SqlException ex)
+            {
+                InvalidateHealth();
+                return json.Serialize(new Dictionary<string, object> { ["success"] = false, ["message"] = "Cross-reference query failed: " + ex.Message });
+            }
+        }
+
         // ── Health / deployment checks ──
 
         private Health GetHealth()

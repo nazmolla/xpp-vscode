@@ -14,6 +14,14 @@ namespace XppVsCode.Server.Tools
         private readonly ModelObjectLister _modelLister = new ModelObjectLister();
         private readonly XRefQuery _xref = new XRefQuery();
 
+        /// <summary>Structured where-used for the extension's references list.</summary>
+        public string WhereUsedJson(string body)
+        {
+            int max = int.TryParse(JsonHelpers.ExtractJsonString(body, "maxResults"), out int m) ? Math.Max(1, Math.Min(m, 1000)) : 500;
+            return _xref.QueryJson(JsonHelpers.ExtractJsonString(body, "objectType"), JsonHelpers.ExtractJsonString(body, "objectName"),
+                JsonHelpers.ExtractJsonString(body, "memberName"), max);
+        }
+
         // Above this total method source size, reads return signatures only unless methodNames is given.
         private const int MaxInlineMethodSourceChars = 40000;
 

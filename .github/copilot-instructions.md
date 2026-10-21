@@ -71,3 +71,9 @@ Target environments: unified developer environments (UDE, Power Platform hosted)
 3. Completion provider (object names), label file creation tool, delete tool.
 4. Debugging spike through DebuggerProxy in vsdbg mode.
 5. Packaging: license still undecided (`UNLICENSED`), `vsce package`, publish as `nazmolla`.
+
+## Visual Studio Dynamics 365 menu mapping (v0.2)
+- Inventory came from reflection over the VS extension (`PkgCmdIDList` in ProjectSystem, `PkgMetadata+CmdId` in ApplicationExplorer).
+- Implemented: Dynamics 365 view (`src/d365Tools.ts`): create/update model (`IMetaModelService.CreateModel/UpdateModel`; disk provider needs `MetadataPath` = custom folder; Customization=Allow), model dependencies, create deployment package (`PLD\bin\RunPackageCreationAll.ps1`, same as VS), find labels, metadata search, find references (`where_used` = structured XRef query), open in browser / table browser, environment and pac commands. Application Explorer: add to project, create extension, create code extension (CoC), find references.
+- Not implemented: Launch Debugger (DebuggerProxy spike), Infolog, Import/Export project (.axpp), Compare, Find tag references, DGML diagrams.
+- Form preview (`media/formPreview.*`) mimics the web client; server adds label/fieldKind/style/columns/groupFields/showLabel per control (`MetaModelBridge.FormRender.cs`).

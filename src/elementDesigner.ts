@@ -126,8 +126,8 @@ export class ElementDesigner {
                 hasCode: CodeTypes.has(this.objectType),
                 isForm: this.objectType === 'AxForm',
             });
-            if (this.objectType === 'AxForm') {
-                const form = await this.server.bridge('get_form_tree', { formName: this.objectName });
+            if (this.objectType === 'AxForm' || this.objectType === 'AxFormExtension') {
+                const form = await this.server.bridge('get_form_tree', { formName: this.objectName.split('.')[0] });
                 if (form.success) {
                     this.post({ type: 'formTree', data: form });
                 }

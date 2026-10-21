@@ -72,6 +72,8 @@ namespace XppVsCode.Server
                     string paramsJson = JsonHelpers.ExtractNestedObject(json, "params") ?? "{}";
                     string action = JsonHelpers.ExtractJsonString(paramsJson, "action");
                     string body = JsonHelpers.ExtractNestedObject(paramsJson, "body") ?? "{}";
+                    if (action == "where_used")
+                        return JsonHelpers.BuildResult(idToken, _router.WhereUsedJson(body));
                     return JsonHelpers.BuildResult(idToken, _bridge.Call(action, body));
                 default:
                     return JsonHelpers.BuildError(idToken, -32601, "Method not found: " + method);

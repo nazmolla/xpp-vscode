@@ -3,6 +3,7 @@ import { AotTreeProvider } from './aot';
 import { XppBuilder } from './build';
 import { objectUri, XppCodeFileSystem, XppScheme } from './codeView';
 import { FormDesigner } from './designer';
+import { registerTools } from './d365Tools';
 import { DesignerNodeContext, ElementDesigner } from './elementDesigner';
 import { readActiveEnvironment } from './environment';
 import { registerMcpProvider } from './mcpProvider';
@@ -99,6 +100,10 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     });
     command('xpp.aot.clearFilter', () => aotTree.setFilter(''));
+    registerTools(context, server, () => {
+        aotTree.refresh();
+        projectTree.refresh();
+    }, command);
     command('xpp.designer.new', (node: DesignerNodeContext) => ElementDesigner.runAction('new', node));
     command('xpp.designer.newMethod', (node: DesignerNodeContext) => ElementDesigner.runAction('newMethod', node));
     command('xpp.designer.override', (node: DesignerNodeContext) => ElementDesigner.runAction('override', node));

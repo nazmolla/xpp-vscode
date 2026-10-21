@@ -39,6 +39,10 @@ namespace XppVsCode.Server.MetaModel
         string GetElementMethodJson(string objectType, string objectName, string[] path);
         string SetElementMethodJson(string objectType, string objectName, string[] nodePath, string originalName, string source);
         string GetOverridesJson(string objectType, string objectName, string[] nodePath);
+        string GetModelJson(string name);
+        string CreateModelJson(string name, string displayName, string publisher, string layer, string description, string[] references);
+        string UpdateModelJson(string name, string displayName, string publisher, string description, string[] references);
+        string ListPackagesJson();
 
         // ── Labels ──
 

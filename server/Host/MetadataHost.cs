@@ -47,6 +47,9 @@ namespace XppVsCode.Server.Host
             {
                 disk.AddMetadataPath(path);
             }
+            // New packages (Create model) go to the custom metadata folder, as in Visual Studio.
+            if (!string.IsNullOrEmpty(_config.CustomMetadataFolder))
+                disk.MetadataPath = _config.CustomMetadataFolder;
 
             _provider = new MetadataProviderFactory().CreateDiskProvider(disk);
             _metaService = new MetaModelServiceFactory().Create(_provider);

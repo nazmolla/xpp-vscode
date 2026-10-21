@@ -78,8 +78,30 @@ export function elementOpenCommand(objectType: string, objectName: string): vsco
 }
 
 export function elementContextValue(objectType: string): string {
-    return ['xppElement', CodeTypes.has(objectType) ? 'code' : '', objectType === 'AxForm' ? 'form' : ''].filter(Boolean).join(' ');
+    return ['xppElement', CodeTypes.has(objectType) ? 'code' : '', objectType === 'AxForm' ? 'form' : '',
+        ExtensionTypes[objectType] ? 'extensible' : '', CodeExtensionFunctions[objectType] ? 'coc' : '',
+        BrowserTypes.has(objectType) ? 'browser' : '', objectType === 'AxTable' ? 'table' : '', WhereUsedTypes.has(objectType) ? 'refs' : '',
+    ].filter(Boolean).join(' ');
 }
+
+/** Element types that have a metadata extension type (Create extension). */
+export const ExtensionTypes: Record<string, string> = {
+    AxTable: 'AxTableExtension', AxForm: 'AxFormExtension', AxEnum: 'AxEnumExtension', AxEdt: 'AxEdtExtension',
+    AxDataEntityView: 'AxDataEntityViewExtension', AxSecurityDuty: 'AxSecurityDutyExtension', AxSecurityRole: 'AxSecurityRoleExtension',
+};
+
+/** Element types that can have a Chain of Command class (Create code extension), with the intrinsic naming them. */
+export const CodeExtensionFunctions: Record<string, string> = {
+    AxClass: 'classStr', AxTable: 'tableStr', AxForm: 'formStr', AxDataEntityView: 'tableStr', AxView: 'tableStr', AxMap: 'mapStr',
+};
+
+/** Elements that can be opened in the web client. */
+export const BrowserTypes = new Set(['AxMenuItemDisplay', 'AxMenuItemOutput', 'AxMenuItemAction', 'AxClass', 'AxTable']);
+
+/** Element types the cross-reference database indexes. */
+export const WhereUsedTypes = new Set(['AxClass', 'AxTable', 'AxForm', 'AxEnum', 'AxEdt', 'AxView', 'AxQuery', 'AxDataEntityView', 'AxMap', 'AxMenu',
+    'AxMenuItemDisplay', 'AxMenuItemAction', 'AxMenuItemOutput', 'AxTableExtension', 'AxEnumExtension', 'AxReport', 'AxSecurityRole',
+    'AxSecurityPrivilege', 'AxSecurityDuty', 'AxTile', 'AxConfigurationKey']);
 
 /**
  * Application Explorer, read straight from the metadata folders of the active configuration.
@@ -128,6 +150,7 @@ export class AotTreeProvider implements vscode.TreeDataProvider<AotNode> {
                 item.id = `model/${node.model.name}`;
                 item.description = node.model.displayName !== node.model.name ? node.model.name : undefined;
                 item.iconPath = new vscode.ThemeIcon(node.model.isCustom ? 'package' : 'library');
+                item.contextValue = node.model.isCustom ? 'xppModel custom' : 'xppModel';
                 item.tooltip = `${node.model.displayName} [${node.model.name}]\nPackage ${node.model.packageName}\n${node.model.folder}${node.model.isCustom ? '\nCustom model' : ''}`;
                 return item;
             }
@@ -278,6 +301,13 @@ export class AotTreeProvider implements vscode.TreeDataProvider<AotNode> {
         return this.models;
     }
 }
+
+/** Models of the active configuration (custom first), for the Dynamics 365 tools. */
+export function listModels(): Promise<ModelLocation[]> {
+    return loadModels();
+}
+
+export type { ModelLocation };
 
 async function loadModels(): Promise<ModelLocation[]> {
     const env = await readActiveEnvironment().catch(() => undefined);

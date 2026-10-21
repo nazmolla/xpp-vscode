@@ -114,6 +114,16 @@ namespace XppVsCode.Server.MetaModel
                         ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "originalName"), ExtractJsonString(body, "source"));
                 case "get_overrides":
                     return _bridge.GetOverridesJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"), ExtractJsonStringArray(body, "path"));
+                case "get_model":
+                    return _bridge.GetModelJson(ExtractJsonString(body, "name"));
+                case "create_model":
+                    return _bridge.CreateModelJson(ExtractJsonString(body, "name"), ExtractJsonString(body, "displayName"), ExtractJsonString(body, "publisher"),
+                        ExtractJsonString(body, "layer"), ExtractJsonString(body, "description"), ExtractJsonStringArray(body, "references"));
+                case "update_model":
+                    return _bridge.UpdateModelJson(ExtractJsonString(body, "name"), ExtractJsonString(body, "displayName"), ExtractJsonString(body, "publisher"),
+                        ExtractJsonString(body, "description"), body.Contains("\"references\"") ? ExtractJsonStringArray(body, "references") : null);
+                case "list_packages":
+                    return _bridge.ListPackagesJson();
                 default:
                     return "{\"success\":false,\"message\":\"Unknown action: " + EscapeJson(action ?? "") + "\"}";
             }
