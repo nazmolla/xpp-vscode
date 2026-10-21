@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { AotTreeProvider } from './aot';
 import { XppBuilder } from './build';
 import { XppCodeFileSystem, XppScheme } from './codeView';
 import { FormDesigner } from './designer';
@@ -17,6 +18,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const server = new XppServerClient(context, log, findActiveProject);
     const builder = new XppBuilder(buildOutput);
     const projectTree = new ProjectTreeProvider();
+    const aotTree = new AotTreeProvider();
     const codeFs = new XppCodeFileSystem(server);
     const navigation = new XppNavigation(server);
     const pac = new PacCommands();
@@ -27,6 +29,7 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.workspace.registerFileSystemProvider(XppScheme, codeFs, { isCaseSensitive: false }),
         projectTree.view = vscode.window.createTreeView('xpp.project', { treeDataProvider: projectTree }),
+        vscode.window.createTreeView('xpp.aot', { treeDataProvider: aotTree, showCollapseAll: true }),
         vscode.languages.registerDefinitionProvider(XppDocumentSelector, navigation),
         vscode.languages.registerHoverProvider(XppDocumentSelector, navigation),
         vscode.workspace.onDidSaveTextDocument(doc => {
@@ -64,13 +67,16 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     });
     command('xpp.openObject', () => openObject(server));
-    command('xpp.openFormDesigner', async (formName?: string) => {
-        const name = formName ?? await vscode.window.showInputBox({ title: 'Form name', placeHolder: 'CustTable' });
+    command('xpp.openFormDesigner', async (arg?: string | { name?: string; item?: { objectName: string } }) => {
+        // Tree context menus pass the clicked node; the designer opens the base form of an extension.
+        const fromNode = typeof arg === 'object' ? arg.name ?? arg.item?.objectName : arg;
+        const name = fromNode?.split('.')[0] ?? await vscode.window.showInputBox({ title: 'Form name', placeHolder: 'CustTable' });
         if (name) {
             FormDesigner.open(context, server, name);
         }
     });
     command('xpp.refreshProject', () => projectTree.refresh());
+    command('xpp.refreshAot', () => aotTree.refresh());
     command('xpp.selectProject', () => selectProject());
     command('xpp.build', async () => {
         const project = await readProject();

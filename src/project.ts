@@ -2,6 +2,7 @@ import { promises as fs } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { iconFor as aotIcon } from './aot';
 import { objectUri } from './codeView';
 
 export interface ProjectItem {
@@ -145,18 +146,5 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode>
 }
 
 function iconFor(objectType: string): string {
-    if (objectType.endsWith('Extension')) {
-        return 'extensions';
-    }
-    switch (objectType) {
-        case 'AxClass': return 'symbol-class';
-        case 'AxTable': return 'table';
-        case 'AxForm': return 'window';
-        case 'AxEnum': return 'symbol-enum';
-        case 'AxEdt': return 'symbol-field';
-        case 'AxQuery': return 'search';
-        case 'AxView': return 'eye';
-        case 'AxDataEntityView': return 'database';
-        default: return objectType.startsWith('AxSecurity') ? 'shield' : objectType.startsWith('AxMenuItem') ? 'link' : 'symbol-misc';
-    }
+    return aotIcon(objectType);
 }
