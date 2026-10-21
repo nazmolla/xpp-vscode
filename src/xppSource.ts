@@ -1,6 +1,7 @@
 /**
- * An object's X++ code as one document: the declaration block first, then each method.
- * Splitting finds top-level { } blocks, skipping braces inside strings and comments.
+ * An object's X++ code as one document, laid out like Visual Studio's code editor: the class declaration
+ * without its closing brace, the methods inside the class body (stored already indented), then the brace.
+ * The compiler numbers lines the same way. Objects without a class declaration fall back to one block per method.
  */
 
 export interface XppSource {
@@ -13,44 +14,317 @@ export interface MethodSpan {
     startLine: number;
 }
 
+interface ClassLayout {
+    /** Offset where the first method starts; the declaration's head and members come before it. */
+    firstMethodStart: number;
+    /** [start, end) of each method, from its first non-blank line to its closing brace. */
+    methods: [number, number][];
+    /** Members (fields, macros) that appear after the first method; they belong to the declaration. */
+    lateMembers: string[];
+    /** Offset of the class's closing brace. */
+    classEnd: number;
+}
+
 export function composeSource(declaration: string, methods: { name: string; source: string }[]): string {
-    const parts = [normalize(declaration)];
-    for (const m of methods) {
-        parts.push(normalize(m.source));
+    let decl = normalizeEol(declaration ?? '').trim();
+    let body = methods.map(m => ({ name: m.name, source: normalizeEol(m.source) }));
+    if (!decl && body[0]?.name.toLowerCase() === 'classdeclaration') {
+        decl = body[0].source.trim();
+        body = body.slice(1);
     }
-    return parts.filter(p => p.length > 0).join('\n\n') + '\n';
-}
-
-function normalize(text: string | undefined): string {
-    return (text ?? '').replace(/\r\n/g, '\n').trim();
-}
-
-/** Splits a document back into the declaration and method sources; forms keep theirs as a classDeclaration method. */
-export function splitSource(text: string, hasDeclaration = true): XppSource {
-    const blocks = topLevelBlocks(text.replace(/\r\n/g, '\n')).map(b => b.trim()).filter(b => b.length > 0);
-    if (blocks.length === 0) {
-        throw new Error('No code block found.');
+    const close = decl.lastIndexOf('}');
+    if (!decl || close < 0) {
+        return [decl, ...body.map(m => m.source.trim())].filter(p => p.length > 0).join('\n\n') + '\n';
     }
-    return hasDeclaration
-        ? { declaration: blocks[0], methods: blocks.slice(1) }
-        : { declaration: '', methods: blocks };
+    let head = decl.slice(0, close).replace(/[ \t]+$/, '');
+    if (!head.endsWith('\n')) {
+        head += '\n';
+    }
+    const methodText = body.map(m => m.source.replace(/^\s*\n/, '').replace(/\s+$/, '')).filter(s => s.length > 0);
+    return methodText.length === 0
+        ? decl + '\n'
+        : head + methodText.join('\n\n') + '\n}\n';
 }
 
-/** Line where each method starts, for mapping compiler diagnostics into the document. */
-export function methodSpans(text: string, hasDeclaration = true): MethodSpan[] {
-    const normalized = text.replace(/\r\n/g, '\n');
-    const spans: MethodSpan[] = [];
-    let offset = 0;
-    topLevelBlocks(normalized).forEach((block, index) => {
-        const start = normalized.indexOf(block, offset);
-        offset = start + block.length;
-        if (index === 0 && hasDeclaration) {
-            return;
+function normalizeEol(text: string): string {
+    return text.replace(/\r\n/g, '\n');
+}
+
+/**
+ * Splits a document back into the declaration and method sources. originalDeclaration (what was loaded) tells
+ * comments that ended the declaration apart from comments that start the first method.
+ */
+export function splitSource(text: string, originalDeclaration?: string): XppSource {
+    const normalized = normalizeEol(text);
+    if (normalized.trim() === '') {
+        return { declaration: '', methods: [] };
+    }
+    const layout = classLayout(normalized, declarationTailOf(originalDeclaration));
+    if (!layout) {
+        const blocks = topLevelBlocks(normalized).map(b => b.trim()).filter(b => b.length > 0);
+        if (blocks.length === 0) {
+            throw new Error('No code block found.');
         }
-        const leading = block.length - block.trimStart().length;
-        spans.push({ name: methodName(block), startLine: lineOf(normalized, start + leading) });
-    });
-    return spans;
+        return { declaration: '', methods: blocks };
+    }
+    if (layout.methods.length === 0) {
+        return { declaration: normalized.slice(0, layout.classEnd + 1).trim(), methods: [] };
+    }
+    let declaration = normalized.slice(0, layout.firstMethodStart).replace(/^\s+/, '');
+    for (const member of layout.lateMembers) {
+        declaration += member.replace(/^\s*\n/, '').replace(/\s+$/, '') + '\n';
+    }
+    return {
+        declaration: declaration + '}',
+        methods: layout.methods.map(([start, end]) => normalized.slice(start, end)),
+    };
+}
+
+/** Line where each method starts. */
+export function methodSpans(text: string): MethodSpan[] {
+    const normalized = normalizeEol(text);
+    const layout = classLayout(normalized);
+    if (!layout) {
+        const spans: MethodSpan[] = [];
+        let offset = 0;
+        for (const block of topLevelBlocks(normalized)) {
+            const start = normalized.indexOf(block, offset);
+            offset = start + block.length;
+            spans.push({ name: methodName(block), startLine: lineOf(normalized, start + (block.length - block.trimStart().length)) });
+        }
+        return spans;
+    }
+    return layout.methods.map(([start, end]) => ({ name: methodName(normalized.slice(start, end)), startLine: lineOf(normalized, start) }));
+}
+
+/**
+ * Converts a compiler line (1-based: the declaration without its closing brace, then each method back to back)
+ * to a 0-based line in the document.
+ */
+export function compilerLineToDocumentLine(text: string, compilerLine: number): number {
+    const normalized = normalizeEol(text);
+    const layout = classLayout(normalized);
+    if (!layout) {
+        // One block per method: each block is counted on its own, the first being a form's classDeclaration.
+        let compilerStart = 1;
+        let first = true;
+        let offset = 0;
+        for (const block of topLevelBlocks(normalized)) {
+            const start = normalized.indexOf(block, offset);
+            offset = start + block.length;
+            const trimmed = block.trim();
+            const docStart = lineOf(normalized, start + (block.length - block.trimStart().length));
+            const lines = trimmed.split('\n').length - (first && methodName(trimmed) === 'classDeclaration' ? 1 : 0);
+            if (compilerLine < compilerStart + lines) {
+                return docStart + (compilerLine - compilerStart);
+            }
+            compilerStart += lines;
+            first = false;
+        }
+        return Math.max(0, compilerLine - 1);
+    }
+    const declarationLines = layout.methods.length > 0 ? lineOf(normalized, layout.firstMethodStart) : lineOf(normalized, layout.classEnd);
+    if (compilerLine <= declarationLines) {
+        return Math.max(0, compilerLine - 1);
+    }
+    let compilerStart = declarationLines + 1;
+    for (const [start, end] of layout.methods) {
+        const lines = normalized.slice(start, end).split('\n').length;
+        if (compilerLine < compilerStart + lines) {
+            return lineOf(normalized, start) + (compilerLine - compilerStart);
+        }
+        compilerStart += lines;
+    }
+    return lineOf(normalized, layout.classEnd);
+}
+
+/** Finds the class body and the methods in it, or undefined if the text doesn't start with a class declaration. */
+function classLayout(text: string, declarationTail = ''): ClassLayout | undefined {
+    const open = findClassOpen(text);
+    if (open < 0) {
+        return undefined;
+    }
+    const methods: [number, number][] = [];
+    const lateMembers: string[] = [];
+    let depth = 1;
+    let segmentStart = open + 1;
+    let i = open + 1;
+    while (i < text.length) {
+        const skipped = skipNonCode(text, i);
+        if (skipped > i) {
+            i = skipped;
+            continue;
+        }
+        const c = text[i];
+        if (depth === 1 && c === '[') {
+            i = skipBracketed(text, i);
+            continue;
+        }
+        if (depth === 1 && c === ';') {
+            // A comment on the same line after the ';' belongs to the member.
+            const newline = text.indexOf('\n', i);
+            const rest = text.slice(i + 1, newline < 0 ? text.length : newline);
+            const end = /^\s*(\/\/.*)?$/.test(rest) ? (newline < 0 ? text.length : newline) : i + 1;
+            if (methods.length > 0) {
+                lateMembers.push(text.slice(segmentStart, end));
+            }
+            segmentStart = end;
+            i = end;
+            continue;
+        } else if (c === '{') {
+            depth++;
+        } else if (c === '}') {
+            depth--;
+            if (depth === 1) {
+                let start = firstContentLine(text, segmentStart);
+                if (methods.length === 0 && declarationTail) {
+                    start = skipDeclarationTail(text, start, declarationTail);
+                }
+                methods.push([start, i + 1]);
+                segmentStart = i + 1;
+            } else if (depth === 0) {
+                if (text.slice(i + 1).trim().length > 0) {
+                    throw new Error(`Code after the class's closing brace (line ${lineOf(text, i) + 1}) is outside the class.`);
+                }
+                const trailing = text.slice(segmentStart, i);
+                if (trailing.trim().length > 0) {
+                    if (methods.length === 0) {
+                        return { firstMethodStart: i, methods, lateMembers, classEnd: i };
+                    }
+                    lateMembers.push(trailing);
+                }
+                return { firstMethodStart: methods.length > 0 ? methods[0][0] : i, methods, lateMembers, classEnd: i };
+            }
+        }
+        i++;
+    }
+    throw new Error('Unbalanced braces: the class is not closed.');
+}
+
+/** Offset of the class body's opening brace, if the text begins with a class header rather than a method. */
+function findClassOpen(text: string): number {
+    let i = 0;
+    while (i < text.length) {
+        const skipped = skipNonCode(text, i);
+        if (skipped > i) {
+            i = skipped;
+            continue;
+        }
+        if (text[i] === '[') {
+            i = skipBracketed(text, i);
+            continue;
+        }
+        if (text[i] === ';') {
+            // using-directives may precede the class header.
+            const statementStart = text.lastIndexOf(';', i - 1) + 1;
+            if (/^using\s/.test(stripComments(text.slice(statementStart, i)).trim())) {
+                i++;
+                continue;
+            }
+            return -1;
+        }
+        if (text[i] === '(') {
+            return -1;
+        }
+        if (text[i] === '{') {
+            return /\bclass\b/.test(stripComments(text.slice(0, i))) ? i : -1;
+        }
+        i++;
+    }
+    return -1;
+}
+
+function stripComments(text: string): string {
+    return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '').replace(/\[[^\]]*\]/g, '');
+}
+
+/**
+ * Comments that ended the original declaration (after its last member) come right before the first method in the
+ * document; they stay with the declaration rather than becoming part of the method.
+ */
+function skipDeclarationTail(text: string, contentStart: number, tail: string): number {
+    const tailLines = tail.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    let lineStart = contentStart;
+    for (const expected of tailLines) {
+        while (lineStart < text.length && text.slice(lineStart, text.indexOf('\n', lineStart) < 0 ? text.length : text.indexOf('\n', lineStart)).trim() === '') {
+            lineStart = text.indexOf('\n', lineStart) + 1;
+        }
+        const newline = text.indexOf('\n', lineStart);
+        const lineEnd = newline < 0 ? text.length : newline;
+        if (text.slice(lineStart, lineEnd).trim() !== expected) {
+            return contentStart;
+        }
+        lineStart = lineEnd + 1;
+    }
+    return firstContentLine(text, lineStart);
+}
+
+/** Comment and macro lines between a declaration's last member (or its opening brace) and its closing brace. */
+function declarationTailOf(declaration: string | undefined): string {
+    const decl = normalizeEol(declaration ?? '').trim();
+    const close = decl.lastIndexOf('}');
+    if (close < 0) {
+        return '';
+    }
+    const body = decl.slice(0, close);
+    let lastCode = body.indexOf('{');
+    for (let i = lastCode + 1; i < body.length; i++) {
+        const skipped = skipNonCode(body, i);
+        if (skipped > i) {
+            i = skipped - 1;
+            continue;
+        }
+        if (body[i] === ';') {
+            lastCode = i;
+        }
+    }
+    if (lastCode < 0) {
+        return '';
+    }
+    const newline = body.indexOf('\n', lastCode);
+    return newline < 0 ? '' : body.slice(newline + 1).trim();
+}
+
+/** Start of the first line of a segment that has content, keeping its indentation. */
+function firstContentLine(text: string, start: number): number {
+    let i = start;
+    let lineStart = start;
+    while (i < text.length && /\s/.test(text[i])) {
+        if (text[i] === '\n') {
+            lineStart = i + 1;
+        }
+        i++;
+    }
+    return lineStart;
+}
+
+/** Index past a comment or string literal at i, or i itself. */
+function skipNonCode(text: string, i: number): number {
+    const c = text[i];
+    const next = text[i + 1];
+    if (c === '/' && next === '/') {
+        const end = text.indexOf('\n', i);
+        return end < 0 ? text.length : end;
+    }
+    if (c === '/' && next === '*') {
+        const end = text.indexOf('*/', i + 2);
+        return end < 0 ? text.length : end + 2;
+    }
+    if (c === '@' && next === '"') {
+        let j = i + 2;
+        while (j < text.length && !(text[j] === '"' && text[j + 1] !== '"')) {
+            j += text[j] === '"' ? 2 : 1;
+        }
+        return j + 1;
+    }
+    if (c === '"' || c === '\'') {
+        let j = i + 1;
+        while (j < text.length && text[j] !== c && text[j] !== '\n') {
+            j += text[j] === '\\' ? 2 : 1;
+        }
+        return j + 1;
+    }
+    return i;
 }
 
 /** The method name: the identifier before the first '(' after doc comments, [attributes] and #macro lines. */
@@ -118,30 +392,6 @@ function isMacroLine(text: string, start: number): boolean {
     return /^#(define|localmacro|globalmacro|endmacro|if|ifnot|endif|macrolib|undef|globaldefine|localdefine)\b/i.test(line)
         || /^#\w+\.\w+/.test(line)
         || /^#\w+\s*$/.test(line);
-}
-
-/**
- * Converts a compiler line (1-based, counted over the whole object as if the methods sat inside the class body:
- * declaration without its closing brace, then each method back to back) to a 0-based line in the composed document.
- */
-export function compilerLineToDocumentLine(text: string, compilerLine: number): number {
-    const normalized = text.replace(/\r\n/g, '\n');
-    let offset = 0;
-    let compilerStart = 1;
-    let first = true;
-    for (const block of topLevelBlocks(normalized)) {
-        const start = normalized.indexOf(block, offset);
-        offset = start + block.length;
-        const trimmed = block.trim();
-        const docStart = lineOf(normalized, start + (block.length - block.trimStart().length));
-        const lines = trimmed.split('\n').length - (first && methodName(trimmed) === 'classDeclaration' ? 1 : 0);
-        if (compilerLine < compilerStart + lines) {
-            return docStart + (compilerLine - compilerStart);
-        }
-        compilerStart += lines;
-        first = false;
-    }
-    return Math.max(0, compilerLine - 1);
 }
 
 function lineOf(text: string, index: number): number {

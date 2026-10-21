@@ -22,7 +22,9 @@ export function parseObjectUri(uri: vscode.Uri): { objectType: string; objectNam
 interface CachedObject {
     text: string;
     methodNames: string[];
-    hasDeclaration: boolean;
+    /** Forms store the class declaration as a method named classDeclaration. */
+    declarationIsMethod: boolean;
+    declaration: string;
     editable: boolean;
     mtime: number;
 }
@@ -64,15 +66,19 @@ export class XppCodeFileSystem implements vscode.FileSystemProvider {
             throw vscode.FileSystemError.NoPermissions(`${objectType} ${objectName} is not in a custom model. Change it with an extension or Chain of Command instead.`);
         }
 
-        const source = splitSource(Buffer.from(content).toString('utf8'), current.hasDeclaration);
-        const newNames = source.methods.map(methodName).filter(n => n);
+        const source = splitSource(Buffer.from(content).toString('utf8'), current.declaration);
+        if (source.methods.some(m => methodName(m) === 'classDeclaration')) {
+            throw vscode.FileSystemError.NoPermissions('Nested classes (data source and control methods) can\'t be edited in this view yet.');
+        }
+        const methods = current.declarationIsMethod && source.declaration ? [source.declaration, ...source.methods] : source.methods;
+        const newNames = methods.map(methodName).filter(n => n);
         const removed = current.methodNames.filter(n => !newNames.some(m => m.toLowerCase() === n.toLowerCase()));
 
         const result = await this.server.bridge('update_object', {
             objectType,
             objectName,
-            declaration: source.declaration,
-            methods: source.methods,
+            declaration: current.declarationIsMethod ? '' : source.declaration,
+            methods,
             removeMethodNames: removed,
             formatCode: false,
         });
@@ -115,10 +121,12 @@ export class XppCodeFileSystem implements vscode.FileSystemProvider {
         }
         const methods: { name: string; source: string }[] = result.methods ?? [];
         const text = composeSource(result.declaration ?? '', methods);
+        const declarationIsMethod = !(result.declaration ?? '').trim() && methods[0]?.name.toLowerCase() === 'classdeclaration';
         const obj: CachedObject = {
             text,
             methodNames: methods.map(m => m.name),
-            hasDeclaration: !!(result.declaration ?? '').trim(),
+            declarationIsMethod,
+            declaration: declarationIsMethod ? methods[0].source : result.declaration ?? '',
             editable: !!result.isCustom && EditableTypes.has(objectType),
             mtime: cached && cached.text === text ? cached.mtime : Date.now(),
         };

@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
 import { AotTreeProvider } from './aot';
 import { XppBuilder } from './build';
-import { XppCodeFileSystem, XppScheme } from './codeView';
+import { objectUri, XppCodeFileSystem, XppScheme } from './codeView';
 import { FormDesigner } from './designer';
+import { ElementDesigner } from './elementDesigner';
 import { readActiveEnvironment } from './environment';
 import { registerMcpProvider } from './mcpProvider';
 import { openObject, XppDocumentSelector, XppNavigation } from './navigation';
@@ -29,7 +30,7 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.workspace.registerFileSystemProvider(XppScheme, codeFs, { isCaseSensitive: false }),
         projectTree.view = vscode.window.createTreeView('xpp.project', { treeDataProvider: projectTree }),
-        vscode.window.createTreeView('xpp.aot', { treeDataProvider: aotTree, showCollapseAll: true }),
+        aotTree.view = vscode.window.createTreeView('xpp.aot', { treeDataProvider: aotTree, showCollapseAll: true }),
         vscode.languages.registerDefinitionProvider(XppDocumentSelector, navigation),
         vscode.languages.registerHoverProvider(XppDocumentSelector, navigation),
         vscode.workspace.onDidSaveTextDocument(doc => {
@@ -67,9 +68,9 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     });
     command('xpp.openObject', () => openObject(server));
-    command('xpp.openFormDesigner', async (arg?: string | { name?: string; item?: { objectName: string } }) => {
-        // Tree context menus pass the clicked node; the designer opens the base form of an extension.
-        const fromNode = typeof arg === 'object' ? arg.name ?? arg.item?.objectName : arg;
+    command('xpp.openFormDesigner', async (arg?: string | ElementRef) => {
+        // Tree context menus pass the clicked node; the layout view opens the base form of an extension.
+        const fromNode = typeof arg === 'string' ? arg : elementOf(arg)?.objectName;
         const name = fromNode?.split('.')[0] ?? await vscode.window.showInputBox({ title: 'Form name', placeHolder: 'CustTable' });
         if (name) {
             FormDesigner.open(context, server, name);
@@ -77,6 +78,28 @@ export function activate(context: vscode.ExtensionContext): void {
     });
     command('xpp.refreshProject', () => projectTree.refresh());
     command('xpp.refreshAot', () => aotTree.refresh());
+    command('xpp.openDesigner', async (arg?: string | ElementRef, name?: string) => {
+        const element = typeof arg === 'string' ? { objectType: arg, objectName: name ?? '' } : elementOf(arg);
+        if (element?.objectName) {
+            ElementDesigner.open(context, server, element.objectType, element.objectName);
+        }
+    });
+    command('xpp.viewCode', async (arg?: ElementRef) => {
+        const element = elementOf(arg);
+        if (element) {
+            await vscode.commands.executeCommand('vscode.open', objectUri(element.objectType, element.objectName));
+        }
+    });
+    command('xpp.aot.modelView', () => aotTree.setModelView(true));
+    command('xpp.aot.classicView', () => aotTree.setModelView(false));
+    command('xpp.aot.filter', async () => {
+        const filter = await vscode.window.showInputBox({ title: 'Filter Application Explorer', prompt: 'Part of an element name', value: aotTree.filter });
+        if (filter !== undefined) {
+            aotTree.setFilter(filter);
+        }
+    });
+    command('xpp.aot.clearFilter', () => aotTree.setFilter(''));
+    void vscode.commands.executeCommand('setContext', 'xpp.aot.modelView', false);
     command('xpp.selectProject', () => selectProject());
     command('xpp.build', async () => {
         const project = await readProject();
@@ -94,3 +117,16 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void { }
+
+/** Tree nodes passed to context-menu commands: Application Explorer elements or project items. */
+type ElementRef = { objectType?: string; entry?: { name: string }; item?: { objectType: string; objectName: string } };
+
+function elementOf(node: ElementRef | undefined): { objectType: string; objectName: string } | undefined {
+    if (node?.item) {
+        return { objectType: node.item.objectType, objectName: node.item.objectName };
+    }
+    if (node?.objectType && node.entry) {
+        return { objectType: node.objectType, objectName: node.entry.name };
+    }
+    return undefined;
+}

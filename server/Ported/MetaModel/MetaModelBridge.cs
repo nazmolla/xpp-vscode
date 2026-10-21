@@ -45,6 +45,7 @@ namespace XppVsCode.Server.MetaModel
         private void InvalidateCaches()
         {
             _objectModelNameCache.Clear();
+            _elementCacheKey = null;
         }
 
         private IMetaModelService MetaService => _host.MetaService;

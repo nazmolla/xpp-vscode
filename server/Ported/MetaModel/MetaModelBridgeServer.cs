@@ -92,6 +92,14 @@ namespace XppVsCode.Server.MetaModel
                     return _bridge.GetFormTreeJson(ExtractJsonString(body, "formName"));
                 case "get_table_fields":
                     return _bridge.GetTableFieldsJson(ExtractJsonString(body, "tableName"));
+                case "get_element_tree":
+                    return _bridge.GetElementTreeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
+                case "get_element_properties":
+                    return _bridge.GetElementPropertiesJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                        ExtractJsonStringArray(body, "path"));
+                case "set_element_property":
+                    return _bridge.SetElementPropertyJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                        ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "property"), ExtractJsonString(body, "value"));
                 default:
                     return "{\"success\":false,\"message\":\"Unknown action: " + EscapeJson(action ?? "") + "\"}";
             }

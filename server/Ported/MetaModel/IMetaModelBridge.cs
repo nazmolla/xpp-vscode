@@ -30,6 +30,9 @@ namespace XppVsCode.Server.MetaModel
         FormLayoutResult GetFormLayout(string formName, string rootControl, int maxDepth);
         string GetFormTreeJson(string formName);
         string GetTableFieldsJson(string tableName);
+        string GetElementTreeJson(string objectType, string objectName);
+        string GetElementPropertiesJson(string objectType, string objectName, string[] path);
+        string SetElementPropertyJson(string objectType, string objectName, string[] path, string property, string value);
 
         // ── Labels ──
 

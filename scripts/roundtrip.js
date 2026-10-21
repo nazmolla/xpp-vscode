@@ -32,9 +32,11 @@ const norm = s => (s || '').replace(/\r\n/g, '\n').trim();
     if (!r.success) { console.log(`SKIP ${spec}: ${r.message}`); continue; }
     const methods = r.methods || [];
     const text = composeSource(r.declaration || '', methods);
+    const declIsMethod = !norm(r.declaration) && (methods[0]?.name || '').toLowerCase() === 'classdeclaration';
     let problem = null;
     try {
-      const back = splitSource(text, !!norm(r.declaration));
+      const split = splitSource(text, declIsMethod ? methods[0].source : r.declaration);
+      const back = declIsMethod ? { declaration: '', methods: [split.declaration, ...split.methods] } : split;
       if (norm(back.declaration) !== norm(r.declaration)) problem = 'declaration differs';
       else if (back.methods.length !== methods.length) problem = `method count ${back.methods.length} vs ${methods.length}`;
       else {
@@ -42,8 +44,8 @@ const norm = s => (s || '').replace(/\r\n/g, '\n').trim();
           if (norm(back.methods[k]) !== norm(methods[k].source)) { problem = `method ${methods[k].name} source differs`; break; }
           if (methodName(back.methods[k]).toLowerCase() !== methods[k].name.toLowerCase()) { problem = `method name '${methodName(back.methods[k])}' vs '${methods[k].name}'`; break; }
         }
-        const spans = methodSpans(text, !!norm(r.declaration));
-        if (!problem && spans.length !== methods.length) problem = `spans ${spans.length}`;
+        const spans = methodSpans(text);
+        if (!problem && spans.length !== methods.length - (declIsMethod ? 1 : 0)) problem = `spans ${spans.length}`;
       }
     } catch (e) { problem = 'split threw: ' + e.message; }
     if (problem) failures++;

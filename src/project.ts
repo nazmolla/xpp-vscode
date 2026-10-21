@@ -2,7 +2,7 @@ import { promises as fs } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { iconFor as aotIcon } from './aot';
+import { elementContextValue, elementOpenCommand, iconFor as aotIcon } from './aot';
 import { objectUri } from './codeView';
 
 export interface ProjectItem {
@@ -111,11 +111,9 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode>
         const { objectType, objectName } = node.item;
         const item = new vscode.TreeItem(objectName, vscode.TreeItemCollapsibleState.None);
         item.description = objectType;
-        item.contextValue = objectType === 'AxForm' || objectType === 'AxFormExtension' ? 'xppForm' : 'xppObject';
+        item.contextValue = elementContextValue(objectType);
         item.iconPath = new vscode.ThemeIcon(iconFor(objectType));
-        item.command = objectType === 'AxFormExtension'
-            ? { command: 'xpp.openFormDesigner', title: 'Open designer', arguments: [objectName.split('.')[0]] }
-            : { command: 'vscode.open', title: 'Open', arguments: [objectUri(objectType, objectName)] };
+        item.command = elementOpenCommand(objectType, objectName);
         return item;
     }
 

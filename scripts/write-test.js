@@ -41,9 +41,9 @@ const check = (label, ok, detail) => console.log(`${ok ? 'PASS' : 'FAIL'} ${labe
   r = await bridge('read_object', { objectType: 'AxClass', objectName: cls });
   let text = composeSource(r.declaration, r.methods);
   text = text.replace('return 1;', 'return 10;');
-  text = text.replace(/\[SysObsolete[\s\S]*?return 2;\n\}\n*/, '');
-  text += '\npublic str fourth()\n{\n    // has a { brace } and "a } string"\n    return "}";\n}\n';
-  const split = splitSource(text, true);
+  text = text.replace(/[ \t]*\[SysObsolete[\s\S]*?return 2;\n\s*\}\n*/, '');
+  text = text.replace(/\}\n$/, '\n    public str fourth()\n    {\n        // has a { brace } and "a } string"\n        return "}";\n    }\n}\n');
+  const split = splitSource(text, r.declaration);
   const names = split.methods.map(methodName);
   const removed = r.methods.map(m => m.name).filter(n => !names.includes(n));
   r = await bridge('update_object', { objectType: 'AxClass', objectName: cls, declaration: split.declaration, methods: split.methods, removeMethodNames: removed, formatCode: false });

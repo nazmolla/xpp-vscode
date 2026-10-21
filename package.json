@@ -80,7 +80,13 @@
     ],
     "commands": [
       { "command": "xpp.openObject", "title": "Open Object…", "category": "X++", "icon": "$(search)" },
-      { "command": "xpp.openFormDesigner", "title": "Open Form Designer…", "category": "X++", "icon": "$(layout)" },
+      { "command": "xpp.openDesigner", "title": "Open Designer", "category": "X++", "icon": "$(symbol-structure)" },
+      { "command": "xpp.viewCode", "title": "View Code", "category": "X++", "icon": "$(code)" },
+      { "command": "xpp.openFormDesigner", "title": "Open Form Layout…", "category": "X++", "icon": "$(layout)" },
+      { "command": "xpp.aot.filter", "title": "Filter Application Explorer…", "category": "X++", "icon": "$(filter)" },
+      { "command": "xpp.aot.clearFilter", "title": "Clear Filter", "category": "X++", "icon": "$(filter-filled)" },
+      { "command": "xpp.aot.modelView", "title": "Model View", "category": "X++", "icon": "$(list-tree)" },
+      { "command": "xpp.aot.classicView", "title": "Classic View", "category": "X++", "icon": "$(list-flat)" },
       { "command": "xpp.build", "title": "Build Model", "category": "X++", "icon": "$(tools)" },
       { "command": "xpp.refreshProject", "title": "Refresh Project", "category": "X++", "icon": "$(refresh)" },
       { "command": "xpp.refreshAot", "title": "Refresh Application Explorer", "category": "X++", "icon": "$(refresh)" },
@@ -95,16 +101,27 @@
     ],
     "menus": {
       "view/title": [
-        { "command": "xpp.openObject", "when": "view == xpp.aot", "group": "navigation@1" },
-        { "command": "xpp.build", "when": "view == xpp.aot", "group": "navigation@2" },
-        { "command": "xpp.refreshAot", "when": "view == xpp.aot", "group": "navigation@3" },
+        { "command": "xpp.aot.filter", "when": "view == xpp.aot && !xpp.aot.filtered", "group": "navigation@0" },
+        { "command": "xpp.aot.clearFilter", "when": "view == xpp.aot && xpp.aot.filtered", "group": "navigation@0" },
+        { "command": "xpp.aot.modelView", "when": "view == xpp.aot && !xpp.aot.modelView", "group": "navigation@1" },
+        { "command": "xpp.aot.classicView", "when": "view == xpp.aot && xpp.aot.modelView", "group": "navigation@1" },
+        { "command": "xpp.openObject", "when": "view == xpp.aot", "group": "navigation@2" },
+        { "command": "xpp.build", "when": "view == xpp.aot", "group": "navigation@3" },
+        { "command": "xpp.refreshAot", "when": "view == xpp.aot", "group": "navigation@4" },
         { "command": "xpp.openObject", "when": "view == xpp.project", "group": "navigation@1" },
         { "command": "xpp.build", "when": "view == xpp.project", "group": "navigation@2" },
         { "command": "xpp.refreshProject", "when": "view == xpp.project", "group": "navigation@3" },
         { "command": "xpp.selectProject", "when": "view == xpp.project", "group": "navigation@4" }
       ],
       "view/item/context": [
-        { "command": "xpp.openFormDesigner", "when": "(view == xpp.project || view == xpp.aot) && viewItem == xppForm", "group": "inline" }
+        { "command": "xpp.openDesigner", "when": "(view == xpp.project || view == xpp.aot) && viewItem =~ /xppElement/", "group": "navigation@1" },
+        { "command": "xpp.viewCode", "when": "(view == xpp.project || view == xpp.aot) && viewItem =~ /\\bcode\\b/", "group": "navigation@2" },
+        { "command": "xpp.openFormDesigner", "when": "(view == xpp.project || view == xpp.aot) && viewItem =~ /\\bform\\b/", "group": "navigation@3" },
+        { "command": "xpp.viewCode", "when": "(view == xpp.project || view == xpp.aot) && viewItem =~ /\\bcode\\b/", "group": "inline" }
+      ],
+      "commandPalette": [
+        { "command": "xpp.openDesigner", "when": "false" },
+        { "command": "xpp.viewCode", "when": "false" }
       ]
     },
     "keybindings": [
