@@ -50,19 +50,36 @@ async function dataverseCall(url: string, token: string, method: 'GET' | 'POST')
     return text ? JSON.parse(text) : {};
 }
 
+/** Calls an unbound Dataverse message: as an action (POST) first, then as a function (GET) if the org exposes it that way. */
+async function invokeMessage(api: string, name: string, token: string): Promise<any> {
+    try {
+        return await dataverseCall(`${api}/${name}`, token, 'POST');
+    } catch (err) {
+        if (!/returned (404|405)/.test((err as Error).message)) {
+            throw err;
+        }
+        return await dataverseCall(`${api}/${name}()`, token, 'GET');
+    }
+}
+
+function field(obj: any, name: string): any {
+    const key = Object.keys(obj ?? {}).find(k => k.toLowerCase() === name.toLowerCase());
+    return key ? obj[key] : undefined;
+}
+
 /** Same lookups Power Platform Tools performs before downloading assets. */
 export async function readUdeEnvironment(dataverseUrl: string, token: string): Promise<UdeEnvironment> {
     const api = `${dataverseUrl}/api/data/v9.2`;
-    const integration = await dataverseCall(`${api}/RetrieveFinanceAndOperationsIntegrationDetails()`, token, 'GET');
-    const details = await dataverseCall(`${api}/msprov_getfinopsapplicationdetails`, token, 'POST');
+    const integration = await invokeMessage(api, 'RetrieveFinanceAndOperationsIntegrationDetails', token);
+    const details = await invokeMessage(api, 'msprov_getfinopsapplicationdetails', token);
     return {
         dataverseUrl,
-        finOpsUrl: integration.Url,
-        tenantId: integration.TenantId,
-        deploymentType: details.applicationdeploymenttype,
-        applicationVersion: details.applicationversion,
-        platformVersion: details.platformversion,
-        environmentId: details.finopsenvironmentid,
+        finOpsUrl: field(integration, 'Url'),
+        tenantId: field(integration, 'TenantId'),
+        deploymentType: field(details, 'applicationdeploymenttype'),
+        applicationVersion: field(details, 'applicationversion'),
+        platformVersion: field(details, 'platformversion'),
+        environmentId: field(details, 'finopsenvironmentid'),
     };
 }
 
@@ -90,8 +107,20 @@ async function blobSize(sasUrl: string): Promise<number | undefined> {
     return response.ok && length ? Number(length) : undefined;
 }
 
+export function validateDataverseUrl(input: string): string | undefined {
+    try {
+        normalizeDataverseUrl(input);
+        return undefined;
+    } catch (err) {
+        return (err as Error).message;
+    }
+}
+
 export function normalizeDataverseUrl(input: string): string {
     const trimmed = input.trim().replace(/\/+$/, '');
+    if (/\.operations\.dynamics\.com/i.test(trimmed)) {
+        throw new Error('That is the Finance & Operations URL. Enter the Dataverse URL instead (https://<org>.crm.dynamics.com), shown in the Power Platform admin center.');
+    }
     return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
@@ -103,6 +132,7 @@ export async function checkEnvironmentConnection(log: vscode.OutputChannel): Pro
         placeHolder: 'https://yourorg.crm.dynamics.com',
         value: vscode.workspace.getConfiguration('xpp').get<string>('environmentUrl') || undefined,
         ignoreFocusOut: true,
+        validateInput: validateDataverseUrl,
     });
     if (!input) {
         return;

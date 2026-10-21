@@ -5,7 +5,7 @@ import * as path from 'path';
 import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import * as vscode from 'vscode';
-import { ClientAssets, getAssetDownloadUrl, getDataverseToken, normalizeDataverseUrl, readUdeEnvironment, UdeEnvironment } from './ude';
+import { ClientAssets, getAssetDownloadUrl, getDataverseToken, normalizeDataverseUrl, readUdeEnvironment, UdeEnvironment, validateDataverseUrl } from './ude';
 
 const ConfigurationsKey = 'HKCU\\Software\\Microsoft\\Dynamics\\AX7\\Development\\Configurations';
 const RequiredFreeBytes = 16 * 1024 ** 3;
@@ -24,6 +24,7 @@ export async function connectEnvironment(context: vscode.ExtensionContext, log: 
         placeHolder: 'https://yourorg.crm.dynamics.com',
         value: vscode.workspace.getConfiguration('xpp').get<string>('environmentUrl') || undefined,
         ignoreFocusOut: true,
+        validateInput: validateDataverseUrl,
     });
     if (!input) {
         return false;
