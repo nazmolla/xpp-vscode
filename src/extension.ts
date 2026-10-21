@@ -6,7 +6,7 @@ import { readActiveEnvironment } from './environment';
 import { registerMcpProvider } from './mcpProvider';
 import { openObject, XppDocumentSelector, XppNavigation } from './navigation';
 import { PacCommands } from './pac';
-import { findActiveProject, ProjectTreeProvider, readProject } from './project';
+import { findActiveProject, ProjectTreeProvider, readProject, selectProject } from './project';
 import { XppServerClient } from './serverClient';
 import { connectEnvironment } from './setup';
 import { checkEnvironmentConnection } from './ude';
@@ -26,7 +26,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     context.subscriptions.push(
         vscode.workspace.registerFileSystemProvider(XppScheme, codeFs, { isCaseSensitive: false }),
-        vscode.window.registerTreeDataProvider('xpp.project', projectTree),
+        projectTree.view = vscode.window.createTreeView('xpp.project', { treeDataProvider: projectTree }),
         vscode.languages.registerDefinitionProvider(XppDocumentSelector, navigation),
         vscode.languages.registerHoverProvider(XppDocumentSelector, navigation),
         vscode.workspace.onDidSaveTextDocument(doc => {
@@ -71,6 +71,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     });
     command('xpp.refreshProject', () => projectTree.refresh());
+    command('xpp.selectProject', () => selectProject());
     command('xpp.build', async () => {
         const project = await readProject();
         await vscode.window.withProgress(

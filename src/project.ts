@@ -1,4 +1,5 @@
 import { promises as fs } from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { objectUri } from './codeView';
@@ -45,12 +46,55 @@ export async function readProject(file?: string): Promise<XppProjectInfo | undef
     return { file: projectFile, name: path.basename(projectFile, '.rnrproj'), model, items };
 }
 
+async function findProjectFiles(dir: string, depth: number, found: string[]): Promise<void> {
+    if (depth < 0 || found.length >= 200) {
+        return;
+    }
+    const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory() && !/^(\.|node_modules$|bin$|obj$)/i.test(entry.name)) {
+            await findProjectFiles(full, depth - 1, found);
+        } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.rnrproj')) {
+            found.push(full);
+        }
+    }
+}
+
+/** Lets the user pick the project from Visual Studio's repos folder or the workspace; saved in xpp.project. */
+export async function selectProject(): Promise<void> {
+    const files: string[] = [];
+    await findProjectFiles(path.join(os.homedir(), 'source', 'repos'), 4, files);
+    for (const uri of await vscode.workspace.findFiles('**/*.rnrproj', '**/{node_modules,bin,obj}/**', 50)) {
+        if (!files.some(f => f.toLowerCase() === uri.fsPath.toLowerCase())) {
+            files.push(uri.fsPath);
+        }
+    }
+    const browse = { label: '$(folder-opened) Browse…', file: '' };
+    const picked = await vscode.window.showQuickPick(
+        [...files.map(file => ({ label: path.basename(file, '.rnrproj'), description: path.dirname(file), file })), browse],
+        { title: 'Select the D365FO project (.rnrproj)', matchOnDescription: true });
+    if (!picked) {
+        return;
+    }
+    let file = picked.file;
+    if (!file) {
+        const chosen = await vscode.window.showOpenDialog({ canSelectMany: false, filters: { 'D365FO project': ['rnrproj'] }, title: 'Select the D365FO project' });
+        if (!chosen?.[0]) {
+            return;
+        }
+        file = chosen[0].fsPath;
+    }
+    await vscode.workspace.getConfiguration('xpp').update('project', file, vscode.ConfigurationTarget.Global);
+}
+
 type ProjectNode = { kind: 'folder'; folder: string; items: ProjectItem[] } | { kind: 'item'; item: ProjectItem };
 
 /** Solution-explorer style view of the active project, grouped by folder. */
 export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode> {
     private readonly changed = new vscode.EventEmitter<void>();
     readonly onDidChangeTreeData = this.changed.event;
+    view?: vscode.TreeView<ProjectNode>;
 
     refresh(): void {
         this.changed.fire();
@@ -84,6 +128,9 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode>
             return [];
         }
         const project = await readProject().catch(() => undefined);
+        if (this.view) {
+            this.view.description = project ? `${project.name}${project.model ? ` (${project.model})` : ''}` : undefined;
+        }
         if (!project) {
             return [];
         }

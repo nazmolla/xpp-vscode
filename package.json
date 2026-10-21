@@ -66,7 +66,7 @@
     "viewsWelcome": [
       {
         "view": "xpp.project",
-        "contents": "No D365FO project (.rnrproj) found in this workspace.\n[Open Folder](command:vscode.openFolder)\nNot set up yet?\n[Connect to Environment](command:xpp.connectEnvironment)"
+        "contents": "No D365FO project selected.\n[Select D365FO Project](command:xpp.selectProject)\nNot set up yet?\n[Connect to Environment](command:xpp.connectEnvironment)"
       }
     ],
     "commands": [
@@ -74,6 +74,7 @@
       { "command": "xpp.openFormDesigner", "title": "Open Form Designer…", "category": "X++", "icon": "$(layout)" },
       { "command": "xpp.build", "title": "Build Model", "category": "X++", "icon": "$(tools)" },
       { "command": "xpp.refreshProject", "title": "Refresh Project", "category": "X++", "icon": "$(refresh)" },
+      { "command": "xpp.selectProject", "title": "Select D365FO Project…", "category": "X++", "icon": "$(project)" },
       { "command": "xpp.connectEnvironment", "title": "Connect to Environment…", "category": "X++" },
       { "command": "xpp.checkEnvironment", "title": "Check Environment Connection", "category": "X++" },
       { "command": "xpp.showEnvironment", "title": "Show Active Environment", "category": "X++" },
@@ -86,7 +87,8 @@
       "view/title": [
         { "command": "xpp.openObject", "when": "view == xpp.project", "group": "navigation@1" },
         { "command": "xpp.build", "when": "view == xpp.project", "group": "navigation@2" },
-        { "command": "xpp.refreshProject", "when": "view == xpp.project", "group": "navigation@3" }
+        { "command": "xpp.refreshProject", "when": "view == xpp.project", "group": "navigation@3" },
+        { "command": "xpp.selectProject", "when": "view == xpp.project", "group": "navigation@4" }
       ],
       "view/item/context": [
         { "command": "xpp.openFormDesigner", "when": "view == xpp.project && viewItem == xppForm", "group": "inline" }
