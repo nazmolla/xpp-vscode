@@ -111,7 +111,8 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode>
         const { objectType, objectName } = node.item;
         const item = new vscode.TreeItem(objectName, vscode.TreeItemCollapsibleState.None);
         item.description = objectType;
-        item.contextValue = elementContextValue(objectType);
+        // Project items always belong to the project's own (custom) model.
+        item.contextValue = elementContextValue(objectType, true);
         item.iconPath = new vscode.ThemeIcon(iconFor(objectType));
         item.command = elementOpenCommand(objectType, objectName);
         return item;

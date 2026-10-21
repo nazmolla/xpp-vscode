@@ -47,6 +47,18 @@ ownership rules, auto-add objects to the active D365FO project, and handle all o
                                   expected properties/fields/relations. Automatically called after
                                   every create/update — also call explicitly when in doubt.
   xpp_get_environment          — Get environment info: metadata folders, active project/model.
+  xpp_select_project           — List the .rnrproj projects (no projectFile) or switch the active
+                                  project. VS Code follows the switch.
+  xpp_remove_from_project      — Exclude an object from the active project (the object stays in
+                                  the model).
+  xpp_delete_object            — Delete a custom-model object completely (metadata file, project
+                                  entry). Blocked when other objects reference it unless force=true.
+  xpp_build                    — Build the model (or only the active project's objects) with the
+                                  same compiler as Visual Studio, report BUILD SUCCEEDED/FAILED with
+                                  every error and warning. Build after creating code and fix every
+                                  error before reporting done.
+  xpp_run_tests                — (VS Code tool) Run SysTest classes of the active project against
+                                  the deployed environment and return pass/fail per test method.
 
   ── Labels ──
   xpp_read_label               — Read labels from a label file. Look up by ID or search by text.

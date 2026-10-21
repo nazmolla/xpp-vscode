@@ -94,21 +94,32 @@ namespace XppVsCode.Server.MetaModel
                 var sb = new StringBuilder();
                 sb.AppendLine("Form: " + formName + "  Model: " + (GetObjectModelName("AxForm", formName) ?? "?")
                     + "  Pattern: " + (effective.Form.Design?.Pattern ?? "-"));
-                sb.AppendLine("Extensions applied (" + effective.Extensions.Count + "): "
-                    + (effective.Extensions.Count == 0 ? "none" : string.Join(", ", effective.Extensions)));
-                foreach (string w in effective.Warnings)
-                    sb.AppendLine("WARNING: " + w);
-
-                sb.AppendLine();
-                sb.AppendLine("Data sources:");
-                foreach (var ds in effective.Form.DataSources)
+                if (start == effective.Root)
                 {
-                    sb.Append("  " + ds.Name + "  table=" + ds.Table);
-                    if (!string.IsNullOrEmpty(ds.JoinSource))
-                        sb.Append("  joinSource=" + ds.JoinSource + "  linkType=" + ds.LinkType);
-                    if (effective.DataSourceAddedBy.TryGetValue(ds.Name, out string dsOrigin))
-                        sb.Append("  {added by " + dsOrigin + "}");
+                    sb.AppendLine("Extensions applied (" + effective.Extensions.Count + "): "
+                        + (effective.Extensions.Count == 0 ? "none" : string.Join(", ", effective.Extensions)));
+                    foreach (string w in effective.Warnings)
+                        sb.AppendLine("WARNING: " + w);
+
                     sb.AppendLine();
+                    sb.AppendLine("Data sources:");
+                    foreach (var ds in effective.Form.DataSources)
+                    {
+                        sb.Append("  " + ds.Name + "  table=" + ds.Table);
+                        if (!string.IsNullOrEmpty(ds.JoinSource))
+                            sb.Append("  joinSource=" + ds.JoinSource + "  linkType=" + ds.LinkType);
+                        if (effective.DataSourceAddedBy.TryGetValue(ds.Name, out string dsOrigin))
+                            sb.Append("  {added by " + dsOrigin + "}");
+                        sb.AppendLine();
+                    }
+                }
+                else
+                {
+                    // A subtree survey only needs the data sources that subtree binds to.
+                    var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    CollectDataSources(start, used);
+                    sb.AppendLine("Data sources used here: " + (used.Count == 0 ? "none" : string.Join(", ",
+                        effective.Form.DataSources.Where(d => used.Contains(d.Name)).Select(d => d.Name + " (table " + d.Table + ")"))));
                 }
 
                 sb.AppendLine();
@@ -231,6 +242,13 @@ namespace XppVsCode.Server.MetaModel
 
         private static IEnumerable<AxFormControl> GetChildControls(object control) =>
             FormExtensionMerger.ChildrenOf(control);
+
+        private static void CollectDataSources(FormControlNode node, HashSet<string> names)
+        {
+            string ds = GetStringProperty(node.Control, "DataSource");
+            if (!string.IsNullOrEmpty(ds)) names.Add(ds);
+            foreach (var child in node.Children) CollectDataSources(child, names);
+        }
 
         private static bool IsContainerControl(object control) =>
             control?.GetType().GetProperty("Controls")?.PropertyType == typeof(KeyedObjectCollection<AxFormControl>);
@@ -474,6 +492,22 @@ namespace XppVsCode.Server.MetaModel
             if (string.IsNullOrEmpty(dto.DataSource) && !string.IsNullOrEmpty(dto.DataField))
                 dto.DataSource = inheritedDataSource;
 
+            // A group bound to a field group gets one control per field, as Visual Studio's designer creates them.
+            if (!string.IsNullOrEmpty(dto.DataGroup))
+            {
+                if (string.IsNullOrEmpty(dto.DataSource)) dto.DataSource = inheritedDataSource;
+                if (string.IsNullOrWhiteSpace(dto.ControlType)) dto.ControlType = "Group";
+                if (dto.DataSource != null && dataSources.TryGetValue(dto.DataSource, out string groupTable))
+                {
+                    var groupFields = GetEffectiveFieldGroupFields(groupTable, dto.DataGroup);
+                    if (groupFields == null)
+                        errors.Add(label + ": field group '" + dto.DataGroup + "' not found on table '" + groupTable + "' or its extensions.");
+                    else if (dto.Controls.Count == 0)
+                        foreach (string field in groupFields)
+                            dto.Controls.Add(new FormControlDto { Name = dto.Name + "_" + field, DataSource = dto.DataSource, DataField = field });
+                }
+            }
+
             AxTableField boundField = null;
             if (!string.IsNullOrEmpty(dto.DataSource))
             {
@@ -510,6 +544,24 @@ namespace XppVsCode.Server.MetaModel
                 ValidateControlDefinition(child, dto.DataSource ?? inheritedDataSource, effective,
                     dataSources, tableFieldCache, newNames, errors);
             }
+        }
+
+        private List<string> GetEffectiveFieldGroupFields(string tableName, string groupName)
+        {
+            var table = MetaService.GetTable(tableName);
+            if (table == null) return null;
+            var group = table.FieldGroups.FirstOrDefault(g => string.Equals(g.Name, groupName, StringComparison.OrdinalIgnoreCase));
+            var fields = group?.Fields.Select(f => f.DataField).ToList();
+            foreach (string extName in NamesForType("AxTableExtension") ?? Enumerable.Empty<string>())
+            {
+                if (!extName.StartsWith(tableName + ".", StringComparison.OrdinalIgnoreCase)) continue;
+                var extGroup = MetaService.GetTableExtension(extName)?.FieldGroups
+                    .FirstOrDefault(g => string.Equals(g.Name, groupName, StringComparison.OrdinalIgnoreCase));
+                if (extGroup == null) continue;
+                fields = fields ?? new List<string>();
+                fields.AddRange(extGroup.Fields.Select(f => f.DataField));
+            }
+            return fields;
         }
 
         private static string InferControlType(AxTableField field)
@@ -563,6 +615,12 @@ namespace XppVsCode.Server.MetaModel
             if (dto.Properties != null)
                 foreach (var kv in dto.Properties)
                     props[kv.Key] = kv.Value;
+            // Tab pages need a pattern on pattern-based forms (else a best-practice warning on every build).
+            if (dto.ControlType == "TabPage" && !props.ContainsKey("Pattern"))
+            {
+                props["Pattern"] = "FieldsFieldGroups";
+                props["PatternVersion"] = "1.1";
+            }
             ApplyProperties(control, props);
 
             if (control.GetType().GetProperty("Controls")?.GetValue(control) is KeyedObjectCollection<AxFormControl> children)

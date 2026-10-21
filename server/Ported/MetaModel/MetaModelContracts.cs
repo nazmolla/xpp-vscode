@@ -24,6 +24,8 @@ namespace XppVsCode.Server.MetaModel
     {
         public string Name { get; set; }
         public bool AllowDuplicates { get; set; }
+        // False when the caller did not pass allowDuplicates; validation then skips the check.
+        public bool AllowDuplicatesSpecified { get; set; }
         public List<string> Fields { get; set; } = new List<string>();
     }
 
@@ -116,6 +118,16 @@ namespace XppVsCode.Server.MetaModel
         public Dictionary<string, string> Properties { get; set; }
     }
 
+    public sealed class MenuElementDto
+    {
+        public string Name { get; set; }
+        public string MenuItemName { get; set; }
+        public string MenuItemType { get; set; }
+        public string Parent { get; set; }
+        public string Position { get; set; }
+        public string PreviousSibling { get; set; }
+    }
+
     // ── Request DTOs ──
 
     public sealed class CreateObjectRequest
@@ -144,6 +156,7 @@ namespace XppVsCode.Server.MetaModel
         public List<DataEntityPermissionDto> DataEntityPermissions { get; set; }
         public List<EntityFieldDto> EntityFields { get; set; }
         public bool SkipStagingTable { get; set; }
+        public List<MenuElementDto> MenuElements { get; set; }
 
         /// <summary>
         /// Convert to an UpdateObjectRequest so Create can delegate metadata
@@ -173,7 +186,8 @@ namespace XppVsCode.Server.MetaModel
                 Duties = Duties,
                 DataEntityPermissions = DataEntityPermissions,
                 EntityFields = EntityFields,
-                SkipStagingTable = SkipStagingTable
+                SkipStagingTable = SkipStagingTable,
+                MenuElements = MenuElements
             };
         }
     }
@@ -204,6 +218,7 @@ namespace XppVsCode.Server.MetaModel
         public List<DataEntityPermissionDto> DataEntityPermissions { get; set; }
         public List<EntityFieldDto> EntityFields { get; set; }
         public bool SkipStagingTable { get; set; }
+        public List<MenuElementDto> MenuElements { get; set; }
         // Entry points, privileges, duties or data entity permissions to remove, by name.
         public List<string> RemoveSecurityItems { get; set; }
     }
@@ -241,6 +256,7 @@ namespace XppVsCode.Server.MetaModel
         public List<QueryDataSourceDto> DataSources { get; set; }
         public List<FormControlDto> Controls { get; set; }
         public List<ControlModificationDto> ControlModifications { get; set; }
+        public List<EntityFieldDto> EntityFields { get; set; }
     }
 
     public sealed class MethodInfo
@@ -283,6 +299,7 @@ namespace XppVsCode.Server.MetaModel
         public string Version { get; set; }
         public string Layer { get; set; }
         public long ModelId { get; set; }
+        public string Package { get; set; }
         public List<string> Dependencies { get; set; } = new List<string>();
         public Dictionary<string, int> ObjectCounts { get; set; } = new Dictionary<string, int>();
     }

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Net;
 using System.Text;
 
@@ -45,6 +46,23 @@ namespace XppVsCode.Server.Tools
                 }
                 else
                 {
+                    // Ranked search first; a keyword guess only when the search service gives nothing usable.
+                    var hits = SearchLearn(query);
+                    foreach (var hit in hits)
+                    {
+                        string page = FetchAndExtractPage(hit.Url, maxLen);
+                        if (page == null || page.Length < 200) continue;
+                        var text = new StringBuilder("Source: " + hit.Url + "\n");
+                        var others = hits.Where(h => h.Url != hit.Url).Take(5).ToList();
+                        if (others.Count > 0)
+                            text.Append("Other matches (pass one as url): " + string.Join("; ", others.Select(o => o.Title + " " + o.Url)) + "\n");
+                        text.Append("\n").Append(page);
+                        string result = text.ToString();
+                        if (result.Length > maxLen)
+                            result = result.Substring(0, maxLen) + "\n\n[Content truncated at " + maxLen + " characters]";
+                        return JsonHelpers.BuildToolResult(idToken, result);
+                    }
+
                     string guessedUrl = GuessDocsUrl(query);
                     if (guessedUrl != null)
                     {
@@ -81,11 +99,124 @@ namespace XppVsCode.Server.Tools
             }
         }
 
+        private sealed class SearchHit
+        {
+            public string Title;
+            public string Url;
+        }
+
+        // Microsoft Learn's semantic search (the public Learn MCP endpoint) in relevance order; the keyword search API as fallback.
+        private static System.Collections.Generic.List<SearchHit> SearchLearn(string query)
+        {
+            var hits = SearchLearnSemantic(query);
+            return hits.Count > 0 ? hits : SearchLearnKeyword(query);
+        }
+
+        private static System.Collections.Generic.List<SearchHit> SearchLearnSemantic(string query)
+        {
+            var hits = new System.Collections.Generic.List<SearchHit>();
+            try
+            {
+                var serializer = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+                string request = serializer.Serialize(new System.Collections.Generic.Dictionary<string, object>
+                {
+                    ["jsonrpc"] = "2.0",
+                    ["id"] = 1,
+                    ["method"] = "tools/call",
+                    ["params"] = new System.Collections.Generic.Dictionary<string, object>
+                    {
+                        ["name"] = "microsoft_docs_search",
+                        ["arguments"] = new System.Collections.Generic.Dictionary<string, object>
+                        {
+                            ["query"] = query + " Dynamics 365 finance and operations X++",
+                        },
+                    },
+                });
+                string response;
+                using (var client = new WebClient { Encoding = Encoding.UTF8 })
+                {
+                    client.Headers[HttpRequestHeader.UserAgent] = "xpp-vscode";
+                    client.Headers[HttpRequestHeader.ContentType] = "application/json";
+                    client.Headers[HttpRequestHeader.Accept] = "application/json, text/event-stream";
+                    response = client.UploadString("https://learn.microsoft.com/api/mcp", request);
+                }
+
+                // The endpoint answers as server-sent events: the JSON-RPC message is on a "data:" line.
+                string message = response.Split('\n').Select(l => l.Trim())
+                    .Where(l => l.StartsWith("data:", StringComparison.Ordinal))
+                    .Select(l => l.Substring(5).Trim()).LastOrDefault() ?? response;
+                var root = serializer.DeserializeObject(message) as System.Collections.Generic.Dictionary<string, object>;
+                var result = root != null && root.TryGetValue("result", out object r) ? r as System.Collections.Generic.Dictionary<string, object> : null;
+                var content = result != null && result.TryGetValue("content", out object c) ? c as object[] : null;
+                string text = content?.OfType<System.Collections.Generic.Dictionary<string, object>>()
+                    .Select(p => p.TryGetValue("text", out object t) ? t as string : null).FirstOrDefault(t => t != null);
+                if (text == null) return hits;
+
+                var payload = serializer.DeserializeObject(text) as System.Collections.Generic.Dictionary<string, object>;
+                if (payload == null || !payload.TryGetValue("results", out object results) || !(results is object[] items)) return hits;
+                var seen = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var item in items.OfType<System.Collections.Generic.Dictionary<string, object>>())
+                {
+                    string url = item.TryGetValue("contentUrl", out object u) ? u as string : null;
+                    if (url == null || url.IndexOf("/dynamics365/", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    if (url.IndexOf("dynamics-ax-2012", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                    int anchor = url.IndexOf('#');
+                    if (anchor >= 0) url = url.Substring(0, anchor);
+                    url = url.Replace("https://learn.microsoft.com/dynamics365/", "https://learn.microsoft.com/en-us/dynamics365/");
+                    if (!seen.Add(url)) continue;
+                    hits.Add(new SearchHit { Title = item.TryGetValue("title", out object t) ? t as string : url, Url = url });
+                }
+            }
+            catch (Exception ex)
+            {
+                McpLogger.Log("xpp_search_docs: Learn semantic search failed: " + ex.Message);
+            }
+            return hits;
+        }
+
+        // Microsoft Learn's public keyword search API; developer (dev-itpro) pages first, then other D365 finance and operations pages.
+        private static System.Collections.Generic.List<SearchHit> SearchLearnKeyword(string query)
+        {
+            var hits = new System.Collections.Generic.List<SearchHit>();
+            try
+            {
+                string api = "https://learn.microsoft.com/api/search?search=" + Uri.EscapeDataString(query + " Dynamics 365 finance operations")
+                    + "&locale=en-us&$top=25";
+                string json;
+                using (var client = new WebClient { Encoding = Encoding.UTF8 })
+                {
+                    client.Headers[HttpRequestHeader.UserAgent] = "xpp-vscode";
+                    json = client.DownloadString(api);
+                }
+                var serializer = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+                if (serializer.DeserializeObject(json) is System.Collections.Generic.Dictionary<string, object> root
+                    && root.TryGetValue("results", out object results) && results is object[] items)
+                {
+                    foreach (var item in items.OfType<System.Collections.Generic.Dictionary<string, object>>())
+                    {
+                        string url = item.TryGetValue("url", out object u) ? u as string : null;
+                        if (url == null || url.IndexOf("/dynamics365/", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                        if (url.IndexOf("dynamics-ax-2012", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                        hits.Add(new SearchHit { Title = item.TryGetValue("title", out object t) ? t as string : url, Url = url });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                McpLogger.Log("xpp_search_docs: search API failed: " + ex.Message);
+            }
+            return hits.OrderBy(h => h.Url.IndexOf("/fin-ops-core/dev-itpro/", StringComparison.OrdinalIgnoreCase) >= 0 ? 0
+                : h.Url.IndexOf("/fin-ops-core/", StringComparison.OrdinalIgnoreCase) >= 0 ? 1 : 2).ToList();
+        }
+
         private static string GuessDocsUrl(string query)
         {
             if (string.IsNullOrWhiteSpace(query)) return null;
             string lower = query.ToLowerInvariant();
             string devItPro = "https://learn.microsoft.com/en-us/dynamics365/fin-ops-core/dev-itpro/";
+
+            if (lower.Contains("business event"))
+                return devItPro + "business-events/business-events-dev-doc";
 
             if (lower.Contains("chain of command") || lower.Contains("coc"))
                 return devItPro + "extensibility/method-wrapping-coc";
@@ -156,12 +287,27 @@ namespace XppVsCode.Server.Tools
                 {
                     client.Encoding = Encoding.UTF8;
                     client.Headers.Add("User-Agent", "XppCopilotCompanion/1.0 (MCP docs tool)");
-                    client.Headers.Add("Accept", "text/html");
-                    string html = client.DownloadString(url);
+                    // Learn serves the article as markdown on request: no navigation chrome, code blocks kept.
+                    client.Headers.Add("Accept", "text/markdown, text/html;q=0.5");
+                    string body = client.DownloadString(url);
 
-                    string extracted = HtmlExtractor.ExtractMainContent(html);
-                    if (string.IsNullOrWhiteSpace(extracted))
-                        extracted = HtmlExtractor.StripHtmlTags(html);
+                    string extracted;
+                    if ((client.ResponseHeaders?["Content-Type"] ?? "").IndexOf("markdown", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        extracted = body;
+                        if (extracted.StartsWith("---"))
+                        {
+                            int end = extracted.IndexOf("\n---", 3, StringComparison.Ordinal);
+                            if (end > 0) extracted = extracted.Substring(extracted.IndexOf('\n', end + 1) + 1);
+                        }
+                        extracted = extracted.Trim();
+                    }
+                    else
+                    {
+                        extracted = HtmlExtractor.ExtractMainContent(body);
+                        if (string.IsNullOrWhiteSpace(extracted))
+                            extracted = HtmlExtractor.StripHtmlTags(body);
+                    }
 
                     if (extracted.Length > maxLen)
                         extracted = extracted.Substring(0, maxLen);

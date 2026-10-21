@@ -40,10 +40,22 @@ export function composeSource(declaration: string, methods: { name: string; sour
     if (!head.endsWith('\n')) {
         head += '\n';
     }
-    const methodText = body.map(m => m.source.replace(/^\s*\n/, '').replace(/\s+$/, '')).filter(s => s.length > 0);
+    const methodText = body.map(m => indentMethod(m.source.replace(/^\s*\n/, '').replace(/\s+$/, ''))).filter(s => s.length > 0);
     return methodText.length === 0
         ? decl + '\n'
         : head + methodText.join('\n\n') + '\n}\n';
+}
+
+/** Methods live one level inside the class; sources written at column 0 (older agent tools) are shifted for display. */
+function indentMethod(source: string): string {
+    const lines = source.split('\n');
+    const indents = lines.filter(l => l.trim().length > 0).map(l => l.length - l.trimStart().length);
+    const min = indents.length ? Math.min(...indents) : 4;
+    if (min >= 4) {
+        return source;
+    }
+    const pad = ' '.repeat(4 - min);
+    return lines.map(l => (l.trim().length === 0 ? '' : pad + l)).join('\n');
 }
 
 function normalizeEol(text: string): string {

@@ -80,6 +80,19 @@ namespace XppVsCode.Server.MetaModel
                     return HandleAddToProject(body);
                 case "list_project_items":
                     return HandleListProjectItems(body);
+                case "remove_from_project":
+                    return _bridge.RemoveFromProjectJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
+                case "select_project":
+                    return string.IsNullOrWhiteSpace(ExtractJsonString(body, "projectFile"))
+                        ? _bridge.ListProjectsJson(ExtractJsonString(body, "searchFolder"))
+                        : _bridge.SelectProjectJson(ExtractJsonString(body, "projectFile"));
+                case "delete_object":
+                    return _bridge.DeleteObjectJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                        "true".Equals(ExtractJsonString(body, "checkOnly"), StringComparison.OrdinalIgnoreCase));
+                case "build":
+                    return _bridge.BuildJson(ExtractJsonString(body, "modelName"),
+                        string.Equals(ExtractJsonString(body, "scope"), "project", StringComparison.OrdinalIgnoreCase),
+                        "true".Equals(ExtractJsonString(body, "syncDatabase"), StringComparison.OrdinalIgnoreCase));
                 case "get_environment":
                     return HandleGetEnvironment(body);
                 case "validate_object":
@@ -167,6 +180,7 @@ namespace XppVsCode.Server.MetaModel
                 Duties = ExtractJsonStringArray(body, "duties")?.ToList(),
                 DataEntityPermissions = ParseDataEntityPermissions(body),
                 EntityFields = ParseEntityFields(body),
+                MenuElements = ParseMenuElements(body),
                 SkipStagingTable = "true".Equals(ExtractJsonString(body, "skipStagingTable"), StringComparison.OrdinalIgnoreCase)
             };
 
@@ -187,12 +201,18 @@ namespace XppVsCode.Server.MetaModel
                 + " fields=" + (req.Fields?.Count ?? 0));
 
             var result = _bridge.CreateObject(req);
+            result.Message += MetaModelBridge.IgnoredPropertiesReport();
+            MetaModelBridge.ClearIgnoredProperties();
             if (!result.Success)
             {
                 // Enhance error message with object context
                 result.Message = "[CreateObject " + req.ObjectType + " '" + req.ObjectName + "'] " + result.Message;
                 return SerializeResult(result);
             }
+
+            // A label file is saved as one AxLabelFile per language ('<Id>_<lang>'); the create result lists them.
+            if (req.ObjectType == "AxLabelFile")
+                return SerializeResult(result);
 
             // Post-creation validation: verify object exists in project and metadata applied
             var createValidateReq = BuildValidateRequest(
@@ -247,6 +267,7 @@ namespace XppVsCode.Server.MetaModel
                 Duties = ExtractJsonStringArray(body, "duties")?.ToList(),
                 DataEntityPermissions = ParseDataEntityPermissions(body),
                 EntityFields = ParseEntityFields(body),
+                MenuElements = ParseMenuElements(body),
                 SkipStagingTable = "true".Equals(ExtractJsonString(body, "skipStagingTable"), StringComparison.OrdinalIgnoreCase),
                 RemoveSecurityItems = ExtractJsonStringArray(body, "removeSecurityItems")?.ToList()
             };
@@ -263,6 +284,8 @@ namespace XppVsCode.Server.MetaModel
                 return SerializeResult(new MetaModelResult { Success = false, Message = error });
 
             var result = _bridge.UpdateObject(req);
+            result.Message += MetaModelBridge.IgnoredPropertiesReport();
+            MetaModelBridge.ClearIgnoredProperties();
             if (!result.Success)
             {
                 // Enhance error message with object context
@@ -318,7 +341,7 @@ namespace XppVsCode.Server.MetaModel
                 objectName,
                 ExtractJsonObjectRaw(body, "typedMetadata"),
                 ExtractJsonObject(body, "properties"),
-                ParseFields(body),
+                ParseFields(body, defaultFieldType: false),
                 ParseEnumValues(body),
                 ParseIndexes(body),
                 ParseRelations(body),
@@ -483,6 +506,8 @@ namespace XppVsCode.Server.MetaModel
             if (result.Publisher != null) sb.Append(",\"publisher\":\"" + EscapeJson(result.Publisher) + "\"");
             if (result.Version != null) sb.Append(",\"version\":\"" + EscapeJson(result.Version) + "\"");
             if (result.Layer != null) sb.Append(",\"layer\":\"" + EscapeJson(result.Layer) + "\"");
+            if (result.Package != null) sb.Append(",\"package\":\"" + EscapeJson(result.Package) + "\"");
+            if (result.Dependencies.Count > 0) sb.Append(",\"dependencies\":\"" + EscapeJson(string.Join(", ", result.Dependencies)) + "\"");
             sb.Append(",\"modelId\":" + result.ModelId);
             sb.Append("}");
             return sb.ToString();
@@ -541,6 +566,20 @@ namespace XppVsCode.Server.MetaModel
             string text = ExtractJsonString(body, "text");
             string comment = ExtractJsonString(body, "comment");
             var result = _bridge.CreateLabel(labelFileId, language, labelId, text, comment);
+            var translations = ExtractJsonObject(body, "translations");
+            if (result.Success && translations != null)
+            {
+                var lines = new List<string> { result.Message };
+                foreach (var t in translations)
+                {
+                    var r = _bridge.CreateLabel(labelFileId, t.Key, labelId, t.Value, comment);
+                    lines.Add((r.Success ? "" : "FAILED " + t.Key + ": ") + r.Message);
+                    if (!r.Success) result.Success = false;
+                }
+                result.Message = string.Join("\n", lines);
+            }
+            if (result.Success)
+                result.Message += "\nUse it as @" + labelFileId + ":" + labelId;
             return SerializeResult(result);
         }
 
@@ -556,11 +595,13 @@ namespace XppVsCode.Server.MetaModel
         {
             var items = _bridge.ListProjectItems();
             var sb = new StringBuilder();
-            sb.Append("{\"success\":true,\"items\":[");
+            sb.Append("{\"success\":true,\"hasProject\":" + (_bridge.HasActiveProject ? "true" : "false") + ",\"items\":[");
             for (int i = 0; i < items.Count; i++)
             {
                 if (i > 0) sb.Append(",");
                 sb.Append("{\"name\":\"" + EscapeJson(items[i].Name) + "\"");
+                if (items[i].ObjectType != null)
+                    sb.Append(",\"objectType\":\"" + EscapeJson(items[i].ObjectType) + "\"");
                 if (items[i].FilePath != null)
                     sb.Append(",\"filePath\":\"" + EscapeJson(items[i].FilePath) + "\"");
                 sb.Append("}");
@@ -709,6 +750,13 @@ namespace XppVsCode.Server.MetaModel
             SerializeEntryPoints(sb, r.EntryPoints);
             // Query DataSources
             SerializeDataSources(sb, r.DataSources);
+            if (r.EntityFields != null && r.EntityFields.Count > 0)
+            {
+                sb.Append(",\"entityFields\":[");
+                sb.Append(string.Join(",", r.EntityFields.Select(f => "{\"name\":\"" + EscapeJson(f.Name ?? "") + "\",\"dataSource\":\""
+                    + EscapeJson(f.DataSource ?? "") + "\",\"dataField\":\"" + EscapeJson(f.DataField ?? "") + "\"}")));
+                sb.Append("]");
+            }
             // Form extension controls
             SerializeFormControls(sb, "controls", r.Controls);
             SerializeControlModifications(sb, r.ControlModifications);
@@ -1359,7 +1407,7 @@ namespace XppVsCode.Server.MetaModel
             return result.Count > 0 ? result : null;
         }
 
-        private System.Collections.Generic.List<FieldDto> ParseFields(string body)
+        private System.Collections.Generic.List<FieldDto> ParseFields(string body, bool defaultFieldType = true)
         {
             string arrayJson = ExtractJsonArray(body, "fields");
             if (arrayJson == null) {
@@ -1372,12 +1420,16 @@ namespace XppVsCode.Server.MetaModel
             {
                 string name = ExtractJsonString(obj, "name");
                 if (string.IsNullOrEmpty(name)) { skipped++; continue; }
+                string enumType = ExtractJsonString(obj, "enumType");
+                string fieldType = ExtractJsonString(obj, "fieldType");
+                if (fieldType == null && defaultFieldType)
+                    fieldType = string.IsNullOrEmpty(enumType) ? "String" : "Enum";
                 result.Add(new FieldDto
                 {
                     Name = name,
-                    FieldType = ExtractJsonString(obj, "fieldType") ?? "String",
+                    FieldType = fieldType,
                     ExtendedDataType = ExtractJsonString(obj, "extendedDataType"),
-                    EnumType = ExtractJsonString(obj, "enumType"),
+                    EnumType = enumType,
                     Label = ExtractJsonString(obj, "label")
                 });
             }
@@ -1402,6 +1454,7 @@ namespace XppVsCode.Server.MetaModel
                 var dto = new IndexDto { Name = name };
                 string dup = ExtractJsonString(obj, "allowDuplicates");
                 dto.AllowDuplicates = "true".Equals(dup, StringComparison.OrdinalIgnoreCase);
+                dto.AllowDuplicatesSpecified = dup != null;
                 string[] fields = ExtractJsonStringArray(obj, "fields");
                 if (fields != null) dto.Fields.AddRange(fields);
                 result.Add(dto);
@@ -1505,6 +1558,28 @@ namespace XppVsCode.Server.MetaModel
                     Name = name,
                     Grant = ExtractJsonString(obj, "grant"),
                     IntegrationMode = ExtractJsonString(obj, "integrationMode")
+                });
+            }
+            return result.Count > 0 ? result : null;
+        }
+
+        private System.Collections.Generic.List<MenuElementDto> ParseMenuElements(string body)
+        {
+            string arrayJson = ExtractJsonArray(body, "menuElements");
+            if (arrayJson == null) return null;
+            var result = new System.Collections.Generic.List<MenuElementDto>();
+            foreach (string obj in SplitJsonObjects(arrayJson))
+            {
+                string name = ExtractJsonString(obj, "name");
+                if (string.IsNullOrEmpty(name)) continue;
+                result.Add(new MenuElementDto
+                {
+                    Name = name,
+                    MenuItemName = ExtractJsonString(obj, "menuItemName"),
+                    MenuItemType = ExtractJsonString(obj, "menuItemType"),
+                    Parent = ExtractJsonString(obj, "parent"),
+                    Position = ExtractJsonString(obj, "position"),
+                    PreviousSibling = ExtractJsonString(obj, "previousSibling"),
                 });
             }
             return result.Count > 0 ? result : null;
@@ -1661,7 +1736,7 @@ namespace XppVsCode.Server.MetaModel
                 "objectType", "objectName", "modelName", "declaration", "methods",
                 "enumValues", "fields", "indexes", "fieldGroups", "relations",
                 "entryPoints", "dataSources", "typedMetadata", "properties", "action",
-                "privileges", "duties", "dataEntityPermissions", "entityFields", "skipStagingTable", "removeSecurityItems"
+                "privileges", "duties", "dataEntityPermissions", "entityFields", "skipStagingTable", "removeSecurityItems", "menuElements"
             };
 
         private static System.Collections.Generic.Dictionary<string, string> ExtractFlatProperties(string json)

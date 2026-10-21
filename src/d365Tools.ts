@@ -118,6 +118,8 @@ export function registerTools(
     command('xpp.tools.createPackage', () => createDeploymentPackage());
     command('xpp.tools.findLabels', () => findLabels(server));
     command('xpp.addToProject', (arg?: TreeArg) => addToProject(server, arg));
+    command('xpp.deleteObject', (arg?: TreeArg) => deleteObject(server, arg, refreshTrees));
+    command('xpp.excludeFromProject', (arg?: TreeArg) => excludeFromProject(server, arg));
     command('xpp.createExtension', (arg?: TreeArg) => createExtension(server, arg, refreshTrees));
     command('xpp.createCodeExtension', (arg?: TreeArg) => createCodeExtension(server, arg, refreshTrees));
     command('xpp.findReferences', (arg?: TreeArg) => findReferences(server, arg));
@@ -390,6 +392,45 @@ async function addToProject(server: XppServerClient, arg?: TreeArg): Promise<voi
     }
     await vscode.commands.executeCommand('xpp.refreshProject');
     vscode.window.showInformationMessage(`Added ${element.objectName} to the project.`);
+}
+
+/** Visual Studio's Delete: removes the object from its model (only your own models) and from the project. */
+async function deleteObject(server: XppServerClient, arg: TreeArg | undefined, refreshTrees: () => void): Promise<void> {
+    const element = elementOf(arg);
+    if (!element) {
+        return;
+    }
+    const confirm = await vscode.window.showWarningMessage(
+        `Delete ${typeLabel(element.objectType)} '${element.objectName}' from its model? The metadata file is removed.`, { modal: true }, 'Delete');
+    if (confirm !== 'Delete') {
+        return;
+    }
+    let result = await server.tool('xpp_delete_object', element);
+    if (result.isError && /still referenced/.test(result.text)) {
+        const force = await vscode.window.showWarningMessage(result.text, { modal: true }, 'Delete Anyway');
+        if (force !== 'Delete Anyway') {
+            return;
+        }
+        result = await server.tool('xpp_delete_object', { ...element, force: true });
+    }
+    if (result.isError) {
+        throw new Error(result.text);
+    }
+    refreshTrees();
+    vscode.window.showInformationMessage(result.text.split('\n')[0]);
+}
+
+/** Visual Studio's Exclude From Project: the object stays in the model. */
+async function excludeFromProject(server: XppServerClient, arg: TreeArg | undefined): Promise<void> {
+    const element = elementOf(arg);
+    if (!element) {
+        return;
+    }
+    const result = await server.bridge('remove_from_project', element);
+    if (!result.success) {
+        throw new Error(result.message);
+    }
+    await vscode.commands.executeCommand('xpp.refreshProject');
 }
 
 async function createExtension(server: XppServerClient, arg: TreeArg | undefined, refreshTrees: () => void): Promise<void> {

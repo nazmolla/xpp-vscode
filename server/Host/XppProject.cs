@@ -37,12 +37,51 @@ namespace XppVsCode.Server.Host
         {
             string dir = Path.GetDirectoryName(FullName);
             return Load().Descendants(Ns + "Content")
-                .Select(c => new ProjectItemInfo
+                .Select(c =>
                 {
-                    Name = (string)c.Element(Ns + "Name") ?? Path.GetFileName((string)c.Attribute("Include")),
-                    FilePath = Path.Combine(dir, (string)c.Attribute("Include") ?? ""),
+                    string include = (string)c.Attribute("Include") ?? "";
+                    int slash = include.IndexOf('\\');
+                    return new ProjectItemInfo
+                    {
+                        Name = (string)c.Element(Ns + "Name") ?? Path.GetFileName(include),
+                        ObjectType = slash > 0 ? include.Substring(0, slash) : null,
+                        FilePath = Path.Combine(dir, include),
+                    };
                 })
                 .ToList();
+        }
+
+        public bool Contains(string objectType, string objectName)
+        {
+            string include = objectType + "\\" + objectName;
+            return Load().Descendants(Ns + "Content")
+                .Any(c => string.Equals((string)c.Attribute("Include"), include, StringComparison.OrdinalIgnoreCase));
+        }
+
+        /// <returns>false when the item was not in the project.</returns>
+        public bool RemoveItem(string objectType, string objectName)
+        {
+            var doc = Load();
+            string include = objectType + "\\" + objectName;
+            var items = doc.Descendants(Ns + "Content")
+                .Where(c => string.Equals((string)c.Attribute("Include"), include, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (items.Count == 0) return false;
+            foreach (var item in items) item.Remove();
+
+            // Drop the folder entry when no item of that type is left, as Visual Studio does.
+            string folder = FolderFor(objectType) + "\\";
+            bool typeLeft = doc.Descendants(Ns + "Content")
+                .Any(c => ((string)c.Attribute("Include") ?? "").StartsWith(objectType + "\\", StringComparison.OrdinalIgnoreCase));
+            if (!typeLeft)
+                doc.Descendants(Ns + "Folder")
+                    .Where(f => string.Equals((string)f.Attribute("Include"), folder, StringComparison.OrdinalIgnoreCase))
+                    .ToList().ForEach(f => f.Remove());
+            foreach (var group in doc.Root.Elements(Ns + "ItemGroup").Where(g => !g.HasElements).ToList())
+                group.Remove();
+
+            doc.Save(FullName);
+            return true;
         }
 
         /// <returns>false when the item is already in the project.</returns>

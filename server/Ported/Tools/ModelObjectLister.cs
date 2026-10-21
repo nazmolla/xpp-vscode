@@ -149,9 +149,20 @@ namespace XppVsCode.Server.Tools
                 }
                 if (model != null) return model;
 
+                // Agents often pass the package name (ApplicationSuite) instead of the model (Foundation).
+                var inPackage = _models.Values.Where(m => string.Equals(m.Package, modelName, StringComparison.OrdinalIgnoreCase))
+                    .Distinct().ToList();
+                if (inPackage.Count == 1) return inPackage[0];
+
                 if (_models.Count == 0)
                 {
                     error = "No D365FO metadata folders found. Check the active D365FO configuration (XPPConfig) on this machine.";
+                    return null;
+                }
+                if (inPackage.Count > 1)
+                {
+                    error = "'" + modelName + "' is a package with several models: " + string.Join(", ", inPackage.Select(m => m.Name).Distinct())
+                        + ". Pass one of these model names.";
                     return null;
                 }
 

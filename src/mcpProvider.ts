@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import * as vscode from 'vscode';
 import { readActiveEnvironment } from './environment';
 import { findActiveProject } from './project';
@@ -26,7 +27,9 @@ export function registerMcpProvider(context: vscode.ExtensionContext, log: vscod
                     args.push('--project', project);
                 }
                 log.appendLine(`X++ MCP server: config ${env.configFile}, project ${project ?? 'none'}`);
-                return [new vscode.McpStdioServerDefinition('F&O Studio', exe, args, {}, ServerVersion)];
+                // A different version makes VS Code restart the running server with the new arguments.
+                const version = `${ServerVersion}+${createHash('sha1').update(`${env.configFile}|${project ?? ''}`).digest('hex').slice(0, 8)}`;
+                return [new vscode.McpStdioServerDefinition('F&O Studio', exe, args, {}, version)];
             } catch (err) {
                 log.appendLine(`MCP server not started: ${(err as Error).message}`);
                 return [];

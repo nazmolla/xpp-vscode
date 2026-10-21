@@ -1,3 +1,6 @@
+import { promises as fs } from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { AotTreeProvider } from './aot';
 import { XppBuilder } from './build';
@@ -13,6 +16,7 @@ import { PacCommands } from './pac';
 import { findActiveProject, ProjectTreeProvider, readProject, selectProject } from './project';
 import { XppServerClient } from './serverClient';
 import { connectEnvironment } from './setup';
+import { registerTests } from './tests';
 import { checkEnvironmentConnection } from './ude';
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -123,6 +127,20 @@ export function activate(context: vscode.ExtensionContext): void {
                 vscode.window.setStatusBarMessage(ok ? '$(check) X++ build succeeded' : '$(error) X++ build failed', 10000);
             });
     });
+    command('xpp.buildProject', async () => {
+        const project = await readProject();
+        if (!project?.model) {
+            throw new Error('Select a D365FO project first.');
+        }
+        await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: `Building project ${project.name}…`, cancellable: true },
+            async (_progress, token) => {
+                const ok = await builder.build(project.model, token, project.items);
+                vscode.window.setStatusBarMessage(ok ? '$(check) X++ project build succeeded' : '$(error) X++ project build failed', 10000);
+            });
+    });
+    registerTests(context, server);
+    followAgentProjectSelection(context);
     command('xpp.pac.init', () => pac.initSolution());
     command('xpp.pac.signIn', () => pac.signIn());
     command('xpp.pac.deploy', () => pac.deploy());
@@ -130,6 +148,31 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void { }
+
+/** The MCP server writes the project an agent selected (xpp_select_project); the views follow it through xpp.project. */
+function followAgentProjectSelection(context: vscode.ExtensionContext): void {
+    const stateFile = path.join(process.env.LOCALAPPDATA ?? os.homedir(), 'XppVsCode', 'activeProject.txt');
+    let lastWrite = 0;
+    const written = async () => (await fs.stat(stateFile).catch(() => undefined))?.mtimeMs ?? 0;
+    const check = async () => {
+        const mtime = await written();
+        if (mtime <= lastWrite) {
+            return;
+        }
+        lastWrite = mtime;
+        const selected = (await fs.readFile(stateFile, 'utf8').catch(() => '')).trim();
+        const config = vscode.workspace.getConfiguration('xpp');
+        if (selected && (config.get<string>('project') ?? '').toLowerCase() !== selected.toLowerCase()) {
+            await config.update('project', selected, vscode.ConfigurationTarget.Global);
+        }
+    };
+    // Only selections written after startup count; a file left by an earlier session must not override the user's project.
+    void written().then(initial => {
+        lastWrite = initial;
+        const timer = setInterval(() => void check(), 3000);
+        context.subscriptions.push({ dispose: () => clearInterval(timer) });
+    });
+}
 
 /** Tree nodes passed to context-menu commands: Application Explorer elements or project items. */
 type ElementRef = { objectType?: string; entry?: { name: string }; item?: { objectType: string; objectName: string } };

@@ -453,17 +453,45 @@ namespace XppVsCode.Server.Tools
             bool more = rows.Count > max;
             var shown = rows.Take(max).ToList();
             sb.AppendLine((more ? "First " + max : shown.Count.ToString()) + " reference(s), grouped by referencing object:");
+            var loaded = LoadedPackages();
+            bool anyUnreadable = false;
             foreach (var group in shown.GroupBy(r => ObjectKey(r.Source)))
             {
                 var first = group.First();
-                sb.AppendLine("  " + DescribeObject(first.Source) + "  [" + first.Module + "]");
+                bool readable = loaded.Count == 0 || loaded.Contains(first.Module ?? "");
+                anyUnreadable |= !readable;
+                sb.AppendLine("  " + DescribeObject(first.Source) + "  [" + first.Module + "]"
+                    + (readable ? "" : "  (package not in the local metadata: cannot be read with xpp_read_object)"));
                 foreach (var r in group)
                     sb.AppendLine("    " + Member(r.Source) + " line " + r.Line + ": " + KindName(r.Kind)
                         + " -> " + Member(r.Target, objectLevel: "(type)"));
             }
+            if (anyUnreadable)
+                sb.AppendLine("Packages marked as not local (typically test packages) are indexed in the cross-reference database but their source is not installed with the metadata.");
             if (more)
                 sb.AppendLine("More references exist. Narrow with memberName or referenceKind, or raise maxResults (max " + MaxMax + ").");
             return sb.ToString().TrimEnd();
+        }
+
+        private static HashSet<string> _loadedPackages;
+
+        // Packages whose metadata is on this machine (folders under the custom and reference metadata roots).
+        private static HashSet<string> LoadedPackages()
+        {
+            if (_loadedPackages != null) return _loadedPackages;
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                var config = DynamicsConfigurationReader.ReadActiveConfiguration();
+                var roots = new List<string>(config.ReferenceMetadataFolders);
+                if (config.HasCustom) roots.Add(config.CustomMetadataFolder);
+                foreach (string root in roots.Where(System.IO.Directory.Exists))
+                    foreach (string dir in System.IO.Directory.GetDirectories(root))
+                        if (System.IO.Directory.Exists(System.IO.Path.Combine(dir, "Descriptor")))
+                            set.Add(System.IO.Path.GetFileName(dir));
+            }
+            catch { }
+            return _loadedPackages = set;
         }
 
         private static void AppendWarnings(StringBuilder sb, Health health)

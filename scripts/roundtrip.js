@@ -19,7 +19,13 @@ child.stdout.on('data', d => {
   }
 });
 const call = (method, params) => new Promise(r => { const n = id++; pending.set(n, r); child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: n, method, params }) + '\n'); });
-const norm = s => (s || '').replace(/\r\n/g, '\n').trim();
+// Compares text without the uniform method indent the code view adds to sources stored at column 0.
+const norm = s => {
+  const lines = (s || '').replace(/\r\n/g, '\n').trim().split('\n');
+  const indents = lines.slice(1).filter(l => l.trim()).map(l => l.length - l.trimStart().length);
+  const cut = Math.min(4, ...indents, 4);
+  return lines.map((l, i) => i === 0 ? l : l.slice(Math.min(cut, l.length - l.trimStart().length))).join('\n');
+};
 
 (async () => {
   const timer = setTimeout(() => { console.log('TIMEOUT'); process.exit(1); }, 240000);

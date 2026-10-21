@@ -9,6 +9,11 @@ import { readProject } from './project';
 import { compilerLineToDocumentLine } from './xppSource';
 
 /** Builds a model the way Visual Studio does: labels with LabelC, then X++ with xppc. */
+function inScope(d: CompilerDiagnostic, scope: Set<string>): boolean {
+    const target = diagnosticTarget(d.path);
+    return !target || scope.has(`${target.objectType}/${target.objectName}`.toLowerCase());
+}
+
 export class XppBuilder {
     private readonly diagnostics = vscode.languages.createDiagnosticCollection('xpp');
 
@@ -18,7 +23,8 @@ export class XppBuilder {
         this.diagnostics.dispose();
     }
 
-    async build(modelName: string | undefined, token?: vscode.CancellationToken): Promise<boolean> {
+    /** projectItems limits the reported diagnostics to those objects; xppc always compiles the whole package. */
+    async build(modelName: string | undefined, token?: vscode.CancellationToken, projectItems?: { objectType: string; objectName: string }[]): Promise<boolean> {
         const env = await readActiveEnvironment();
         const model = modelName ?? await this.pickModel(env);
         if (!model) {
@@ -71,11 +77,20 @@ export class XppBuilder {
         }
 
         await fs.rm(xmlLog, { force: true });
+        const assembly = path.join(packageFolder, 'bin', `Dynamics.AX.${model}.dll`);
+        const assemblyBefore = existsSync(assembly) ? (await fs.stat(assembly)).mtimeMs : 0;
         const compiled = await this.run(path.join(bin, 'xppc.exe'), args, token);
-        const found = existsSync(xmlLog) ? await this.publish(xmlLog) : [];
-        const errors = found.filter(d => d.severity.toLowerCase() === 'error').length;
-        this.output.appendLine(`=== ${model}: ${errors} error(s), ${found.length - errors} warning(s) ===`);
-        return compiled && errors === 0;
+        const scope = projectItems ? new Set(projectItems.map(i => `${i.objectType}/${i.objectName}`.toLowerCase())) : undefined;
+        const all = existsSync(xmlLog) ? await this.publish(xmlLog, scope) : [];
+        const found = all.filter(d => !scope || inScope(d, scope));
+        // Fatal (compiler crash) is as blocking as Error; a crash may also write no diagnostics at all.
+        const isBlocking = (d: CompilerDiagnostic) => ['error', 'fatal'].includes(d.severity.toLowerCase());
+        const errors = found.filter(isBlocking).length;
+        const assemblyWritten = existsSync(assembly) && (await fs.stat(assembly)).mtimeMs > assemblyBefore;
+        const ok = compiled && !all.some(isBlocking) && assemblyWritten;
+        const reason = !compiled ? ' (xppc exited with an error)' : !assemblyWritten && errors === 0 ? ' (no assembly was produced)' : '';
+        this.output.appendLine(`=== ${model}${scope ? ' (project items)' : ''}: ${ok ? 'BUILD SUCCEEDED' : 'BUILD FAILED' + reason} - ${errors} error(s), ${found.length - errors} warning(s) ===`);
+        return ok;
     }
 
     private async pickModel(env: XppEnvironment): Promise<string | undefined> {
@@ -118,14 +133,14 @@ export class XppBuilder {
     }
 
     /** Shows compiler diagnostics in the Problems view, on the object's code view where possible. */
-    private async publish(xmlLog: string): Promise<CompilerDiagnostic[]> {
+    private async publish(xmlLog: string, scope?: Set<string>): Promise<CompilerDiagnostic[]> {
         const xml = await fs.readFile(xmlLog, 'utf8');
         const found = parseDiagnostics(xml);
         const byUri = new Map<string, { uri: vscode.Uri; items: vscode.Diagnostic[] }>();
 
         for (const d of found) {
             const target = diagnosticTarget(d.path);
-            if (!target) {
+            if (!target || (scope && !inScope(d, scope) && d.severity.toLowerCase() !== 'fatal')) {
                 continue;
             }
             const uri = objectUri(target.objectType, target.objectName);
@@ -135,7 +150,7 @@ export class XppBuilder {
             }
             const endLine = d.endLine !== undefined ? line + (d.endLine - (d.line ?? d.endLine)) : line;
             const range = new vscode.Range(line, Math.max(0, (d.column ?? 1) - 1), endLine, Math.max(0, (d.endColumn ?? 1000) - 1));
-            const severity = d.severity.toLowerCase() === 'error' ? vscode.DiagnosticSeverity.Error
+            const severity = ['error', 'fatal'].includes(d.severity.toLowerCase()) ? vscode.DiagnosticSeverity.Error
                 : d.severity.toLowerCase() === 'warning' ? vscode.DiagnosticSeverity.Warning
                     : vscode.DiagnosticSeverity.Information;
             const diagnostic = new vscode.Diagnostic(range, d.line === undefined ? `${d.message} (${d.path})` : d.message, severity);

@@ -77,11 +77,12 @@ export function elementOpenCommand(objectType: string, objectName: string): vsco
         : { command: 'xpp.openDesigner', title: 'Open Designer', arguments: [objectType, objectName] };
 }
 
-export function elementContextValue(objectType: string): string {
+export function elementContextValue(objectType: string, isCustom = false): string {
     return ['xppElement', CodeTypes.has(objectType) ? 'code' : '', objectType === 'AxForm' ? 'form' : '',
         ExtensionTypes[objectType] ? 'extensible' : '', CodeExtensionFunctions[objectType] ? 'coc' : '',
         BrowserTypes.has(objectType) ? 'browser' : '', objectType === 'AxTable' ? 'table' : '', WhereUsedTypes.has(objectType) ? 'refs' : '',
-        objectType === 'AxClass' || objectType === 'AxTable' ? 'hier' : '',
+        objectType === 'AxClass' || objectType === 'AxTable' ? 'hier' : '', objectType === 'AxClass' ? 'class' : '',
+        isCustom ? 'custom' : '',
     ].filter(Boolean).join(' ');
 }
 
@@ -173,7 +174,7 @@ export class AotTreeProvider implements vscode.TreeDataProvider<AotNode> {
                 item.id = `${node.scope?.name ?? ''}/${objectType}/${entry.name}`;
                 item.description = node.scope ? undefined : entry.models.map(m => m.displayName).join(', ');
                 item.iconPath = new vscode.ThemeIcon(iconFor(objectType));
-                item.contextValue = elementContextValue(objectType);
+                item.contextValue = elementContextValue(objectType, entry.models.some(m => m.isCustom));
                 item.command = elementOpenCommand(objectType, entry.name);
                 item.tooltip = `${entry.name} (${typeLabel(objectType)})\n${entry.models.map(m => `${m.displayName} [${m.name}]`).join('\n')}`;
                 return item;

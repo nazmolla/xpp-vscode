@@ -60,6 +60,11 @@ namespace XppVsCode.Server
                         result.DefaultModelForNewProjects = parsed.DefaultModelForNewProjects?.Trim();
                         result.CrossReferencesDbServerName = parsed.CrossReferencesDbServerName?.Trim();
                         result.CrossReferencesDatabaseName = parsed.CrossReferencesDatabaseName?.Trim();
+                        result.RuntimePackagesDirectory = parsed.RuntimePackagesDirectory?.Trim();
+                        result.DatabaseServer = parsed.DatabaseServer?.Trim();
+                        result.BusinessDatabaseName = parsed.BusinessDatabaseName?.Trim();
+                        result.RuntimeHostType = parsed.RuntimeHostType;
+                        result.CloudInstanceUrl = parsed.CloudInstanceURL?.Trim();
                         // Custom metadata folder
                         if (!string.IsNullOrWhiteSpace(parsed.ModelStoreFolder))
                             result.CustomMetadataFolder = parsed.ModelStoreFolder.Trim();
@@ -138,6 +143,21 @@ namespace XppVsCode.Server
 
         [DataMember(Name = "DefaultModelForNewProjects", IsRequired = false)]
         public string DefaultModelForNewProjects { get; set; }
+
+        [DataMember(Name = "RuntimePackagesDirectory", IsRequired = false)]
+        public string RuntimePackagesDirectory { get; set; }
+
+        [DataMember(Name = "DatabaseServer", IsRequired = false)]
+        public string DatabaseServer { get; set; }
+
+        [DataMember(Name = "BusinessDatabaseName", IsRequired = false)]
+        public string BusinessDatabaseName { get; set; }
+
+        [DataMember(Name = "RuntimeHostType", IsRequired = false)]
+        public int? RuntimeHostType { get; set; }
+
+        [DataMember(Name = "CloudInstanceURL", IsRequired = false)]
+        public string CloudInstanceURL { get; set; }
     }
 
     internal sealed class DynamicsMetadataConfig
@@ -149,6 +169,13 @@ namespace XppVsCode.Server
         public string DefaultModelForNewProjects { get; set; }
         public string CrossReferencesDbServerName { get; set; }
         public string CrossReferencesDatabaseName { get; set; }
+        public string RuntimePackagesDirectory { get; set; }
+        public string DatabaseServer { get; set; }
+        public string BusinessDatabaseName { get; set; }
+        public int? RuntimeHostType { get; set; }
+        public string CloudInstanceUrl { get; set; }
+        // Unified developer environments (cloud runtime, local metadata only) use host type 4.
+        public bool IsUnifiedDeveloperEnvironment => RuntimeHostType == 4 || !string.IsNullOrEmpty(RuntimePackagesDirectory);
         public List<string> ReferenceMetadataFolders { get; } = new List<string>();
 
         public bool HasCustom => !string.IsNullOrWhiteSpace(CustomMetadataFolder);

@@ -28,26 +28,31 @@ It works against a unified developer environment (UDE) and uses the same metadat
 - **Navigation:** go to definition and hover for element names.
 
 ### Build, deploy and debug
-- **Build Models** with the X++ compiler (`Ctrl+Shift+B`). Errors appear in the Problems panel at the right line.
+- **Build Model** with the X++ compiler (`Ctrl+Shift+B`), and **Build Project**, which reports only the problems in the project's objects. Errors appear in the Problems panel at the right line. A compiler crash (Fatal) or a missing output assembly fails the build.
+- **Run Tests:** runs SysTest test classes on the environment the way Visual Studio's Test Explorer does, and shows each test's result. Tests run against the deployed code, so build and deploy first.
 - **Create Deployment Package** (the same script Visual Studio runs), Deploy Models and Synchronize Database (with `pac`).
 - **Launch Debugger:** attaches to the environment through the FinOps tools' debugger proxy, as Visual Studio does. Breakpoints can be set in the code view.
 - **Infolog:** messages raised by the code being debugged.
 
 ### Dynamics 365 tools
 - **Model management:** Create Model, Update Model Parameters, View Model Dependencies.
-- **Projects:** Select Project, Export Project and Import Project (`.axpp`, compatible with Visual Studio).
+- **Projects:** Select Project, Export Project and Import Project (`.axpp`, compatible with Visual Studio). In the project view, **Exclude from Project** keeps an element in the model; **Delete** removes it from the model (your own models only).
 - **Search:** Find Labels, Find Tag References, Metadata Search, Find References.
 - **Environment:** Connect to Environment (downloads metadata, restores the cross-reference database, configures the machine), Check Connection, Sign in.
 
 ### AI agent tools (MCP)
 Copilot can:
-- read, create, update and validate metadata;
+- read, create, update and validate metadata (every create is all-or-nothing and reports its validation result);
 - find elements and their references;
-- manage labels and add elements to the project;
-- work with security privileges, duties and roles;
-- create data entity extensions, including their staging tables.
+- create label files and labels with translations, and add elements to the project;
+- create menu extensions, and work with security privileges, duties and roles;
+- create data entity extensions, including their staging tables;
+- delete elements of your own models (refused while other elements reference them) or exclude them from the project;
+- select the active project, build the model and read every compiler error;
+- run X++ unit tests on the environment (`xpp_run_tests`);
+- search the Microsoft Learn documentation.
 
-The tools are registered automatically.
+The tools are registered automatically. `node scripts/tool-regression.js --project <your .rnrproj>` checks them against the active environment.
 
 ## Requirements
 

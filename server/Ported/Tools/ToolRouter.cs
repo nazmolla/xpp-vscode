@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Text;
 
 namespace XppVsCode.Server.Tools
@@ -42,14 +43,14 @@ namespace XppVsCode.Server.Tools
   ""tools"": [
     {
       ""name"": ""xpp_create_object"",
-      ""description"": ""Creates a new D365FO X++ metadata object using the MetaModel API. CRITICAL: This is the ONLY correct way to create X++ objects. NEVER create metadata files directly via terminal, file writes, or Set-Content — that bypasses the MetaModel API and produces corrupted/unregistered objects. ALL parameters MUST be JSON — any XML or CDATA content will be REJECTED with an error. Use 'properties' for scalar metadata (Label, IsExtensible, TableGroup, etc.), 'enumValues' for AxEnum values, 'fields'/'indexes'/'fieldGroups'/'relations' for AxTable structure, 'entryPoints' for security types. Use xpp_read_object on existing objects to see the exact JSON format. The object is automatically added to the active VS project. EXTENSIONS: to change a standard/foreign table, enum, or EDT, create AxTableExtension / AxEnumExtension / AxEdtExtension named '<BaseObject>.<Suffix>' (e.g. 'CustTable.MyModelExtension') in your own custom model; fields/indexes/fieldGroups/relations/enumValues are added to the base object, and 'properties' become property modifications of the base object. FORM EXTENSIONS (AxFormExtension): ALWAYS call xpp_get_form_layout on the base form first, then pass 'controls' with explicit placement (parent + position, and previousSibling for position 'after') and optional 'dataSources' / 'controlModifications'. Placement is validated against the base form plus all its existing extensions before saving, and verified after saving. DATA ENTITY EXTENSIONS (AxDataEntityViewExtension '<Entity>.<Suffix>'): pass 'entityFields' (name, dataSource, dataField); each dataField must already exist on that data source's table or a table extension. The same fields are added automatically to an extension of the entity's staging table ('<StagingTable>.<Suffix>') with the source field's type/EDT, unless skipStagingTable=true. SECURITY: privileges take 'entryPoints' (objectType MenuItemDisplay/MenuItemOutput/MenuItemAction, objectName, grant e.g. 'Read' or 'Read,Update,Create,Delete' or 'Invoke') and 'dataEntityPermissions'; duties take 'privileges'; roles take 'duties' and 'privileges'. Standard privileges cannot be extended: create your own privilege and add it to a standard duty/role with AxSecurityDutyExtension / AxSecurityRoleExtension ('<Base>.<Suffix>')."",
+      ""description"": ""Creates a new D365FO X++ metadata object using the MetaModel API. CRITICAL: This is the ONLY correct way to create X++ objects. NEVER create metadata files directly via terminal, file writes, or Set-Content — that bypasses the MetaModel API and produces corrupted/unregistered objects. ALL parameters MUST be JSON — any XML or CDATA content will be REJECTED with an error. Use 'properties' for scalar metadata (Label, IsExtensible, TableGroup, etc.), 'enumValues' for AxEnum values, 'fields'/'indexes'/'fieldGroups'/'relations' for AxTable structure, 'entryPoints' for security types. Use xpp_read_object on existing objects to see the exact JSON format. The object is automatically added to the active VS project. EXTENSIONS: to change a standard/foreign table, enum, or EDT, create AxTableExtension / AxEnumExtension / AxEdtExtension named '<BaseObject>.<Suffix>' (e.g. 'CustTable.MyModelExtension') in your own custom model; fields/indexes/fieldGroups/relations/enumValues are added to the base object, and 'properties' become property modifications of the base object. FORM EXTENSIONS (AxFormExtension): ALWAYS call xpp_get_form_layout on the base form first, then pass 'controls' with explicit placement (parent + position, and previousSibling for position 'after') and optional 'dataSources' / 'controlModifications'. Placement is validated against the base form plus all its existing extensions before saving, and verified after saving. DATA ENTITY EXTENSIONS (AxDataEntityViewExtension '<Entity>.<Suffix>'): pass 'entityFields' (name, dataSource, dataField); each dataField must already exist on that data source's table or a table extension. The same fields are added automatically to an extension of the entity's staging table ('<StagingTable>.<Suffix>') with the source field's type/EDT, unless skipStagingTable=true. SECURITY: privileges take 'entryPoints' (objectType MenuItemDisplay/MenuItemOutput/MenuItemAction, objectName, grant e.g. 'Read' or 'Read,Update,Create,Delete' or 'Invoke') and 'dataEntityPermissions'; duties take 'privileges'; roles take 'duties' and 'privileges'. Standard privileges cannot be extended: create your own privilege and add it to a standard duty/role with AxSecurityDutyExtension / AxSecurityRoleExtension ('<Base>.<Suffix>'). EDTs: set properties.EdtType (String, Int, Int64, Real, Enum, Date, UtcDateTime, Time, Guid, Container) or properties.Extends (kind taken from the parent); then StringSize / EnumType / NoOfDecimals as needed. LABEL FILES (AxLabelFile): objectName = label file ID (e.g. 'MyModelLabels'), properties.Languages = 'en-US,fr-CA'; one label file per language is created, then add labels with xpp_create_label and reference them as '@<Id>:<LabelId>' in Label/HelpText properties. MENU EXTENSIONS (AxMenuExtension '<Menu>.<Suffix>', e.g. 'AccountsReceivable.MyModel'): pass 'menuElements' (name, menuItemName, menuItemType Display|Output|Action, parent = existing submenu, position end|begin|after, previousSibling). Tables and table extensions: every relation is checked (related table and both fields must exist) before anything is saved. The create is all-or-nothing: if any part fails, nothing is saved. The new object is added to the active project (the response says so) and the response ends with a 'Validation:' line; check it."",
       ""inputSchema"": {
         ""type"": ""object"",
         ""properties"": {
           ""objectType"": {
             ""type"": ""string"",
             ""description"": ""The D365FO object type to create."",
-            ""enum"": [""AxClass"", ""AxTable"", ""AxView"", ""AxDataEntityView"", ""AxEdt"", ""AxEnum"", ""AxForm"", ""AxTile"", ""AxMenu"", ""AxMenuItemDisplay"", ""AxMenuItemOutput"", ""AxMenuItemAction"", ""AxQuery"", ""AxSecurityPrivilege"", ""AxSecurityDuty"", ""AxSecurityRole"", ""AxService"", ""AxServiceGroup"", ""AxConfigurationKey"", ""AxTableExtension"", ""AxEnumExtension"", ""AxEdtExtension"", ""AxFormExtension"", ""AxDataEntityViewExtension"", ""AxSecurityDutyExtension"", ""AxSecurityRoleExtension""]
+            ""enum"": [""AxClass"", ""AxTable"", ""AxView"", ""AxDataEntityView"", ""AxEdt"", ""AxEnum"", ""AxForm"", ""AxTile"", ""AxMenu"", ""AxMenuItemDisplay"", ""AxMenuItemOutput"", ""AxMenuItemAction"", ""AxQuery"", ""AxSecurityPrivilege"", ""AxSecurityDuty"", ""AxSecurityRole"", ""AxService"", ""AxServiceGroup"", ""AxConfigurationKey"", ""AxTableExtension"", ""AxEnumExtension"", ""AxEdtExtension"", ""AxFormExtension"", ""AxDataEntityViewExtension"", ""AxSecurityDutyExtension"", ""AxSecurityRoleExtension"", ""AxLabelFile"", ""AxMenuExtension""]
           },
           ""objectName"": { ""type"": ""string"", ""description"": ""Name of the object. Must follow the model's naming prefix convention."" },
           ""typedMetadata"": { ""type"": ""object"", ""description"": ""Full strongly-typed metadata graph for the target object type. Preferred for complete metadata writes across all object types."" },
@@ -70,7 +71,8 @@ namespace XppVsCode.Server.Tools
           ""dataEntityPermissions"": { ""type"": ""array"", ""items"": { ""type"": ""object"", ""properties"": { ""name"": { ""type"": ""string"", ""description"": ""Data entity name."" }, ""grant"": { ""type"": ""string"", ""description"": ""Read, Update, Create, Correct, Delete or All; comma-separated for several."" }, ""integrationMode"": { ""type"": ""string"", ""enum"": [""All"", ""DataServices"", ""DataManagement""] } }, ""required"": [""name""] }, ""description"": ""AxSecurityPrivilege only: data entity permissions."" },
           ""entityFields"": { ""type"": ""array"", ""items"": { ""type"": ""object"", ""properties"": { ""name"": { ""type"": ""string"", ""description"": ""New entity field name (unique on the entity and its extensions)."" }, ""dataSource"": { ""type"": ""string"", ""description"": ""Entity data source name (read the entity first)."" }, ""dataField"": { ""type"": ""string"", ""description"": ""Field on the data source's table or one of its table extensions."" }, ""label"": { ""type"": ""string"" }, ""mandatory"": { ""type"": ""boolean"" } }, ""required"": [""name"", ""dataSource"", ""dataField""] }, ""description"": ""AxDataEntityViewExtension only: mapped fields to add. The staging table gets the same fields automatically."" },
           ""skipStagingTable"": { ""type"": ""boolean"", ""description"": ""AxDataEntityViewExtension only: do not extend the staging table. Default false."" },
-          ""modelName"": { ""type"": ""string"", ""description"": ""Target model name. If omitted, uses the active project's model."" }
+          ""modelName"": { ""type"": ""string"", ""description"": ""Target model name. If omitted, uses the active project's model."" },
+          ""menuElements"": { ""type"": ""array"", ""items"": { ""type"": ""object"", ""properties"": { ""name"": { ""type"": ""string"" }, ""menuItemName"": { ""type"": ""string"", ""description"": ""Defaults to name."" }, ""menuItemType"": { ""type"": ""string"", ""enum"": [""Display"", ""Output"", ""Action""] }, ""parent"": { ""type"": ""string"", ""description"": ""Existing submenu of the base menu (e.g. 'Periodic'); omit for the menu's top level."" }, ""position"": { ""type"": ""string"", ""enum"": [""end"", ""begin"", ""after""] }, ""previousSibling"": { ""type"": ""string"" } }, ""required"": [""name"", ""menuItemType""] }, ""description"": ""AxMenuExtension only: menu items to add. The menu item and the parent submenu must exist."" }
         },
         ""required"": [""objectType"", ""objectName""]
       }
@@ -95,7 +97,7 @@ namespace XppVsCode.Server.Tools
       ""inputSchema"": {
         ""type"": ""object"",
         ""properties"": {
-          ""objectType"": { ""type"": ""string"", ""description"": ""The object type (AxClass, AxTable, AxForm, AxEdt, AxEnum, AxView, AxQuery, AxDataEntityView, AxMenu, AxSecurityPrivilege, AxSecurityDuty, AxSecurityRole, AxTableExtension, AxEnumExtension, AxEdtExtension, AxFormExtension, AxDataEntityViewExtension, AxSecurityDutyExtension, AxSecurityRoleExtension). For extensions, 'properties' are written as property modifications of the base object."" },
+          ""objectType"": { ""type"": ""string"", ""description"": ""The object type (AxClass, AxTable, AxForm, AxEdt, AxEnum, AxView, AxQuery, AxDataEntityView, AxMenu, AxSecurityPrivilege, AxSecurityDuty, AxSecurityRole, AxTableExtension, AxEnumExtension, AxEdtExtension, AxFormExtension, AxDataEntityViewExtension, AxSecurityDutyExtension, AxSecurityRoleExtension, AxMenuExtension). For extensions, 'properties' are written as property modifications of the base object."" },
           ""objectName"": { ""type"": ""string"", ""description"": ""The object name to update."" },
           ""typedMetadata"": { ""type"": ""object"", ""description"": ""Full strongly-typed metadata graph for complete metadata updates across all object types."" },
           ""declaration"": { ""type"": ""string"", ""description"": ""New raw X++ declaration code. Replaces existing. Plain code only — NO XML, NO CDATA."" },
@@ -116,6 +118,7 @@ namespace XppVsCode.Server.Tools
           ""dataEntityPermissions"": { ""type"": ""array"", ""items"": { ""type"": ""object"", ""properties"": { ""name"": { ""type"": ""string"" }, ""grant"": { ""type"": ""string"" }, ""integrationMode"": { ""type"": ""string"", ""enum"": [""All"", ""DataServices"", ""DataManagement""] } }, ""required"": [""name""] }, ""description"": ""AxSecurityPrivilege only: data entity permissions to add or update."" },
           ""removeSecurityItems"": { ""type"": ""array"", ""items"": { ""type"": ""string"" }, ""description"": ""Security objects: names of entry points, data entity permissions, privileges or duties to remove."" },
           ""entityFields"": { ""type"": ""array"", ""items"": { ""type"": ""object"", ""properties"": { ""name"": { ""type"": ""string"" }, ""dataSource"": { ""type"": ""string"" }, ""dataField"": { ""type"": ""string"" }, ""label"": { ""type"": ""string"" }, ""mandatory"": { ""type"": ""boolean"" } }, ""required"": [""name"", ""dataSource"", ""dataField""] }, ""description"": ""AxDataEntityViewExtension only: mapped fields to add; the staging table extension gets the same fields."" },
+          ""menuElements"": { ""type"": ""array"", ""items"": { ""type"": ""object"" }, ""description"": ""AxMenuExtension only: menu items to add or replace by name (same shape as in xpp_create_object)."" },
           ""skipStagingTable"": { ""type"": ""boolean"", ""description"": ""AxDataEntityViewExtension only: do not extend the staging table."" }
         },
         ""required"": [""objectType"", ""objectName""]
@@ -128,7 +131,7 @@ namespace XppVsCode.Server.Tools
         ""type"": ""object"",
         ""properties"": {
           ""objectName"": { ""type"": ""string"", ""description"": ""Full or partial name to search for (case-insensitive). Partial names need at least 3 characters; prefer specific names."" },
-          ""objectType"": { ""type"": ""string"", ""description"": ""Strongly recommended: limits search to 1 type (5-10x faster). Values: AxClass, AxTable, AxForm, AxEnum, AxView, AxQuery, AxEdt, AxMenuItemDisplay, AxMenuItemOutput, AxMenuItemAction."" },
+          ""objectType"": { ""type"": ""string"", ""description"": ""Strongly recommended: limits search to 1 type (5-10x faster). Any metadata type: AxClass, AxTable, AxForm, AxEnum, AxEdt, AxView, AxQuery, AxDataEntityView, AxMap, AxMenu, AxMenuItemDisplay/Output/Action, AxSecurityRole/Duty/Privilege, AxTableExtension, AxFormExtension, AxLabelFile, ... An unknown type is reported as an error, never as 'not found'."" },
           ""exactMatch"": { ""type"": ""boolean"", ""description"": ""If true, only exact name matches. Default false. Use true when you know the full name."" },
           ""maxResults"": { ""type"": ""integer"", ""description"": ""Max results to return. Default 10. Max 50. Keep small (1-10)."" }
         },
@@ -142,7 +145,7 @@ namespace XppVsCode.Server.Tools
         ""type"": ""object"",
         ""properties"": {
           ""nameFilter"": { ""type"": ""string"", ""description"": ""Required, min 3 characters. Specific substring to match object names (case-insensitive). Example: 'CustTable', 'SalesOrder'."" },
-          ""objectType"": { ""type"": ""string"", ""description"": ""Strongly recommended; required with modelName. Filter by type: AxClass, AxTable, AxForm, AxEnum, AxView, AxQuery, AxEdt, AxMenuItemDisplay, AxMenuItemOutput, AxMenuItemAction."" },
+          ""objectType"": { ""type"": ""string"", ""description"": ""Strongly recommended; required with modelName. Any metadata type, e.g. AxClass, AxTable, AxForm, AxDataEntityView, AxSecurityRole, AxTableExtension, AxMenuItemDisplay."" },
           ""modelName"": { ""type"": ""string"", ""description"": ""Optional model filter. Requires objectType. Model filtering is checked per object, so it does not make broad filters cheap."" },
           ""maxResults"": { ""type"": ""integer"", ""description"": ""Max results. Default 10. Max 50. Keep small (1-10)."" }
         },
@@ -216,14 +219,15 @@ namespace XppVsCode.Server.Tools
     },
     {
       ""name"": ""xpp_create_label"",
-      ""description"": ""Creates a new label in a D365FO label file using the Label API."",
+      ""description"": ""Creates a label in a label file of your own model, in the given language and optionally in more languages in the same call (translations). The label file must exist: create it with xpp_create_object objectType=AxLabelFile (objectName = label file ID, properties.Languages = 'en-US,fr-CA'). The response gives the reference to use in properties: @<labelFileId>:<labelId>."",
       ""inputSchema"": {
         ""type"": ""object"",
         ""properties"": {
           ""labelFileId"": { ""type"": ""string"", ""description"": ""The label file ID."" },
-          ""language"": { ""type"": ""string"", ""description"": ""Language code. Default en-US."" },
-          ""labelId"": { ""type"": ""string"", ""description"": ""The label ID to create."" },
+          ""language"": { ""type"": ""string"", ""description"": ""Language code of 'text'. Default en-US."" },
+          ""labelId"": { ""type"": ""string"", ""description"": ""The label ID to create (letters and digits, e.g. XvsDemoStatus)."" },
           ""text"": { ""type"": ""string"", ""description"": ""The label text."" },
+          ""translations"": { ""type"": ""object"", ""description"": ""Optional texts in other languages of the same label file, keyed by language code, e.g. fr-CA."" },
           ""comment"": { ""type"": ""string"", ""description"": ""Optional comment."" }
         },
         ""required"": [""labelFileId"", ""labelId"", ""text""]
@@ -307,6 +311,56 @@ namespace XppVsCode.Server.Tools
       }
     },
     {
+      ""name"": ""xpp_delete_object"",
+      ""description"": ""Deletes an object COMPLETELY from its model (the metadata file is removed) and from the active project, like Visual Studio's Delete. Only objects of your own custom models; standard and other-ISV objects are refused. Before deleting, where-used is checked: if other objects reference it the delete is refused and the referencing objects are listed, unless force=true. Use it to clean up wrong, probe or broken objects instead of touching files. To keep the object but drop it from the project use xpp_remove_from_project."",
+      ""inputSchema"": {
+        ""type"": ""object"",
+        ""properties"": {
+          ""objectType"": { ""type"": ""string"", ""description"": ""Metadata type, e.g. AxClass, AxQuery, AxTableExtension, AxLabelFile (label files are deleted per language: '<Id>_<lang>')."" },
+          ""objectName"": { ""type"": ""string"" },
+          ""force"": { ""type"": ""boolean"", ""description"": ""Delete even when other objects still reference it (they will no longer compile). Default false."" }
+        },
+        ""required"": [""objectType"", ""objectName""]
+      }
+    },
+    {
+      ""name"": ""xpp_remove_from_project"",
+      ""description"": ""Excludes an object from the active D365FO project (.rnrproj) and keeps it in the model, like Visual Studio's Exclude From Project."",
+      ""inputSchema"": {
+        ""type"": ""object"",
+        ""properties"": {
+          ""objectType"": { ""type"": ""string"" },
+          ""objectName"": { ""type"": ""string"" }
+        },
+        ""required"": [""objectType"", ""objectName""]
+      }
+    },
+    {
+      ""name"": ""xpp_select_project"",
+      ""description"": ""Lists the D365FO projects (.rnrproj) that can be opened, or makes one the active project for all tools (new objects are added to it, scope=project builds use it). Without projectFile it lists candidates (the active one is marked '*') from searchFolder, the current project's repos folder and %USERPROFILE%\\source\\repos. The VS Code project view follows the selection."",
+      ""inputSchema"": {
+        ""type"": ""object"",
+        ""properties"": {
+          ""projectFile"": { ""type"": ""string"", ""description"": ""Full path of the .rnrproj to activate. Omit to list projects."" },
+          ""searchFolder"": { ""type"": ""string"", ""description"": ""Extra folder to search for .rnrproj files (3 levels deep)."" }
+        },
+        ""required"": []
+      }
+    },
+    {
+      ""name"": ""xpp_build"",
+      ""description"": ""Builds a custom model exactly like Dynamics 365 > Build: compiles label files (LabelC), then X++ (xppc) with cross-references, and returns the result with every error, fatal error and warning (object, method, line, message). Call it after creating or changing code and fix every error before you report success; a build is only successful when it says BUILD SUCCEEDED. scope=project reports only the diagnostics of objects in the active project (xppc still compiles the whole package). syncDatabase=true synchronizes the database after a successful build where a local database exists; on unified developer environments the database is synchronized by deployment instead and the result says so. Builds take minutes."",
+      ""inputSchema"": {
+        ""type"": ""object"",
+        ""properties"": {
+          ""modelName"": { ""type"": ""string"", ""description"": ""Model to build. Defaults to the active project's model."" },
+          ""scope"": { ""type"": ""string"", ""enum"": [""model"", ""project""], ""description"": ""Default model."" },
+          ""syncDatabase"": { ""type"": ""boolean"", ""description"": ""Synchronize the database after a successful build. Default false."" }
+        },
+        ""required"": []
+      }
+    },
+    {
       ""name"": ""xpp_get_object_type_schema"",
       ""description"": ""Returns a generated JSON schema for a D365FO metadata object type based on reflective type inspection. Use this to discover full strongly-typed typedMetadata shape for create/update/validate payloads."",
       ""inputSchema"": {
@@ -347,6 +401,10 @@ namespace XppVsCode.Server.Tools
                 case "xpp_validate_object": return HandleValidateObject(idToken, json);
                 case "xpp_get_object_type_schema": return HandleGetObjectTypeSchema(idToken, json);
                 case "xpp_get_form_layout": return HandleGetFormLayout(idToken, json);
+                case "xpp_delete_object": return HandleDeleteObject(idToken, json);
+                case "xpp_remove_from_project": return DelegateToBridge(idToken, json, "remove_from_project");
+                case "xpp_select_project": return DelegateToBridge(idToken, json, "select_project");
+                case "xpp_build": return DelegateToBridge(idToken, json, "build");
 
                 // ── Local-only tools ──
                 case "xpp_search_docs": return _docSearch.Handle(idToken, json);
@@ -385,6 +443,22 @@ namespace XppVsCode.Server.Tools
             var sb = new StringBuilder();
             if (!string.IsNullOrEmpty(message))
                 sb.AppendLine(message);
+
+            string validation = JsonHelpers.ExtractNestedObject(bridgeResponse, "validation");
+            if (isSuccess && !string.IsNullOrEmpty(validation))
+            {
+                bool valid = ReadBool(validation, "valid");
+                sb.AppendLine("Validation: " + (valid ? "PASSED" : "FAILED") + " - " + JsonHelpers.ExtractJsonString(validation, "message"));
+            }
+
+            if (isSuccess && (action == "list_objects" || action == "find_object")
+                && ReadObjectArray(bridgeResponse, action == "find_object" ? "matches" : "objects").Count == 0
+                && string.IsNullOrEmpty(message))
+                sb.AppendLine("0 matches.");
+            if (isSuccess && action == "list_project_items" && ReadObjectArray(bridgeResponse, "items").Count == 0)
+                sb.AppendLine(ReadBool(bridgeResponse, "hasProject")
+                    ? "The active project is empty."
+                    : "No active project. Select one with xpp_select_project.");
 
             string layout = JsonHelpers.ExtractJsonString(bridgeResponse, "layout");
             if (!string.IsNullOrEmpty(layout))
@@ -436,13 +510,16 @@ namespace XppVsCode.Server.Tools
                 string activeModel = JsonHelpers.ExtractJsonString(bridgeResponse, "activeModelName");
                 string layer = JsonHelpers.ExtractJsonString(bridgeResponse, "activeModelLayer");
                 if (!string.IsNullOrEmpty(projectName)) sb.AppendLine("ActiveProject: " + projectName);
+                else sb.AppendLine("ActiveProject: none. New objects are not added to a project and scope=project builds are unavailable; list and select one with xpp_select_project.");
                 if (!string.IsNullOrEmpty(activeModel)) sb.AppendLine("ActiveModel: " + activeModel);
                 if (!string.IsNullOrEmpty(layer)) sb.AppendLine("Layer: " + layer);
+                foreach (string folder in JsonHelpers.ExtractJsonStringArray(bridgeResponse, "referenceMetadataFolders") ?? new string[0])
+                    sb.AppendLine("ReferenceMetadataFolder: " + folder);
             }
 
             if (action == "get_model_info" && isSuccess)
             {
-                foreach (string key in new[] { "name", "displayName", "publisher", "version", "layer", "modelId" })
+                foreach (string key in new[] { "name", "displayName", "publisher", "version", "layer", "modelId", "package", "dependencies" })
                 {
                     string value = JsonHelpers.ExtractJsonString(bridgeResponse, key)
                         ?? JsonHelpers.ExtractJsonValueToken(bridgeResponse, key);
@@ -491,12 +568,15 @@ namespace XppVsCode.Server.Tools
             var methods = ReadObjectArray(bridgeResponse, "methods");
             if (methods.Count == 0) return;
 
-            sb.AppendLine("\n=== Methods (" + methods.Count + ") ===");
-            foreach (var m in methods)
-                sb.AppendLine("  " + (MethodSignature(Str(m, "source")) ?? Str(m, "name")));
-
-            var wanted = methodNames == null ? null
+            var wanted = methodNames == null || methodNames.Length == 0 ? null
                 : new System.Collections.Generic.HashSet<string>(methodNames, StringComparer.OrdinalIgnoreCase);
+            // With methodNames the caller already knows the signatures; listing all of them again only floods the context.
+            if (wanted == null)
+            {
+                sb.AppendLine("\n=== Methods (" + methods.Count + ") ===");
+                foreach (var m in methods)
+                    sb.AppendLine("  " + (MethodSignature(Str(m, "source")) ?? Str(m, "name")));
+            }
             var selected = wanted == null ? methods : methods.FindAll(m => wanted.Contains(Str(m, "name") ?? ""));
             int totalChars = 0;
             foreach (var m in selected) totalChars += (Str(m, "source") ?? "").Length;
@@ -581,6 +661,41 @@ namespace XppVsCode.Server.Tools
                     + (Str(r, "sourceMember") != null ? "." + Str(r, "sourceMember") + "()" : "")
                     + " line " + Str(r, "lineNumber") + ": " + Str(r, "kind")
                     + (Str(r, "sourceModule") != null ? "  [" + Str(r, "sourceModule") + "]" : ""));
+        }
+
+        private string HandleDeleteObject(string idToken, string json)
+        {
+            string argsJson = JsonHelpers.ExtractToolArgumentsObject(json);
+            string objectType = JsonHelpers.ExtractArgString(argsJson, "objectType");
+            string objectName = JsonHelpers.ExtractArgString(argsJson, "objectName");
+            if (string.IsNullOrEmpty(objectType) || string.IsNullOrEmpty(objectName))
+                return JsonHelpers.BuildToolResult(idToken, "Parameters 'objectType' and 'objectName' are required.", isError: true);
+
+            string note = "";
+            // Ownership and existence come first, so a standard object is refused for that reason, not for its where-used.
+            string check = _bridge.Call("delete_object", "{\"objectType\":\"" + JsonHelpers.EscapeJsonString(objectType)
+                + "\",\"objectName\":\"" + JsonHelpers.EscapeJsonString(objectName) + "\",\"checkOnly\":\"true\"}");
+            if (!ReadBool(check, "success"))
+                return JsonHelpers.BuildToolResult(idToken, JsonHelpers.ExtractJsonString(check, "message") ?? "Delete failed.", isError: true);
+
+            if (!ReadBool(argsJson, "force"))
+            {
+                string refs = _xref.QueryJson(objectType, objectName, null, 25);
+                var users = ReadObjectArray(refs, "references")
+                    .Where(r => !(string.Equals(Str(r, "objectType"), objectType, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(Str(r, "objectName"), objectName, StringComparison.OrdinalIgnoreCase)))
+                    .Select(r => Str(r, "objectType") + " " + Str(r, "objectName"))
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (users.Count > 0)
+                    return JsonHelpers.BuildToolResult(idToken, objectType + " '" + objectName + "' is still referenced by "
+                        + users.Count + " object(s): " + string.Join(", ", users) + ". Not deleted. Remove the references first, or pass force=true.", isError: true);
+                if (!ReadBool(refs, "success"))
+                    note = "\n(Where-used could not be checked: " + JsonHelpers.ExtractJsonString(refs, "message") + ")";
+            }
+
+            string response = _bridge.Call("delete_object", argsJson);
+            return JsonHelpers.BuildToolResult(idToken, (JsonHelpers.ExtractJsonString(response, "message") ?? "Delete failed.") + note,
+                isError: !ReadBool(response, "success"));
         }
 
         private string HandleReadObject(string idToken, string json)
@@ -832,6 +947,7 @@ namespace XppVsCode.Server.Tools
             AppendJsonArray(sb, json, "entryPoints", "Entry Points");
             // Query Data Sources
             AppendJsonArray(sb, json, "dataSources", "Data Sources");
+            AppendJsonArray(sb, json, "entityFields", "Entity fields (name, dataSource, dataField)");
             // Form extension controls
             AppendJsonArray(sb, json, "controls", "Controls");
             AppendJsonArray(sb, json, "controlModifications", "Control Modifications");
