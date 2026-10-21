@@ -19,6 +19,12 @@ Fix every issue in [ai-tools-test-log.md](./ai-tools-test-log.md), re-test, buil
 | README | Updated (Build Project, Run Tests, Delete/Exclude, new agent tools, regression script) |
 | Package, install, commit and push | Done: v0.3.0 installed in VS Code, pushed as `1f1997e` |
 
+## Visual Studio extension sync
+
+The fixes and new tools from this round (not the test features) are ported to the Visual Studio extension
+(nazmolla/XppAiCopilotCompanion, v0.5.2): delete, exclude from project, select project, and build (off the VS UI thread).
+Still to check by hand inside Visual Studio: delete/exclude/select through DTE and a long `xpp_build`.
+
 ## Still to do
 
 1. In VS Code, confirm U1–U5 and #8: method indentation in the code view, Build Project, a Fatal build reported as
