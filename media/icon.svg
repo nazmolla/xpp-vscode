@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Marketplace icon for F&O Studio. Original artwork: isometric cube in an orbit with a spark. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3a0f63"/>
+      <stop offset="1" stop-color="#0b3a6e"/>
+    </linearGradient>
+    <linearGradient id="orbit" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="48" fill="url(#bg)"/>
+  <g stroke-linejoin="round">
+    <path d="M128 66 182 97v62l-54 31-54-31V97z" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-width="7"/>
+    <path d="M128 66 182 97l-54 31-54-31z" fill="#ffffff" fill-opacity="0.95"/>
+    <path d="M74 97l54 31v62l-54-31z" fill="#c4b5fd"/>
+    <path d="M182 97l-54 31v62l54-31z" fill="#67e8f9"/>
+  </g>
+  <g fill="none" stroke="url(#orbit)" stroke-width="10" stroke-linecap="round">
+    <path d="M40 170A96 96 0 0 1 170 40"/>
+    <path d="M216 86A96 96 0 0 1 86 216"/>
+  </g>
+  <path d="M206 30l6 16 16 6-16 6-6 16-6-16-16-6 16-6z" fill="#fde68a"/>
+</svg>

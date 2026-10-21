@@ -1,7 +1,7 @@
 # Copilot instructions: xpp-vscode
 
 ## What this project is
-A VS Code extension that brings Dynamics 365 Finance & Operations (D365FO) X++ development to VS Code and its AI agents, without Visual Studio. It is the VS Code successor of the Visual Studio extension "X++ AI Copilot Companion" (source: `C:\Users\Mohamed Nazmi\OneDrive - Long View Systems Corporation\Documents\DevExt\vsix-companion`, a separate repo and conversation). Goal: a public extension anyone can install from the Marketplace.
+A VS Code extension, **F&O Studio for VS Code**, that brings Dynamics 365 Finance & Operations (D365FO) X++ development to VS Code and its AI agents, without Visual Studio. It is the VS Code successor of the Visual Studio extension "X++ AI Copilot Companion" (source: `C:\Users\Mohamed Nazmi\OneDrive - Long View Systems Corporation\Documents\DevExt\vsix-companion`, a separate repo and conversation). Goal: a public extension anyone can install from the Marketplace.
 
 Target environments: unified developer environments (UDE, Power Platform hosted). Windows only.
 

@@ -1,6 +1,6 @@
-# X++ AI Companion for D365FO
+# F&O Studio for VS Code
 
-Dynamics 365 Finance & Operations development in VS Code, built for AI agents. It covers what the Visual Studio Dynamics 365 tools do: Application Explorer, designers, code editing, build, deploy, debugging, plus agent tools for Copilot.
+A full Dynamics 365 Finance & Operations development environment in VS Code, with AI built in. It covers what the Visual Studio Dynamics 365 tools do: Application Explorer, designers, code editing, build, deploy, debugging, plus agent tools for Copilot.
 
 It works against a unified developer environment (UDE) and uses the same metadata API, compiler and scripts as Visual Studio, so projects and models move freely between the two.
 
@@ -79,3 +79,5 @@ The tools are registered automatically.
 ## Status
 
 Preview. The debugger has not yet been verified end to end against a live environment.
+
+*F&O Studio is an independent project and is not affiliated with or endorsed by Microsoft. Dynamics 365 is a trademark of Microsoft Corporation.*

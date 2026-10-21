@@ -1,9 +1,11 @@
 {
   "name": "xpp-vscode",
-  "displayName": "X++ AI Companion for D365FO",
-  "description": "Dynamics 365 Finance & Operations X++ development in VS Code: code view, form designer, build, deploy and AI agent tools.",
+  "displayName": "F&O Studio for VS Code",
+  "description": "A full Dynamics 365 Finance & Operations development environment in VS Code: Application Explorer, designers, X++ code, build, deploy, debugging, and AI agent tools.",
   "version": "0.2.0",
   "publisher": "nazmolla",
+  "icon": "media/icon.png",
+  "galleryBanner": { "color": "#2a1b5c", "theme": "dark" },
   "license": "UNLICENSED",
   "repository": {
     "type": "git",
@@ -14,8 +16,10 @@
   },
   "categories": [
     "Programming Languages",
+    "Debuggers",
     "AI"
   ],
+  "keywords": ["Dynamics 365", "Finance and Operations", "F&O", "X++", "D365FO", "ERP", "MCP"],
   "os": [
     "win32"
   ],
@@ -57,7 +61,7 @@
     "mcpServerDefinitionProviders": [
       {
         "id": "xpp.mcp",
-        "label": "X++ (D365FO)"
+        "label": "F&O Studio (Dynamics 365 F&O)"
       }
     ],
     "languages": [
@@ -79,8 +83,8 @@
       "activitybar": [
         {
           "id": "xpp",
-          "title": "X++",
-          "icon": "$(symbol-class)"
+          "title": "F&O Studio",
+          "icon": "media/icon-activitybar.svg"
         }
       ]
     },

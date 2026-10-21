@@ -26,7 +26,7 @@ export function registerMcpProvider(context: vscode.ExtensionContext, log: vscod
                     args.push('--project', project);
                 }
                 log.appendLine(`X++ MCP server: config ${env.configFile}, project ${project ?? 'none'}`);
-                return [new vscode.McpStdioServerDefinition('X++ (D365FO)', exe, args, {}, ServerVersion)];
+                return [new vscode.McpStdioServerDefinition('F&O Studio', exe, args, {}, ServerVersion)];
             } catch (err) {
                 log.appendLine(`MCP server not started: ${(err as Error).message}`);
                 return [];
