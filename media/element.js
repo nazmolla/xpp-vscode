@@ -4,10 +4,23 @@
     const treeEl = document.getElementById('tree');
     const propsEl = document.getElementById('properties');
     const errorEl = document.getElementById('error');
+    const previewEl = document.getElementById('preview');
     let editable = false;
     let selectedPath = null;
     let selectedRow = null;
+    let pendingSelect = null;
     const collapsed = new Set();
+    const controlRows = new Map();
+    const preview = window.XppFormPreview({
+        onSelect: name => {
+            const row = controlRows.get(name.toLowerCase());
+            if (row) {
+                expandTo(row);
+                select(row, true);
+            }
+        },
+        selectedName: () => selectedRow && controlName(selectedRow._node),
+    });
 
     const send = (command, data) => vscode.postMessage(Object.assign({ command }, data || {}));
     const pathKey = path => path.join('\u0001');
@@ -30,6 +43,15 @@
             case 'tree':
                 renderTree(msg);
                 break;
+            case 'formTree':
+                document.body.classList.add('has-preview');
+                previewEl.hidden = false;
+                preview.render(previewEl, msg.data);
+                break;
+            case 'selectPath':
+                pendingSelect = msg.path;
+                selectByPath(msg.path);
+                break;
             case 'properties':
                 if (selectedPath && pathKey(msg.path) === pathKey(selectedPath)) {
                     renderProperties(msg.data);
@@ -49,9 +71,10 @@
         document.getElementById('formLayout').hidden = !msg.isForm;
 
         treeEl.textContent = '';
+        controlRows.clear();
         const ul = document.createElement('ul');
         ul.className = 'tree';
-        ul.appendChild(renderNode(data.root, 0));
+        ul.appendChild(renderNode(data.root, 0, null));
         treeEl.appendChild(ul);
         if (data.truncated) {
             const note = document.createElement('div');
@@ -59,18 +82,71 @@
             note.textContent = 'This element is very large; some nodes are not shown.';
             treeEl.appendChild(note);
         }
-        const keep = selectedPath && treeEl.querySelector(`[data-path="${CSS.escape(pathKey(selectedPath))}"]`);
-        select(keep || treeEl.querySelector('.row'));
+        const wanted = pendingSelect || selectedPath;
+        pendingSelect = null;
+        if (!wanted || !selectByPath(wanted)) {
+            select(treeEl.querySelector('.row'));
+        }
     }
 
-    function renderNode(node, depth) {
+    function selectByPath(path) {
+        const row = treeEl.querySelector(`[data-path="${CSS.escape(pathKey(path))}"]`);
+        if (!row) {
+            return false;
+        }
+        expandTo(row);
+        select(row);
+        return true;
+    }
+
+    function expandTo(row) {
+        for (let li = row.parentElement.parentElement; li && li !== treeEl; li = li.parentElement) {
+            if (li.tagName === 'UL' && li.hidden) {
+                const ownerRow = li.parentElement.querySelector(':scope > .row');
+                toggleNode(ownerRow, li, ownerRow.querySelector('.toggle'), ownerRow._node.path);
+            }
+        }
+        row.scrollIntoView({ block: 'nearest' });
+    }
+
+    // Form controls live under Design/Controls; their names are unique in the form.
+    function controlName(node) {
+        if (!node) return null;
+        if (node.path.length === 1 && node.path[0] === 'Design') return 'Design';
+        return node.kind === 'item' && node.path.length >= 3 && node.path[node.path.length - 2] === 'Controls' ? node.path[node.path.length - 1] : null;
+    }
+
+    function contextFor(node, parent) {
+        const folders = node.children.filter(c => c.kind === 'folder');
+        const hasMethods = node.kind === 'folder' ? node.type === 'Methods' : folders.some(c => c.type === 'Methods');
+        const canAdd = node.kind === 'folder' ? node.type !== 'Methods' : folders.some(c => c.type !== 'Methods');
+        return JSON.stringify({
+            webviewSection: 'xppNode',
+            xppKind: node.kind,
+            xppEditable: editable,
+            xppCanAdd: canAdd,
+            xppHasMethods: hasMethods,
+            xppIsMethod: node.kind === 'method',
+            xppCanDelete: (node.kind === 'item' || node.kind === 'method') && !!parent && parent.kind === 'folder',
+            xppPath: JSON.stringify(node.path),
+            xppType: node.type,
+            preventDefaultContextMenuItems: true,
+        });
+    }
+
+    function renderNode(node, depth, parent) {
         const li = document.createElement('li');
         const row = document.createElement('div');
         row.className = 'row';
         row.dataset.path = pathKey(node.path);
         row.dataset.kind = node.kind;
+        row.dataset.vscodeContext = contextFor(node, parent);
         row.style.paddingLeft = `${depth * 14 + 4}px`;
         row.tabIndex = -1;
+        const control = controlName(node);
+        if (control) {
+            controlRows.set(control.toLowerCase(), row);
+        }
 
         const hasChildren = node.children.length > 0;
         // Folders start collapsed below the first level, like Visual Studio.
@@ -109,14 +185,16 @@
         if (hasChildren) {
             const ul = document.createElement('ul');
             ul.hidden = collapsed.has(pathKey(node.path));
-            node.children.forEach(child => ul.appendChild(renderNode(child, depth + 1)));
+            node.children.forEach(child => ul.appendChild(renderNode(child, depth + 1, node)));
             li.appendChild(ul);
             toggle.addEventListener('click', e => {
                 e.stopPropagation();
                 toggleNode(row, ul, toggle, node.path);
             });
         }
-        row.addEventListener('click', () => select(row, node));
+        row.addEventListener('click', () => select(row));
+        // Right-click selects the node first, like a tree view.
+        row.addEventListener('contextmenu', () => select(row));
         row.addEventListener('dblclick', () => {
             if (node.kind === 'method') {
                 send('openMethod', { path: node.path });
@@ -139,7 +217,7 @@
         toggle.textContent = ul.hidden ? '\u25B8' : '\u25BE';
     }
 
-    function select(row) {
+    function select(row, fromPreview) {
         if (!row) {
             return;
         }
@@ -148,9 +226,13 @@
         }
         selectedRow = row;
         row.classList.add('selected');
-        row.focus();
+        row.focus({ preventScroll: !!fromPreview });
         const node = row._node;
         selectedPath = node.path;
+        const control = controlName(node);
+        if (!fromPreview) {
+            preview.select(control);
+        }
         if (node.kind === 'folder') {
             propsEl.innerHTML = '';
             const info = document.createElement('div');

@@ -3,7 +3,7 @@ import { AotTreeProvider } from './aot';
 import { XppBuilder } from './build';
 import { objectUri, XppCodeFileSystem, XppScheme } from './codeView';
 import { FormDesigner } from './designer';
-import { ElementDesigner } from './elementDesigner';
+import { DesignerNodeContext, ElementDesigner } from './elementDesigner';
 import { readActiveEnvironment } from './environment';
 import { registerMcpProvider } from './mcpProvider';
 import { openObject, XppDocumentSelector, XppNavigation } from './navigation';
@@ -99,6 +99,12 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     });
     command('xpp.aot.clearFilter', () => aotTree.setFilter(''));
+    command('xpp.designer.new', (node: DesignerNodeContext) => ElementDesigner.runAction('new', node));
+    command('xpp.designer.newMethod', (node: DesignerNodeContext) => ElementDesigner.runAction('newMethod', node));
+    command('xpp.designer.override', (node: DesignerNodeContext) => ElementDesigner.runAction('override', node));
+    command('xpp.designer.delete', (node: DesignerNodeContext) => ElementDesigner.runAction('delete', node));
+    command('xpp.designer.openMethod', (node: DesignerNodeContext) => ElementDesigner.runAction('openMethod', node));
+    context.subscriptions.push(ElementDesigner.onDidChange.event(e => codeFs.refresh(objectUri(e.objectType, e.objectName))));
     void vscode.commands.executeCommand('setContext', 'xpp.aot.modelView', false);
     command('xpp.selectProject', () => selectProject());
     command('xpp.build', async () => {

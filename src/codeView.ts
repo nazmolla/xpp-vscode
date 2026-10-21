@@ -11,12 +11,25 @@ export function objectUri(objectType: string, objectName: string): vscode.Uri {
     return vscode.Uri.from({ scheme: XppScheme, path: `/${objectType}/${objectName}.xpp` });
 }
 
-export function parseObjectUri(uri: vscode.Uri): { objectType: string; objectName: string } {
+/** A method of a node inside an element, e.g. a form data source's init: path DataSources/CustTable/Methods/init. */
+export function methodUri(objectType: string, objectName: string, path: string[]): vscode.Uri {
+    return vscode.Uri.from({ scheme: XppScheme, path: `/${objectType}/${objectName}/${path.join('/')}.xpp` });
+}
+
+export function parseObjectUri(uri: vscode.Uri): { objectType: string; objectName: string; methodPath?: string[] } {
     const parts = uri.path.replace(/^\//, '').split('/');
-    if (parts.length !== 2 || !parts[1].endsWith('.xpp')) {
+    const last = parts[parts.length - 1];
+    if (parts.length < 2 || !last.endsWith('.xpp')) {
         throw vscode.FileSystemError.FileNotFound(uri);
     }
-    return { objectType: parts[0], objectName: parts[1].slice(0, -4) };
+    if (parts.length === 2) {
+        return { objectType: parts[0], objectName: last.slice(0, -4) };
+    }
+    const methodPath = [...parts.slice(2, -1), last.slice(0, -4)];
+    if (methodPath.length < 2 || methodPath[methodPath.length - 2] !== 'Methods') {
+        throw vscode.FileSystemError.FileNotFound(uri);
+    }
+    return { objectType: parts[0], objectName: parts[1], methodPath };
 }
 
 interface CachedObject {
@@ -25,6 +38,8 @@ interface CachedObject {
     /** Forms store the class declaration as a method named classDeclaration. */
     declarationIsMethod: boolean;
     declaration: string;
+    /** Indentation removed from a nested node's method for display, put back on save. */
+    methodIndent?: string;
     editable: boolean;
     mtime: number;
 }
@@ -60,10 +75,24 @@ export class XppCodeFileSystem implements vscode.FileSystemProvider {
     }
 
     async writeFile(uri: vscode.Uri, content: Uint8Array): Promise<void> {
-        const { objectType, objectName } = parseObjectUri(uri);
+        const { objectType, objectName, methodPath } = parseObjectUri(uri);
         const current = await this.load(uri);
         if (!current.editable) {
             throw vscode.FileSystemError.NoPermissions(`${objectType} ${objectName} is not in a custom model. Change it with an extension or Chain of Command instead.`);
+        }
+        if (methodPath) {
+            const indent = current.methodIndent ?? '';
+            const source = Buffer.from(content).toString('utf8').replace(/\r\n/g, '\n').replace(/\s+$/, '')
+                .split('\n').map(line => line.trim() ? indent + line : '').join('\n') + '\n';
+            const saved = await this.server.bridge('set_element_method', {
+                objectType, objectName, path: methodPath.slice(0, -2), originalName: methodPath[methodPath.length - 1], source,
+            });
+            if (!saved.success) {
+                throw vscode.FileSystemError.Unavailable(saved.message ?? 'Save failed.');
+            }
+            this.cache.delete(uri.toString());
+            this.changed.fire([{ type: vscode.FileChangeType.Changed, uri }]);
+            return;
         }
 
         const source = splitSource(Buffer.from(content).toString('utf8'), current.declaration);
@@ -114,7 +143,28 @@ export class XppCodeFileSystem implements vscode.FileSystemProvider {
         if (cached && !fresh) {
             return cached;
         }
-        const { objectType, objectName } = parseObjectUri(uri);
+        const { objectType, objectName, methodPath } = parseObjectUri(uri);
+        if (methodPath) {
+            const method = await this.server.bridge('get_element_method', { objectType, objectName, path: methodPath });
+            if (!method.success) {
+                throw vscode.FileSystemError.FileNotFound(method.message ?? uri);
+            }
+            const lines = String(method.source).replace(/\r\n/g, '\n').replace(/\s+$/, '').split('\n');
+            const indent = lines.filter(l => l.trim()).reduce((min, l) => Math.min(min, l.length - l.trimStart().length), Number.MAX_SAFE_INTEGER);
+            const methodIndent = ' '.repeat(indent === Number.MAX_SAFE_INTEGER ? 0 : indent);
+            const text = lines.map(l => l.startsWith(methodIndent) ? l.slice(methodIndent.length) : l.trimStart()).join('\n') + '\n';
+            const obj: CachedObject = {
+                text,
+                methodNames: [method.name],
+                declarationIsMethod: false,
+                declaration: '',
+                methodIndent,
+                editable: !!method.isCustom,
+                mtime: cached && cached.text === text ? cached.mtime : Date.now(),
+            };
+            this.cache.set(key, obj);
+            return obj;
+        }
         const result = await this.server.bridge('read_object', { objectType, objectName });
         if (!result.success) {
             throw vscode.FileSystemError.FileNotFound(result.message ?? uri);

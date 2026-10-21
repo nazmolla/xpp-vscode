@@ -217,12 +217,15 @@ export class FormDesigner {
     private html(context: vscode.ExtensionContext, webview: vscode.Webview): string {
         const nonce = randomBytes(16).toString('base64');
         const script = webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'media', 'designer.js'));
+        const previewScript = webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'media', 'formPreview.js'));
         const style = webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'media', 'designer.css'));
+        const previewStyle = webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'media', 'formPreview.css'));
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
+<link rel="stylesheet" href="${previewStyle}">
 <link rel="stylesheet" href="${style}">
 <title>Form designer</title>
 </head>
@@ -233,6 +236,7 @@ export class FormDesigner {
   <section id="canvas" aria-label="Form preview"></section>
   <aside id="properties" aria-label="Properties"></aside>
 </main>
+<script nonce="${nonce}" src="${previewScript}"></script>
 <script nonce="${nonce}" src="${script}"></script>
 </body>
 </html>`;

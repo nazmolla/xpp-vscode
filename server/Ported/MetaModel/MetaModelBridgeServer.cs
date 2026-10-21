@@ -100,6 +100,20 @@ namespace XppVsCode.Server.MetaModel
                 case "set_element_property":
                     return _bridge.SetElementPropertyJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
                         ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "property"), ExtractJsonString(body, "value"));
+                case "get_node_types":
+                    return _bridge.GetNodeTypesJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"), ExtractJsonStringArray(body, "path"));
+                case "add_element_node":
+                    return _bridge.AddElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                        ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "typeName"), ExtractJsonString(body, "name"), ExtractJsonObject(body, "properties"));
+                case "delete_element_node":
+                    return _bridge.DeleteElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"), ExtractJsonStringArray(body, "path"));
+                case "get_element_method":
+                    return _bridge.GetElementMethodJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"), ExtractJsonStringArray(body, "path"));
+                case "set_element_method":
+                    return _bridge.SetElementMethodJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                        ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "originalName"), ExtractJsonString(body, "source"));
+                case "get_overrides":
+                    return _bridge.GetOverridesJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"), ExtractJsonStringArray(body, "path"));
                 default:
                     return "{\"success\":false,\"message\":\"Unknown action: " + EscapeJson(action ?? "") + "\"}";
             }

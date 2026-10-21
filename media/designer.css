@@ -59,38 +59,6 @@ button:hover { background: var(--vscode-button-secondaryHoverBackground); }
 .row.added .name, .tab-header.added { color: var(--vscode-charts-green); }
 .hidden { opacity: 0.45; }
 
-/* preview */
-.form { border: 1px solid var(--vscode-panel-border); padding: 8px; min-height: 100%; box-sizing: border-box; }
-.form-title { font-size: 1.3em; margin-bottom: 8px; }
-.tab { margin: 6px 0; border: 1px solid transparent; }
-.tab-headers { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--vscode-panel-border); }
-.tab-header { background: transparent; color: var(--vscode-foreground); border-bottom: 2px solid transparent; }
-.tab-header.active { border-bottom-color: var(--vscode-focusBorder); font-weight: 600; }
-fieldset { border: 1px solid var(--vscode-panel-border); margin: 6px 0; padding: 6px 8px; }
-fieldset.page { border-top: none; }
-legend { font-weight: 600; padding: 0 4px; }
-.flow { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: flex-start; }
-.flow > fieldset.group { flex: 1 1 260px; }
-.field { display: flex; flex-direction: column; min-width: 160px; border: 1px solid transparent; padding: 2px; cursor: pointer; }
-.field label { font-size: 0.9em; color: var(--vscode-descriptionForeground); }
-.input {
-    height: 20px;
-    background: var(--vscode-input-background);
-    border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
-    text-align: right;
-    padding-right: 4px;
-}
-.input.checkbox { width: 16px; height: 16px; }
-.grid { overflow-x: auto; margin: 6px 0; border: 1px solid transparent; }
-.grid table { border-collapse: collapse; min-width: 100%; }
-.grid th, .grid td { border: 1px solid var(--vscode-panel-border); padding: 2px 6px; text-align: left; white-space: nowrap; }
-.actionpane, .buttongroup { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 4px; border: 1px solid transparent; }
-.actionpane { background: var(--vscode-sideBar-background); margin-bottom: 6px; }
-.apt-caption { font-weight: 600; margin-right: 6px; }
-.fake-button { cursor: pointer; }
-.other { border: 1px dotted var(--vscode-panel-border); padding: 2px 4px; margin: 2px 0; }
-.other .type { color: var(--vscode-descriptionForeground); }
-
 /* properties */
 .props { border-collapse: collapse; width: 100%; }
 .props th { text-align: left; color: var(--vscode-descriptionForeground); font-weight: normal; padding: 2px 6px 2px 0; vertical-align: top; white-space: nowrap; }

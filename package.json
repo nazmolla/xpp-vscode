@@ -87,6 +87,11 @@
       { "command": "xpp.aot.clearFilter", "title": "Clear Filter", "category": "X++", "icon": "$(filter-filled)" },
       { "command": "xpp.aot.modelView", "title": "Model View", "category": "X++", "icon": "$(list-tree)" },
       { "command": "xpp.aot.classicView", "title": "Classic View", "category": "X++", "icon": "$(list-flat)" },
+      { "command": "xpp.designer.new", "title": "New…", "category": "X++" },
+      { "command": "xpp.designer.newMethod", "title": "New Method…", "category": "X++" },
+      { "command": "xpp.designer.override", "title": "Override Method…", "category": "X++" },
+      { "command": "xpp.designer.openMethod", "title": "View Code", "category": "X++" },
+      { "command": "xpp.designer.delete", "title": "Delete", "category": "X++" },
       { "command": "xpp.build", "title": "Build Model", "category": "X++", "icon": "$(tools)" },
       { "command": "xpp.refreshProject", "title": "Refresh Project", "category": "X++", "icon": "$(refresh)" },
       { "command": "xpp.refreshAot", "title": "Refresh Application Explorer", "category": "X++", "icon": "$(refresh)" },
@@ -119,9 +124,21 @@
         { "command": "xpp.openFormDesigner", "when": "(view == xpp.project || view == xpp.aot) && viewItem =~ /\\bform\\b/", "group": "navigation@3" },
         { "command": "xpp.viewCode", "when": "(view == xpp.project || view == xpp.aot) && viewItem =~ /\\bcode\\b/", "group": "inline" }
       ],
+      "webview/context": [
+        { "command": "xpp.designer.openMethod", "when": "webviewId == 'xppElementDesigner' && xppIsMethod", "group": "1_open@1" },
+        { "command": "xpp.designer.new", "when": "webviewId == 'xppElementDesigner' && xppEditable && xppCanAdd", "group": "2_new@1" },
+        { "command": "xpp.designer.newMethod", "when": "webviewId == 'xppElementDesigner' && xppEditable && xppHasMethods", "group": "2_new@2" },
+        { "command": "xpp.designer.override", "when": "webviewId == 'xppElementDesigner' && xppEditable && xppHasMethods", "group": "2_new@3" },
+        { "command": "xpp.designer.delete", "when": "webviewId == 'xppElementDesigner' && xppEditable && xppCanDelete", "group": "9_delete@1" }
+      ],
       "commandPalette": [
         { "command": "xpp.openDesigner", "when": "false" },
-        { "command": "xpp.viewCode", "when": "false" }
+        { "command": "xpp.viewCode", "when": "false" },
+        { "command": "xpp.designer.new", "when": "false" },
+        { "command": "xpp.designer.newMethod", "when": "false" },
+        { "command": "xpp.designer.override", "when": "false" },
+        { "command": "xpp.designer.openMethod", "when": "false" },
+        { "command": "xpp.designer.delete", "when": "false" }
       ]
     },
     "keybindings": [

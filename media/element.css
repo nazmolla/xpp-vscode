@@ -47,8 +47,16 @@ button:hover { background: var(--vscode-button-secondaryHoverBackground); }
 main {
     display: grid;
     grid-template-columns: minmax(240px, 45%) 1fr;
+    grid-template-areas: "tree props";
     height: calc(100vh - 36px);
 }
+body.has-preview main {
+    grid-template-rows: 40% 60%;
+    grid-template-areas: "tree props" "preview preview";
+}
+#tree { grid-area: tree; }
+#properties { grid-area: props; }
+#preview { grid-area: preview; overflow: auto; padding: 8px; border-top: 1px solid var(--vscode-panel-border); background: var(--vscode-sideBar-background); }
 #tree, #properties { overflow: auto; }
 #tree { border-right: 1px solid var(--vscode-panel-border); outline: none; padding: 4px 0; }
 

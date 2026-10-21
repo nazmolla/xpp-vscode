@@ -33,6 +33,12 @@ namespace XppVsCode.Server.MetaModel
         string GetElementTreeJson(string objectType, string objectName);
         string GetElementPropertiesJson(string objectType, string objectName, string[] path);
         string SetElementPropertyJson(string objectType, string objectName, string[] path, string property, string value);
+        string GetNodeTypesJson(string objectType, string objectName, string[] path);
+        string AddElementNodeJson(string objectType, string objectName, string[] collectionPath, string typeName, string name, Dictionary<string, string> properties);
+        string DeleteElementNodeJson(string objectType, string objectName, string[] path);
+        string GetElementMethodJson(string objectType, string objectName, string[] path);
+        string SetElementMethodJson(string objectType, string objectName, string[] nodePath, string originalName, string source);
+        string GetOverridesJson(string objectType, string objectName, string[] nodePath);
 
         // ── Labels ──
 
