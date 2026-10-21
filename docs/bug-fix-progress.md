@@ -17,7 +17,7 @@ Fix every issue in [ai-tools-test-log.md](./ai-tools-test-log.md), re-test, buil
 | UI issues U1–U5, #8 | Implemented, extension compiles; to confirm by hand in VS Code |
 | Server build (`npm run build:server`) and extension compile (`npx tsc -p .`) | Pass |
 | README | Updated (Build Project, Run Tests, Delete/Exclude, new agent tools, regression script) |
-| Package, install, commit and push | See git log |
+| Package, install, commit and push | Done: v0.3.0 installed in VS Code, pushed as `1f1997e` |
 
 ## Still to do
 
