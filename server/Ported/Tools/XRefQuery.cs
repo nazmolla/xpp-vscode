@@ -102,11 +102,14 @@ namespace XppVsCode.Server.Tools
         }
 
         /// <summary>Where-used as JSON for the VS Code extension's references list.</summary>
-        public string QueryJson(string objectType, string objectName, string memberName, int max)
+        public string QueryJson(string objectType, string objectName, string memberName, int max, string kindName = null)
         {
             var json = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue };
             if (!TypeToFolder.TryGetValue(objectType ?? "", out string folder))
                 return json.Serialize(new Dictionary<string, object> { ["success"] = false, ["message"] = "Where-used is not available for " + objectType + "." });
+            int kind = string.IsNullOrEmpty(kindName) ? 0 : Array.FindIndex(KindNames, k => k.Equals(kindName, StringComparison.OrdinalIgnoreCase));
+            if (kind < 0)
+                return json.Serialize(new Dictionary<string, object> { ["success"] = false, ["message"] = "Unknown reference kind '" + kindName + "'." });
 
             var health = GetHealth();
             if (!health.Usable)
@@ -120,7 +123,7 @@ namespace XppVsCode.Server.Tools
                     if (!TargetExists(conn, objectPath, memberName))
                         return json.Serialize(new Dictionary<string, object> { ["success"] = false, ["message"] = NotIndexedMessage(conn, health, objectType, objectName, objectPath, memberName) });
 
-                    var rows = QueryReferences(conn, objectPath, memberName, 0, max + 1);
+                    var rows = QueryReferences(conn, objectPath, memberName, kind, max + 1);
                     var references = rows.Take(max).Select(r =>
                     {
                         var parts = r.Source.TrimStart('/').Split('/');
@@ -151,6 +154,68 @@ namespace XppVsCode.Server.Tools
                 InvalidateHealth();
                 return json.Serialize(new Dictionary<string, object> { ["success"] = false, ["message"] = "Cross-reference query failed: " + ex.Message });
             }
+        }
+
+        // ── Tags (Dynamics 365 > Find Tag References) ──
+
+        // Tag sources use singular kinds ("Table/X/TableFieldInt/F", "Class/X/Method/m"); map them to element types.
+        private static readonly Dictionary<string, string> SourceKindToType = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "Class", "AxClass" }, { "Table", "AxTable" }, { "Form", "AxForm" }, { "View", "AxView" }, { "Query", "AxQuery" },
+            { "DataEntityView", "AxDataEntityView" }, { "Map", "AxMap" }, { "Enum", "AxEnum" }, { "Menu", "AxMenu" },
+            { "MenuItemDisplay", "AxMenuItemDisplay" }, { "MenuItemAction", "AxMenuItemAction" }, { "MenuItemOutput", "AxMenuItemOutput" },
+            { "TableExtension", "AxTableExtension" }, { "FormExtension", "AxFormExtension" }, { "SecurityPrivilege", "AxSecurityPrivilege" },
+        };
+
+        public string TagsJson(string filter, int max)
+        {
+            var json = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+            var health = GetHealth();
+            if (!health.Usable)
+                return json.Serialize(new Dictionary<string, object> { ["success"] = false, ["message"] = health.Problem });
+            var tags = new List<string>();
+            using (var conn = Open(health.Server, health.Database))
+            using (var cmd = new SqlCommand("SELECT TOP (@take) Path FROM Names WHERE Path LIKE @p ORDER BY Path", conn) { CommandTimeout = 30 })
+            {
+                cmd.Parameters.AddWithValue("@take", max);
+                cmd.Parameters.AddWithValue("@p", "/Tags/%" + EscapeLike(filter ?? "") + "%");
+                using (var r = cmd.ExecuteReader())
+                    while (r.Read()) tags.Add(r.GetString(0).Substring("/Tags/".Length));
+            }
+            return json.Serialize(new Dictionary<string, object> { ["success"] = true, ["tags"] = tags });
+        }
+
+        public string TagReferencesJson(string tag, int max)
+        {
+            var json = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+            var health = GetHealth();
+            if (!health.Usable)
+                return json.Serialize(new Dictionary<string, object> { ["success"] = false, ["message"] = health.Problem });
+            var refs = new List<Dictionary<string, object>>();
+            using (var conn = Open(health.Server, health.Database))
+            using (var cmd = new SqlCommand("SELECT TOP (@take) s.Path, r.Line, m.Module FROM Names t JOIN [References] r ON r.TargetId = t.Id "
+                + "JOIN Names s ON s.Id = r.SourceId LEFT JOIN Modules m ON m.Id = s.ModuleId WHERE t.Path = @p ORDER BY m.Module, s.Path", conn) { CommandTimeout = 30 })
+            {
+                cmd.Parameters.AddWithValue("@take", max);
+                cmd.Parameters.AddWithValue("@p", "/Tags/" + tag);
+                using (var r = cmd.ExecuteReader())
+                    while (r.Read())
+                    {
+                        string source = r.GetString(0);
+                        var parts = source.TrimStart('/').Split('/');
+                        string type = parts.Length >= 2 && SourceKindToType.TryGetValue(parts[0], out string t) ? t
+                            : parts.Length >= 2 ? TypeToFolder.FirstOrDefault(kv => kv.Value.Equals(parts[0], StringComparison.OrdinalIgnoreCase)).Key : null;
+                        refs.Add(new Dictionary<string, object>
+                        {
+                            ["objectType"] = type,
+                            ["objectName"] = parts.Length >= 2 ? parts[1] : source,
+                            ["member"] = string.Join("/", parts.Skip(2)),
+                            ["line"] = r.IsDBNull(1) ? 0 : (int)r.GetInt16(1),
+                            ["module"] = r.IsDBNull(2) ? "?" : r.GetString(2),
+                        });
+                    }
+            }
+            return json.Serialize(new Dictionary<string, object> { ["success"] = true, ["references"] = refs });
         }
 
         // ── Health / deployment checks ──

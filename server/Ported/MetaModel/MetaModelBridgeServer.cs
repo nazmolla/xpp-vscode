@@ -124,6 +124,15 @@ namespace XppVsCode.Server.MetaModel
                         ExtractJsonString(body, "description"), body.Contains("\"references\"") ? ExtractJsonStringArray(body, "references") : null);
                 case "list_packages":
                     return _bridge.ListPackagesJson();
+                case "dump_element":
+                    return _bridge.DumpElementJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
+                case "export_project":
+                    return _bridge.ExportProjectJson(ExtractJsonString(body, "projectFile"), ExtractJsonString(body, "outputFile"));
+                case "inspect_project_package":
+                    return _bridge.InspectProjectPackageJson(ExtractJsonString(body, "file"));
+                case "import_project":
+                    return _bridge.ImportProjectJson(ExtractJsonString(body, "file"), ExtractJsonString(body, "targetFolder"),
+                        "true".Equals(ExtractJsonString(body, "overwrite"), StringComparison.OrdinalIgnoreCase));
                 default:
                     return "{\"success\":false,\"message\":\"Unknown action: " + EscapeJson(action ?? "") + "\"}";
             }

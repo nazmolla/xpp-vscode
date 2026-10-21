@@ -26,6 +26,34 @@
     "onStartupFinished"
   ],
   "contributes": {
+    "breakpoints": [
+      { "language": "xpp" }
+    ],
+    "debuggers": [
+      {
+        "type": "xpp",
+        "label": "X++ (Dynamics 365 unified developer environment)",
+        "languages": ["xpp"],
+        "configurationAttributes": {
+          "attach": {
+            "properties": {
+              "processName": { "type": "string", "default": "AXHost.exe", "description": "Process to attach to in the environment." },
+              "justMyCode": { "type": "boolean", "default": true },
+              "sourceFileMap": { "type": "object", "description": "Extra source path mappings." }
+            }
+          }
+        },
+        "initialConfigurations": [
+          { "type": "xpp", "request": "attach", "name": "Attach to Dynamics 365 (unified developer environment)" }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "X++: Attach to Dynamics 365",
+            "body": { "type": "xpp", "request": "attach", "name": "Attach to Dynamics 365 (unified developer environment)" }
+          }
+        ]
+      }
+    ],
     "mcpServerDefinitionProviders": [
       {
         "id": "xpp.mcp",
@@ -69,6 +97,10 @@
         {
           "id": "xpp.tools",
           "name": "Dynamics 365"
+        },
+        {
+          "id": "xpp.infolog",
+          "name": "Infolog"
         }
       ]
     },
@@ -98,6 +130,15 @@
       { "command": "xpp.tools.createPackage", "title": "Create Deployment Package…", "category": "Dynamics 365" },
       { "command": "xpp.tools.findLabels", "title": "Find Labels…", "category": "Dynamics 365" },
       { "command": "xpp.tools.options", "title": "Options…", "category": "Dynamics 365" },
+      { "command": "xpp.debug.start", "title": "Launch Debugger", "category": "Dynamics 365", "icon": "$(debug-start)" },
+      { "command": "xpp.infolog.clear", "title": "Clear Infolog", "category": "Dynamics 365", "icon": "$(clear-all)" },
+      { "command": "xpp.tools.exportProject", "title": "Export Project…", "category": "Dynamics 365" },
+      { "command": "xpp.tools.importProject", "title": "Import Project…", "category": "Dynamics 365" },
+      { "command": "xpp.tools.findTagReferences", "title": "Find Tag References…", "category": "Dynamics 365" },
+      { "command": "xpp.compare", "title": "Compare Code…", "category": "Dynamics 365" },
+      { "command": "xpp.compareMetadata", "title": "Compare Metadata…", "category": "Dynamics 365" },
+      { "command": "xpp.viewHierarchy", "title": "View Hierarchy", "category": "Dynamics 365" },
+      { "command": "xpp.viewReferences", "title": "View References", "category": "Dynamics 365" },
       { "command": "xpp.addToProject", "title": "Add to Project", "category": "Dynamics 365" },
       { "command": "xpp.createExtension", "title": "Create Extension", "category": "Dynamics 365" },
       { "command": "xpp.createCodeExtension", "title": "Create Code Extension", "category": "Dynamics 365" },
@@ -122,6 +163,8 @@
     ],
     "menus": {
       "view/title": [
+        { "command": "xpp.infolog.clear", "when": "view == xpp.infolog", "group": "navigation@1" },
+        { "command": "xpp.debug.start", "when": "view == xpp.infolog || view == xpp.tools", "group": "navigation@0" },
         { "command": "xpp.aot.filter", "when": "view == xpp.aot && !xpp.aot.filtered", "group": "navigation@0" },
         { "command": "xpp.aot.clearFilter", "when": "view == xpp.aot && xpp.aot.filtered", "group": "navigation@0" },
         { "command": "xpp.aot.modelView", "when": "view == xpp.aot && !xpp.aot.modelView", "group": "navigation@1" },
@@ -143,6 +186,10 @@
         { "command": "xpp.createExtension", "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\bextensible\\b/", "group": "3_extend@1" },
         { "command": "xpp.createCodeExtension", "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\bcoc\\b/", "group": "3_extend@2" },
         { "command": "xpp.findReferences", "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\brefs\\b/", "group": "4_refs@1" },
+        { "command": "xpp.viewReferences", "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\brefs\\b/", "group": "4_refs@2" },
+        { "command": "xpp.viewHierarchy", "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\bhier\\b/", "group": "4_refs@3" },
+        { "command": "xpp.compare", "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\bcode\\b/", "group": "6_compare@1" },
+        { "command": "xpp.compareMetadata", "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /xppElement/", "group": "6_compare@2" },
         { "command": "xpp.openTableBrowser", "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\btable\\b/", "group": "5_run@1" },
         { "command": "xpp.openInBrowser", "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\bbrowser\\b/ && !(viewItem =~ /\\btable\\b/)", "group": "5_run@2" },
         { "command": "xpp.tools.updateModel", "when": "view == xpp.aot && viewItem == 'xppModel custom'", "group": "1_model@1" },
@@ -201,6 +248,11 @@
           "type": "string",
           "default": "",
           "description": "Path to the Power Platform CLI (pac). Defaults to pac on PATH."
+        },
+        "xpp.debuggerProxyPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Microsoft.Dynamics.AX.DebuggerProxy.exe. Defaults to the FinOps tools installed by X++: Connect to Environment."
         },
         "xpp.financeAndOperationsUrl": {
           "type": "string",

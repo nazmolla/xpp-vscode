@@ -43,6 +43,10 @@ namespace XppVsCode.Server.MetaModel
         string CreateModelJson(string name, string displayName, string publisher, string layer, string description, string[] references);
         string UpdateModelJson(string name, string displayName, string publisher, string description, string[] references);
         string ListPackagesJson();
+        string ExportProjectJson(string projectFile, string outputFile);
+        string InspectProjectPackageJson(string file);
+        string ImportProjectJson(string file, string targetFolder, bool overwrite);
+        string DumpElementJson(string objectType, string objectName);
 
         // ── Labels ──
 

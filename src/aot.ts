@@ -81,6 +81,7 @@ export function elementContextValue(objectType: string): string {
     return ['xppElement', CodeTypes.has(objectType) ? 'code' : '', objectType === 'AxForm' ? 'form' : '',
         ExtensionTypes[objectType] ? 'extensible' : '', CodeExtensionFunctions[objectType] ? 'coc' : '',
         BrowserTypes.has(objectType) ? 'browser' : '', objectType === 'AxTable' ? 'table' : '', WhereUsedTypes.has(objectType) ? 'refs' : '',
+        objectType === 'AxClass' || objectType === 'AxTable' ? 'hier' : '',
     ].filter(Boolean).join(' ');
 }
 
@@ -96,7 +97,7 @@ export const CodeExtensionFunctions: Record<string, string> = {
 };
 
 /** Elements that can be opened in the web client. */
-export const BrowserTypes = new Set(['AxMenuItemDisplay', 'AxMenuItemOutput', 'AxMenuItemAction', 'AxClass', 'AxTable']);
+export const BrowserTypes = new Set(['AxMenuItemDisplay', 'AxMenuItemOutput', 'AxMenuItemAction', 'AxClass', 'AxTable', 'AxForm']);
 
 /** Element types the cross-reference database indexes. */
 export const WhereUsedTypes = new Set(['AxClass', 'AxTable', 'AxForm', 'AxEnum', 'AxEdt', 'AxView', 'AxQuery', 'AxDataEntityView', 'AxMap', 'AxMenu',

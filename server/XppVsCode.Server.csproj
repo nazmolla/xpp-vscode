@@ -30,6 +30,9 @@
   <ItemGroup>
     <Reference Include="System.Web.Extensions" />
     <Reference Include="System.Data" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="System.Runtime.Serialization" />
     <Reference Include="Microsoft.Dynamics.AX.Metadata">
       <HintPath>$(D365BinPath)\Microsoft.Dynamics.AX.Metadata.dll</HintPath>
       <Private>false</Private>

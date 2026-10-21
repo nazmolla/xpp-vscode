@@ -19,8 +19,12 @@ namespace XppVsCode.Server.Tools
         {
             int max = int.TryParse(JsonHelpers.ExtractJsonString(body, "maxResults"), out int m) ? Math.Max(1, Math.Min(m, 1000)) : 500;
             return _xref.QueryJson(JsonHelpers.ExtractJsonString(body, "objectType"), JsonHelpers.ExtractJsonString(body, "objectName"),
-                JsonHelpers.ExtractJsonString(body, "memberName"), max);
+                JsonHelpers.ExtractJsonString(body, "memberName"), max, JsonHelpers.ExtractJsonString(body, "referenceKind"));
         }
+
+        public string TagsJson(string body) => _xref.TagsJson(JsonHelpers.ExtractJsonString(body, "filter"), 500);
+
+        public string TagReferencesJson(string body) => _xref.TagReferencesJson(JsonHelpers.ExtractJsonString(body, "tag"), 1000);
 
         // Above this total method source size, reads return signatures only unless methodNames is given.
         private const int MaxInlineMethodSourceChars = 40000;

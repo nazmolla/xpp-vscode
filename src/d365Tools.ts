@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { CodeExtensionFunctions, CodeTypes, ExtensionTypes, listModels, ModelLocation, typeLabel } from './aot';
 import { methodUri, objectUri } from './codeView';
+import { DiagramNode, DiagramPanel, hierarchyDiagram, MetadataDocuments, MetadataScheme, referencesDiagram } from './diagrams';
 import { readActiveEnvironment } from './environment';
 import { findActiveProject, readProject } from './project';
 import { XppServerClient } from './serverClient';
@@ -43,9 +44,31 @@ const ToolsMenu: ToolNode[] = [
     },
     { label: 'Build Models…', icon: 'tools', command: 'xpp.build' },
     { label: 'Synchronize Database', icon: 'database', command: 'xpp.pac.dbSync', description: 'pac' },
+    {
+        label: 'Debug', icon: 'debug-alt', children: [
+            { label: 'Launch Debugger', icon: 'debug-start', command: 'xpp.debug.start' },
+            { label: 'Infolog', icon: 'output', command: 'xpp.infolog.focus' },
+        ],
+    },
+    {
+        label: 'Project', icon: 'project', children: [
+            { label: 'Select Project…', icon: 'folder-opened', command: 'xpp.selectProject' },
+            { label: 'Export Project…', icon: 'export', command: 'xpp.tools.exportProject' },
+            { label: 'Import Project…', icon: 'cloud-download', command: 'xpp.tools.importProject' },
+        ],
+    },
     { label: 'Find Labels…', icon: 'symbol-string', command: 'xpp.tools.findLabels' },
+    { label: 'Find Tag References…', icon: 'tag', command: 'xpp.tools.findTagReferences' },
     { label: 'Metadata Search…', icon: 'search', command: 'xpp.openObject' },
     { label: 'Find References…', icon: 'references', command: 'xpp.findReferences' },
+    {
+        label: 'View', icon: 'type-hierarchy', children: [
+            { label: 'View Hierarchy…', icon: 'type-hierarchy-sub', command: 'xpp.viewHierarchy' },
+            { label: 'View References…', icon: 'references', command: 'xpp.viewReferences' },
+            { label: 'Compare Code…', icon: 'diff', command: 'xpp.compare' },
+            { label: 'Compare Metadata…', icon: 'diff-multiple', command: 'xpp.compareMetadata' },
+        ],
+    },
     {
         label: 'Run', icon: 'play', children: [
             { label: 'Open in Browser…', icon: 'globe', command: 'xpp.openInBrowser' },
@@ -98,8 +121,26 @@ export function registerTools(
     command('xpp.createExtension', (arg?: TreeArg) => createExtension(server, arg, refreshTrees));
     command('xpp.createCodeExtension', (arg?: TreeArg) => createCodeExtension(server, arg, refreshTrees));
     command('xpp.findReferences', (arg?: TreeArg) => findReferences(server, arg));
-    command('xpp.openInBrowser', (arg?: TreeArg) => openInBrowser(arg));
-    command('xpp.openTableBrowser', (arg?: TreeArg) => openInBrowser(arg ?? { objectType: 'AxTable' }, true));
+    command('xpp.openInBrowser', (arg?: TreeArg) => openInBrowser(arg, false, server));
+    command('xpp.openTableBrowser', (arg?: TreeArg) => openInBrowser(arg ?? { objectType: 'AxTable' }, true, server));
+    command('xpp.tools.exportProject', () => exportProject(server));
+    command('xpp.tools.importProject', () => importProject(server, refreshTrees));
+    command('xpp.tools.findTagReferences', () => findTagReferences(server));
+    command('xpp.compare', (arg?: TreeArg) => compareElements(server, arg, false));
+    command('xpp.compareMetadata', (arg?: TreeArg) => compareElements(server, arg, true));
+    command('xpp.viewHierarchy', async (arg?: TreeArg) => {
+        const element = elementOf(arg) ?? await pickElement(server, 'View hierarchy', ['AxClass', 'AxTable']);
+        if (element) {
+            await hierarchyDiagram(server, element.objectType, element.objectName);
+        }
+    });
+    command('xpp.viewReferences', async (arg?: TreeArg) => {
+        const element = elementOf(arg) ?? await pickElement(server, 'View references');
+        if (element) {
+            await referencesDiagram(server, element.objectType, element.objectName);
+        }
+    });
+    context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(MetadataScheme, new MetadataDocuments(server)));
 }
 
 function elementOf(arg: TreeArg | undefined): { objectType: string; objectName: string } | undefined {
@@ -243,13 +284,11 @@ async function modelDependencies(name?: string): Promise<void> {
     await Promise.all(models.map(async m => references.set(m.name, await descriptorReferences(m))));
     const outgoing = references.get(model.name) ?? [];
     const incoming = models.filter(m => m.name !== model.name && (references.get(m.name) ?? []).some(r => r.toLowerCase() === model.packageName.toLowerCase()));
-    const items: vscode.QuickPickItem[] = [
-        { label: `References (${outgoing.length})`, kind: vscode.QuickPickItemKind.Separator },
-        ...outgoing.map(r => ({ label: r, description: 'package' })),
-        { label: `Referenced by (${incoming.length})`, kind: vscode.QuickPickItemKind.Separator },
-        ...incoming.map(m => ({ label: m.displayName, description: m.name })),
+    const roots: DiagramNode[] = [
+        { label: `References (${outgoing.length})`, children: outgoing.map(r => ({ label: r, description: 'package' })) },
+        { label: `Referenced by (${incoming.length})`, children: incoming.map(m => ({ label: m.displayName, description: m.name })) },
     ];
-    await vscode.window.showQuickPick(items, { title: `Dependencies of ${model.displayName} [${model.name}], package ${model.packageName}` });
+    DiagramPanel.show(`Dependencies of ${model.displayName} [${model.name}], package ${model.packageName}`, roots);
 }
 
 async function descriptorReferences(model: ModelLocation): Promise<string[]> {
@@ -457,15 +496,21 @@ async function openReference(ref: { objectType?: string; objectName: string; mem
 }
 
 /** The web client URL for an element: menu items, class runner and table browser, like Visual Studio's startup object. */
-async function openInBrowser(arg: TreeArg | undefined, tableBrowser = false): Promise<void> {
-    const element = elementOf(arg) ?? (tableBrowser
+async function openInBrowser(arg: TreeArg | undefined, tableBrowser: boolean, server: XppServerClient): Promise<void> {
+    let element = elementOf(arg) ?? (tableBrowser
         ? await pickTable()
         : undefined);
     if (!element) {
         if (!tableBrowser) {
-            vscode.window.showInformationMessage('Right-click a menu item, class or table in Application Explorer and choose Open in Browser.');
+            vscode.window.showInformationMessage('Right-click a form, menu item, class or table in Application Explorer and choose Open in Browser.');
         }
         return;
+    }
+    if (element.objectType === 'AxForm' && !tableBrowser) {
+        element = await menuItemForForm(server, element.objectName);
+        if (!element) {
+            return;
+        }
     }
     const baseUrl = await financeAndOperationsUrl();
     if (!baseUrl) {
@@ -503,4 +548,114 @@ async function financeAndOperationsUrl(): Promise<string | undefined> {
         await config.update('financeAndOperationsUrl', url, vscode.ConfigurationTarget.Global);
     }
     return url.replace(/\/+$/, '');
+}
+
+/** A form opens in the web client through a display menu item that references it. */
+async function menuItemForForm(server: XppServerClient, form: string): Promise<{ objectType: string; objectName: string } | undefined> {
+    const result = await server.bridge('where_used', { objectType: 'AxForm', objectName: form, maxResults: '500' });
+    const items = result.success
+        ? [...new Set((result.references as any[]).filter(r => r.objectType === 'AxMenuItemDisplay').map(r => String(r.objectName)))]
+        : [];
+    if (items.length === 0) {
+        vscode.window.showWarningMessage(`No display menu item opens ${form}. Create one, then open it in the browser.`);
+        return undefined;
+    }
+    const name = items.length === 1 ? items[0] : await vscode.window.showQuickPick(items, { title: `Display menu items that open ${form}` });
+    return name ? { objectType: 'AxMenuItemDisplay', objectName: name } : undefined;
+}
+
+// ── Export / import project (.axpp, Visual Studio's format) ──
+
+async function exportProject(server: XppServerClient): Promise<void> {
+    const projectFile = await findActiveProject();
+    if (!projectFile) {
+        throw new Error('Select a D365FO project first (X++: Select D365FO Project).');
+    }
+    const project = await readProject(projectFile);
+    const target = await vscode.window.showSaveDialog({
+        title: `Export project ${project?.name ?? ''}`, filters: { 'Dynamics 365 project export': ['axpp'] },
+        defaultUri: vscode.Uri.file(path.join(path.dirname(projectFile), `${project?.name ?? 'project'}.axpp`)),
+    });
+    if (!target) {
+        return;
+    }
+    const result = await server.bridge('export_project', { projectFile, outputFile: target.fsPath });
+    if (!result.success) {
+        throw new Error(result.message);
+    }
+    vscode.window.showInformationMessage(result.message);
+}
+
+async function importProject(server: XppServerClient, refreshTrees: () => void): Promise<void> {
+    const files = await vscode.window.showOpenDialog({ title: 'Import project', filters: { 'Dynamics 365 project export': ['axpp'] }, canSelectMany: false });
+    if (!files?.[0]) {
+        return;
+    }
+    const file = files[0].fsPath;
+    const info = await server.bridge('inspect_project_package', { file });
+    if (!info.success) {
+        throw new Error(info.message);
+    }
+    const existing = (info.items as any[]).filter(i => i.exists).length;
+    const summary = `${info.project}: ${info.items.length} element(s) for model ${info.model}${info.modelExists ? '' : ' (the model will be created)'}.`
+        + (existing ? ` ${existing} already exist.` : '');
+    const choice = await vscode.window.showInformationMessage(summary, { modal: true }, ...(existing ? ['Import and overwrite', 'Import new only'] : ['Import']));
+    if (!choice) {
+        return;
+    }
+    const folder = await vscode.window.showOpenDialog({ title: 'Folder for the project', canSelectFiles: false, canSelectFolders: true, openLabel: 'Import here' });
+    if (!folder?.[0]) {
+        return;
+    }
+    const result = await server.bridge('import_project', { file, targetFolder: folder[0].fsPath, overwrite: String(choice === 'Import and overwrite') });
+    if (!result.success) {
+        throw new Error(result.message);
+    }
+    refreshTrees();
+    if (await vscode.window.showInformationMessage(result.message, 'Use this project')) {
+        await vscode.workspace.getConfiguration('xpp').update('project', result.projectFile, vscode.ConfigurationTarget.Global);
+    }
+}
+
+// ── Tags, compare ──
+
+async function findTagReferences(server: XppServerClient): Promise<void> {
+    const filter = await vscode.window.showInputBox({ title: 'Find tag references', prompt: 'Tag (or part of it)' });
+    if (filter === undefined) {
+        return;
+    }
+    const tags = await server.bridge('list_tags', { filter });
+    if (!tags.success) {
+        throw new Error(tags.message);
+    }
+    const list = tags.tags as string[];
+    const tag = list.length === 1 ? list[0] : await vscode.window.showQuickPick(list, { title: list.length ? 'Tags' : 'No tags found' });
+    if (!tag) {
+        return;
+    }
+    const result = await server.bridge('tag_references', { tag });
+    if (!result.success) {
+        throw new Error(result.message);
+    }
+    const picked = await vscode.window.showQuickPick(
+        (result.references as any[]).map(r => ({ label: String(r.objectName), description: r.member, detail: `${typeLabel(r.objectType ?? '')} · ${r.module}`, ref: r })),
+        { title: `${result.references.length} element(s) tagged '${tag}'`, matchOnDescription: true });
+    if (picked?.ref.objectType) {
+        await vscode.commands.executeCommand('xpp.openDesigner', picked.ref.objectType, picked.ref.objectName);
+    }
+}
+
+/** Compare the code (or metadata) of two elements in the diff editor. */
+async function compareElements(server: XppServerClient, arg: TreeArg | undefined, metadata: boolean): Promise<void> {
+    const left = elementOf(arg) ?? await pickElement(server, metadata ? 'Compare metadata: first element' : 'Compare code: first element');
+    if (!left) {
+        return;
+    }
+    const right = await pickElement(server, `Compare ${left.objectName} with`, [left.objectType]);
+    if (!right) {
+        return;
+    }
+    const useCode = !metadata && CodeTypes.has(left.objectType);
+    const uri = (e: { objectType: string; objectName: string }) => useCode ? objectUri(e.objectType, e.objectName) : MetadataDocuments.uri(e.objectType, e.objectName);
+    await vscode.commands.executeCommand('vscode.diff', uri(left), uri(right), `${left.objectName} ↔ ${right.objectName}${useCode ? '' : ' (metadata)'}`);
 }

@@ -4,6 +4,7 @@ import { XppBuilder } from './build';
 import { objectUri, XppCodeFileSystem, XppScheme } from './codeView';
 import { FormDesigner } from './designer';
 import { registerTools } from './d365Tools';
+import { XppDebugger } from './debug';
 import { DesignerNodeContext, ElementDesigner } from './elementDesigner';
 import { readActiveEnvironment } from './environment';
 import { registerMcpProvider } from './mcpProvider';
@@ -100,6 +101,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     });
     command('xpp.aot.clearFilter', () => aotTree.setFilter(''));
+    new XppDebugger(server, log).register(context);
     registerTools(context, server, () => {
         aotTree.refresh();
         projectTree.refresh();

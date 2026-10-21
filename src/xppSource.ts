@@ -138,6 +138,45 @@ export function compilerLineToDocumentLine(text: string, compilerLine: number): 
     return lineOf(normalized, layout.classEnd);
 }
 
+/** The inverse of compilerLineToDocumentLine: a 0-based document line to the compiler's 1-based line (blank lines between methods go to the next method). */
+export function documentLineToCompilerLine(text: string, documentLine: number): number {
+    const normalized = normalizeEol(text);
+    const layout = classLayout(normalized);
+    if (!layout || layout.methods.length === 0) {
+        return documentLine + 1;
+    }
+    const declarationLines = lineOf(normalized, layout.firstMethodStart);
+    if (documentLine < declarationLines) {
+        return documentLine + 1;
+    }
+    let compilerStart = declarationLines + 1;
+    for (const [start, end] of layout.methods) {
+        const startLine = lineOf(normalized, start);
+        const lines = normalized.slice(start, end).split('\n').length;
+        if (documentLine < startLine + lines) {
+            return compilerStart + Math.max(0, documentLine - startLine);
+        }
+        compilerStart += lines;
+    }
+    return compilerStart;
+}
+
+/** The element's source as the compiler numbers it: the declaration without its closing brace, then each method back to back. */
+export function compilerView(declaration: string, methods: { name: string; source: string }[]): string {
+    let decl = normalizeEol(declaration ?? '').trim();
+    let body = methods.map(m => normalizeEol(m.source));
+    if (!decl && methods[0]?.name.toLowerCase() === 'classdeclaration') {
+        decl = body[0].trim();
+        body = body.slice(1);
+    }
+    const lines = decl ? decl.split('\n').slice(0, -1) : [];
+    for (const source of body) {
+        lines.push(...source.replace(/^\s*\n/, '').replace(/\s+$/, '').split('\n'));
+    }
+    lines.push('}');
+    return lines.join('\r\n') + '\r\n';
+}
+
 /** Finds the class body and the methods in it, or undefined if the text doesn't start with a class declaration. */
 function classLayout(text: string, declarationTail = ''): ClassLayout | undefined {
     const open = findClassOpen(text);
