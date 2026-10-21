@@ -10,6 +10,7 @@ export interface XppEnvironment {
     binDirectory: string;
     referencePackagesPaths: string[];
     modelStoreFolder: string;
+    runtimePackagesDirectory?: string;
     crossReferencesDbServerName?: string;
     crossReferencesDatabaseName?: string;
     defaultModelForNewProjects?: string;
@@ -48,6 +49,7 @@ export async function readActiveEnvironment(): Promise<XppEnvironment> {
         binDirectory: path.join(frameworkDirectory, 'bin'),
         referencePackagesPaths: json.ReferencePackagesPaths ?? [],
         modelStoreFolder: json.ModelStoreFolder,
+        runtimePackagesDirectory: json.RuntimePackagesDirectory,
         crossReferencesDbServerName: json.CrossReferencesDbServerName,
         crossReferencesDatabaseName: json.CrossReferencesDatabaseName,
         defaultModelForNewProjects: json.DefaultModelForNewProjects,

@@ -1,17 +1,8 @@
 import * as vscode from 'vscode';
 import { readActiveEnvironment } from './environment';
+import { findActiveProject } from './project';
 
 const ServerVersion = '0.1.0';
-
-/** The .rnrproj the tools add objects to: the xpp.project setting, else the first one in the workspace. */
-export async function findActiveProject(): Promise<string | undefined> {
-    const configured = vscode.workspace.getConfiguration('xpp').get<string>('project');
-    if (configured) {
-        return configured;
-    }
-    const found = await vscode.workspace.findFiles('**/*.rnrproj', '**/{node_modules,bin,obj}/**', 2);
-    return found[0]?.fsPath;
-}
 
 export function registerMcpProvider(context: vscode.ExtensionContext, log: vscode.OutputChannel): void {
     const changed = new vscode.EventEmitter<void>();

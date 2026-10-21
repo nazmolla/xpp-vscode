@@ -11,12 +11,14 @@ namespace XppVsCode.Server
     {
         private const string ServerName = "xpp-vscode";
         private readonly ToolRouter _router;
+        private readonly BridgeClient _bridge;
         private readonly string _version;
         private readonly string _instructions;
 
-        public McpStdioServer(ToolRouter router, string version)
+        public McpStdioServer(ToolRouter router, BridgeClient bridge, string version)
         {
             _router = router;
+            _bridge = bridge;
             _version = version;
             _instructions = LoadInstructions();
         }
@@ -65,6 +67,12 @@ namespace XppVsCode.Server
                     return _router.BuildToolsListResponse(idToken);
                 case "tools/call":
                     return _router.HandleToolCall(idToken, json);
+                case "xpp/bridge":
+                    // Used by the VS Code extension itself (designer, code view): raw bridge JSON, not tool text.
+                    string paramsJson = JsonHelpers.ExtractNestedObject(json, "params") ?? "{}";
+                    string action = JsonHelpers.ExtractJsonString(paramsJson, "action");
+                    string body = JsonHelpers.ExtractNestedObject(paramsJson, "body") ?? "{}";
+                    return JsonHelpers.BuildResult(idToken, _bridge.Call(action, body));
                 default:
                     return JsonHelpers.BuildError(idToken, -32601, "Method not found: " + method);
             }

@@ -1,8 +1,8 @@
 {
   "name": "xpp-vscode",
   "displayName": "X++ AI Companion for D365FO",
-  "description": "Dynamics 365 Finance & Operations X++ development tools for VS Code and AI agents.",
-  "version": "0.1.0",
+  "description": "Dynamics 365 Finance & Operations X++ development in VS Code: code view, form designer, build, deploy and AI agent tools.",
+  "version": "0.2.0",
   "publisher": "nazmolla",
   "license": "UNLICENSED",
   "repository": {
@@ -20,7 +20,10 @@
     "win32"
   ],
   "main": "./out/extension.js",
-  "activationEvents": [],
+  "activationEvents": [
+    "workspaceContains:**/*.rnrproj",
+    "onFileSystem:xpp"
+  ],
   "contributes": {
     "mcpServerDefinitionProviders": [
       {
@@ -28,17 +31,70 @@
         "label": "X++ (D365FO)"
       }
     ],
-    "commands": [
+    "languages": [
       {
-        "command": "xpp.showEnvironment",
-        "title": "Show Active Environment",
-        "category": "X++"
-      },
-      {
-        "command": "xpp.checkEnvironment",
-        "title": "Check Environment Connection",
-        "category": "X++"
+        "id": "xpp",
+        "aliases": ["X++", "xpp"],
+        "extensions": [".xpp"],
+        "configuration": "./language-configuration.json"
       }
+    ],
+    "grammars": [
+      {
+        "language": "xpp",
+        "scopeName": "source.xpp",
+        "path": "./syntaxes/xpp.tmLanguage.json"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "xpp",
+          "title": "X++",
+          "icon": "$(symbol-class)"
+        }
+      ]
+    },
+    "views": {
+      "xpp": [
+        {
+          "id": "xpp.project",
+          "name": "D365FO Project"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "xpp.project",
+        "contents": "No D365FO project (.rnrproj) found in this workspace.\n[Open Folder](command:vscode.openFolder)\nNot set up yet?\n[Connect to Environment](command:xpp.connectEnvironment)"
+      }
+    ],
+    "commands": [
+      { "command": "xpp.openObject", "title": "Open Object…", "category": "X++", "icon": "$(search)" },
+      { "command": "xpp.openFormDesigner", "title": "Open Form Designer…", "category": "X++", "icon": "$(layout)" },
+      { "command": "xpp.build", "title": "Build Model", "category": "X++", "icon": "$(tools)" },
+      { "command": "xpp.refreshProject", "title": "Refresh Project", "category": "X++", "icon": "$(refresh)" },
+      { "command": "xpp.connectEnvironment", "title": "Connect to Environment…", "category": "X++" },
+      { "command": "xpp.checkEnvironment", "title": "Check Environment Connection", "category": "X++" },
+      { "command": "xpp.showEnvironment", "title": "Show Active Environment", "category": "X++" },
+      { "command": "xpp.pac.signIn", "title": "Sign In to Environment (pac)", "category": "X++" },
+      { "command": "xpp.pac.init", "title": "Initialize Deployment Solution (pac)", "category": "X++" },
+      { "command": "xpp.pac.deploy", "title": "Deploy Models to Environment (pac)", "category": "X++" },
+      { "command": "xpp.pac.dbSync", "title": "Synchronize Database (pac)", "category": "X++" }
+    ],
+    "menus": {
+      "view/title": [
+        { "command": "xpp.openObject", "when": "view == xpp.project", "group": "navigation@1" },
+        { "command": "xpp.build", "when": "view == xpp.project", "group": "navigation@2" },
+        { "command": "xpp.refreshProject", "when": "view == xpp.project", "group": "navigation@3" }
+      ],
+      "view/item/context": [
+        { "command": "xpp.openFormDesigner", "when": "view == xpp.project && viewItem == xppForm", "group": "inline" }
+      ]
+    },
+    "keybindings": [
+      { "command": "xpp.openObject", "key": "ctrl+alt+o" },
+      { "command": "xpp.build", "key": "ctrl+shift+b", "when": "resourceScheme == xpp || resourceExtname == .rnrproj" }
     ],
     "configuration": {
       "title": "X++",
@@ -57,6 +113,21 @@
           "type": "string",
           "default": "",
           "description": "Optional Microsoft Entra app (client) ID to sign in with, if your tenant does not allow VS Code's default sign-in for Dataverse."
+        },
+        "xpp.build.crossReference": {
+          "type": "boolean",
+          "default": true,
+          "description": "Update the cross-reference database while building, so where-used includes your code."
+        },
+        "xpp.build.runAppCheckerRules": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run AppChecker rules during the build."
+        },
+        "xpp.pacPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the Power Platform CLI (pac). Defaults to pac on PATH."
         }
       }
     }

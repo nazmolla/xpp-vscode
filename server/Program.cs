@@ -14,6 +14,9 @@ namespace XppVsCode.Server
 
         private static int Main(string[] args)
         {
+            if (args.Length > 0 && (args[0] == "--sql-check" || args[0] == "--restore-xref"))
+                return SqlSetup.Run(args);
+
             DynamicsConfigurationReader.ConfigFileOverride = ArgValue(args, "--config");
             var config = DynamicsConfigurationReader.ReadActiveConfiguration();
             if (string.IsNullOrEmpty(config.FrameworkDirectory) || !config.HasReference)
@@ -40,8 +43,8 @@ namespace XppVsCode.Server
         private static void Run(DynamicsMetadataConfig config, string projectFile)
         {
             var bridge = new MetaModelBridge(new MetadataHost(config), new LabelStore(config), projectFile);
-            var router = new ToolRouter(new BridgeClient(new MetaModelBridgeServer(bridge)));
-            new McpStdioServer(router, Version).Run();
+            var client = new BridgeClient(new MetaModelBridgeServer(bridge));
+            new McpStdioServer(new ToolRouter(client), client, Version).Run();
         }
 
         private static string ArgValue(string[] args, string name)

@@ -2257,26 +2257,71 @@ namespace XppVsCode.Server.MetaModel
             return string.Join("\n", lines).TrimEnd();
         }
 
+        // The identifier before the first '(' after comments, [attributes] (possibly multi-line) and #macro lines.
         private static string ExtractMethodName(string source)
         {
             if (string.IsNullOrWhiteSpace(source)) return "unknownMethod";
-            var lines = source.Split('\n');
-            var sig = new StringBuilder();
-            foreach (string line in lines)
+            string text = source.Replace("\r\n", "\n");
+            int i = 0;
+            while (true)
             {
-                string l = line.Trim();
-                if (l.StartsWith("///") || l.StartsWith("//") || l.StartsWith("/*")
-                    || l.StartsWith("*") || l.Length == 0 || l.StartsWith("["))
-                    continue;
-                sig.Append(l);
-                if (l.Contains("(")) break;
+                while (i < text.Length && char.IsWhiteSpace(text[i])) i++;
+                if (i >= text.Length) break;
+                if (string.CompareOrdinal(text, i, "//", 0, 2) == 0 || (text[i] == '#' && IsMacroLine(text, i)))
+                {
+                    int end = text.IndexOf('\n', i);
+                    i = end < 0 ? text.Length : end + 1;
+                }
+                else if (text[i] == '#')
+                {
+                    // A #word on the signature line (e.g. #obsolete) acts as a modifier.
+                    for (i++; i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] == '_'); i++) { }
+                }
+                else if (string.CompareOrdinal(text, i, "/*", 0, 2) == 0)
+                {
+                    int end = text.IndexOf("*/", i + 2, StringComparison.Ordinal);
+                    i = end < 0 ? text.Length : end + 2;
+                }
+                else if (text[i] == '[')
+                {
+                    i = SkipBracketed(text, i);
+                }
+                else break;
             }
-            string s = sig.ToString();
-            int paren = s.IndexOf('(');
-            if (paren <= 0) return "unknownMethod";
-            string before = s.Substring(0, paren).Trim();
-            string[] tokens = before.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            int paren = text.IndexOf('(', Math.Min(i, text.Length));
+            int brace = text.IndexOf('{', Math.Min(i, text.Length));
+            // A class-style header ("public class X extends Y {") is how forms store their declaration.
+            if (brace >= 0 && (paren < 0 || brace < paren)) return "classDeclaration";
+            if (paren <= i) return "unknownMethod";
+            string[] tokens = text.Substring(i, paren - i).Trim().Split(new[] { ' ', '\t', '\n' }, StringSplitOptions.RemoveEmptyEntries);
             return tokens.Length > 0 ? tokens[tokens.Length - 1] : "unknownMethod";
+        }
+
+        // Macro directives (#define.X(..), #if, #localmacro, ...) and macro library lines (#SysAdmin) take the whole line.
+        private static bool IsMacroLine(string text, int start)
+        {
+            int end = text.IndexOf('\n', start);
+            string line = text.Substring(start, (end < 0 ? text.Length : end) - start).Trim();
+            return System.Text.RegularExpressions.Regex.IsMatch(line,
+                @"^#(define|localmacro|globalmacro|endmacro|if|ifnot|endif|macrolib|undef|globaldefine|localdefine)\b|^#\w+\.\w+|^#\w+\s*$",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
+        private static int SkipBracketed(string text, int start)
+        {
+            int depth = 0;
+            for (int i = start; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (c == '"' || c == '\'')
+                {
+                    for (i++; i < text.Length && text[i] != c; i++)
+                        if (text[i] == '\\') i++;
+                }
+                else if (c == '[') depth++;
+                else if (c == ']' && --depth == 0) return i + 1;
+            }
+            return text.Length;
         }
 
         private ModelSaveInfo GetModelSaveInfo(string modelName)

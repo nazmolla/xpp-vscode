@@ -88,6 +88,10 @@ namespace XppVsCode.Server.MetaModel
                     return HandleGetObjectTypeSchema(body);
                 case "get_form_layout":
                     return HandleGetFormLayout(body);
+                case "get_form_tree":
+                    return _bridge.GetFormTreeJson(ExtractJsonString(body, "formName"));
+                case "get_table_fields":
+                    return _bridge.GetTableFieldsJson(ExtractJsonString(body, "tableName"));
                 default:
                     return "{\"success\":false,\"message\":\"Unknown action: " + EscapeJson(action ?? "") + "\"}";
             }

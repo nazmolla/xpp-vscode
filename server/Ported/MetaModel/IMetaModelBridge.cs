@@ -28,6 +28,8 @@ namespace XppVsCode.Server.MetaModel
         ModelInfoResult GetModelInfo(string modelName);
         List<ModelSummary> ListModels();
         FormLayoutResult GetFormLayout(string formName, string rootControl, int maxDepth);
+        string GetFormTreeJson(string formName);
+        string GetTableFieldsJson(string tableName);
 
         // ── Labels ──
 

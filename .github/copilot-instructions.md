@@ -51,19 +51,20 @@ Target environments: unified developer environments (UDE, Power Platform hosted)
 - **X++ language server**: `Microsoft.Dynamics.LSP.XppLanguageServer.exe` (in the FinOps VSIX; options `--xppSourcePath`, `--compilerMetadataPath`, `--hostPID`, `--referencePackages`, `--frameworkBin`).
 - **Debugging**: VS uses `Microsoft.Dynamics.AX.DebuggerProxy.exe` (in the FinOps VSIX `DebuggerProxy` folder, .NET 8): local TCP port (default 5119) tunnelled over `wss://<env>/___sidecar/AOS1/remote-debugger/connect`, args `--remoteProxyHost --accessToken --aos --VSVersion`. It has an msvsmon mode and a **vsdbg** mode (VS Code's debugger) — attaching from VS Code looks feasible; needs a spike.
 
-## Status (2026-10-20)
-- Done: scaffold; all 18 tools ported and passing the read-only smoke test (8 s); extension registers the MCP server and passes the project.
-- Not yet verified: write tools (`xpp_create_object`, `xpp_update_object`, `xpp_add_to_project`, `xpp_create_label`) — need test objects in `testcust` (ask the user first); speed of `MetadataHost.Reset()` after each write; loading the extension in VS Code (F5 / Extension Development Host) and Copilot picking up the server.
-- Known gaps (also in the VS extension): no tool to create a label file (`AxLabelFile`), no delete tool.
-- Data entity extensions (`AxDataEntityViewExtension` with `entityFields`, auto-extends the staging table) and security (privilege entry points with real grants, data entity permissions, duty/role extensions, `removeSecurityItems`) were added in both repos and tested on `XvsTest*` objects in `testcust`. `scripts/call.ps1 -CallsFile <json>` runs ad-hoc tool calls.
+## More findings (don't redo)
+- **X++ language server is a stub**: it only advertises document sync; hover/completion return "Method not found", and VS only enables it with env `UseNewLSPServer`. v1 provides language features itself (TextMate grammar `syntaxes/xpp.tmLanguage.json`, definition/hover via `find_object`).
+- **xppc without VS** (14 s, same output as VS): `-metadata=<custom store> -compilermetadata=<RuntimePackagesDirectory> -modelmodule=<model> -output=<pkg>\bin -xmllog=... -log=... -appBase=<PLD\bin> -refPath=<PLD\bin> -referenceFolder=<PLD> -referenceFolder=<custom store>` [+ `-xref -xrefSqlServer -xrefDbName`]. LabelC: `-metadata -output=<pkg>\Resources -modelmodule -names`.
+- **Compiler diagnostics**: code errors use paths `dynamics://Class/<name>/Method/<m>` and line numbers counted over the whole object as if methods sat inside the class body (declaration without closing `}`, then methods back to back). `compilerLineToDocumentLine` in `src/xppSource.ts` maps them; `scripts/diag-test.js` verifies.
+- `SalesOrderHeaderV2Entity` is obsolete (staging `SalesOrderHeaderV2Staging`).
+
+## Status (v0.2.0, uncommitted work landed after a04400c)
+- Done and verified headless: 18 MCP tools (smoke test 16/16), write tools incl. security and data entity extensions, `add_to_project`, code view compose/split round-trip (30 objects, ~7,000 methods), code-view save path, designer bridge (`get_form_tree`, `get_table_fields`, add field/group, hide), xppc build + diagnostics mapping.
+- Built but NOT run in VS Code yet: extension UI (code view FileSystemProvider `xpp:/AxType/Name.xpp`, project tree, navigation, form designer webview `src/designer.ts` + `media/`), build command, UDE setup (`src/setup.ts`), pac commands (`pac` not installed here), LabelC (testcust has no label file).
+- Test objects in `testcust` to clean up (ask first): `SalesOrderHeaderV2Entity.XvsTest`, `SalesOrderHeaderV2Staging.XvsTest`, `XvsTestRemovalMaintain`, `SalesOrderIntegrationMaintain.XvsTest`, `TradeSalesClerk.XvsTest`, `XvsTestCodeView`, `VendGroup.XvsTest`.
 
 ## Next steps (in order)
-1. Verify the write tools on `Xvs*` test objects in `testcust` (with the user's OK); measure and, if slow, make `Reset()` cheaper.
-2. Run the extension in an Extension Development Host; confirm Copilot lists and calls the X++ tools.
-3. Add data entity extensions and label file creation (port back to the VS extension).
-4. "X++: Connect to environment" command implementing the UDE setup above. Read-only first part is built: `src/ude.ts`, command "X++: Check Environment Connection" (sign-in via `vscode.authentication` 'microsoft' with `<dataverseUrl>/.default`, optional `xpp.auth.clientId`; Dataverse actions; DevTools download links + sizes). Needs a manual run with F5 (user interaction for sign-in) to confirm the token is accepted; then implement download/unzip/XRef restore/config/junctions/registry.
-5. Build/deploy/sync commands over `pac`.
-6. X++ language server client (syntax, IntelliSense).
-7. Debugging spike through DebuggerProxy in vsdbg mode.
-8. Form designer (webview) — later milestone.
-9. Packaging/publishing: publisher `nazmolla`, license still undecided (`UNLICENSED`), README, `vsce package`.
+1. User runs F5 (Extension Development Host) on the TestProj folder: Open Object, edit/save, Form Designer, Build, Check/Connect Environment, Copilot tool use. Fix what breaks.
+2. Port back to the VS extension: robust method-name parsing (`ExtractMethodName`, `IsMacroLine`, `SkipBracketed`) and `XppProject` indentation.
+3. Completion provider (object names), label file creation tool, delete tool.
+4. Debugging spike through DebuggerProxy in vsdbg mode.
+5. Packaging: license still undecided (`UNLICENSED`), `vsce package`, publish as `nazmolla`.

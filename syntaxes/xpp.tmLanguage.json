@@ -1,0 +1,75 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "X++",
+  "scopeName": "source.xpp",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#attributes" },
+    { "include": "#labels" },
+    { "include": "#numbers" },
+    { "include": "#declarations" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#calls" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "name": "comment.block.documentation.xpp", "match": "///.*$" },
+        { "name": "comment.line.double-slash.xpp", "match": "//.*$" },
+        { "name": "comment.block.xpp", "begin": "/\\*", "end": "\\*/" }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        { "name": "string.quoted.verbatim.xpp", "begin": "@\"", "end": "\"(?!\")", "patterns": [ { "name": "constant.character.escape.xpp", "match": "\"\"" } ] },
+        { "name": "string.quoted.double.xpp", "begin": "\"", "end": "\"", "patterns": [ { "name": "constant.character.escape.xpp", "match": "\\\\." } ] },
+        { "name": "string.quoted.single.xpp", "begin": "'", "end": "'", "patterns": [ { "name": "constant.character.escape.xpp", "match": "\\\\." } ] }
+      ]
+    },
+    "attributes": {
+      "name": "meta.attribute.xpp",
+      "begin": "^\\s*\\[(?=[A-Za-z_])",
+      "end": "\\]",
+      "patterns": [
+        { "include": "#strings" },
+        { "include": "#calls" },
+        { "name": "entity.name.type.attribute.xpp", "match": "\\b[A-Za-z_]\\w*\\b" }
+      ]
+    },
+    "labels": {
+      "name": "constant.other.label.xpp",
+      "match": "@[A-Za-z_]\\w*(:\\w+)?\\b"
+    },
+    "numbers": {
+      "name": "constant.numeric.xpp",
+      "match": "\\b(0x[0-9A-Fa-f]+|\\d+(\\.\\d+)?([eE][+-]?\\d+)?[uUlL]*)\\b"
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "\\b(class|interface|extends|implements)\\s+([A-Za-z_]\\w*)",
+          "captures": { "1": { "name": "keyword.other.xpp" }, "2": { "name": "entity.name.type.class.xpp" } }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        { "name": "keyword.control.xpp", "match": "(?i)\\b(if|else|while|do|for|switch|case|default|break|continue|return|try|catch|finally|throw|retry|ttsbegin|ttscommit|ttsabort|using|changecompany|next|breakpoint)\\b" },
+        { "name": "keyword.other.sql.xpp", "match": "(?i)\\b(select|from|where|join|exists|notexists|outer|firstonly|firstonly10|firstonly100|firstonly1000|firstfast|forupdate|forceselectorder|forcenestedloop|forceliterals|forceplaceholders|nofetch|crosscompany|reverse|order|group|by|asc|desc|index|hint|insert_recordset|update_recordset|delete_from|setting|count|sum|avg|minof|maxof|validtimestate|repeatableread|optimisticlock|pessimisticlock|generateonly|in|like)\\b" },
+        { "name": "storage.modifier.xpp", "match": "(?i)\\b(public|private|protected|internal|static|final|abstract|server|client|display|edit|delegate|const|readonly|extends|implements|new|super|this|as|is|event|var)\\b" },
+        { "name": "keyword.other.xpp", "match": "(?i)\\b(class|interface|enum|struct|void|null|true|false|next|element|print|pause|window|args|xpp|classstr|tablestr|formstr|enumstr|fieldstr|methodstr|staticmethodstr|tablemethodstr|menuitemdisplaystr|menuitemactionstr|menuitemoutputstr|identifierstr|literalstr|fieldnum|tablenum|classnum|enumnum|extendedtypenum|extendedtypestr|tablestaticmethodstr|varstr)\\b" },
+        { "name": "keyword.operator.xpp", "match": "(==|!=|<=|>=|&&|\\|\\||\\+\\+|--|\\+=|-=|\\*=|/=|=>|[-+*/%<>=!&|^~?:])" }
+      ]
+    },
+    "types": {
+      "name": "storage.type.xpp",
+      "match": "(?i)\\b(int|int64|real|str|boolean|date|utcdatetime|timeofday|container|anytype|guid|System\\.\\w+)\\b"
+    },
+    "calls": {
+      "match": "\\b([A-Za-z_]\\w*)\\s*(?=\\()",
+      "captures": { "1": { "name": "entity.name.function.xpp" } }
+    }
+  }
+}
