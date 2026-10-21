@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { promises as dns } from 'dns';
 import * as vscode from 'vscode';
 
 const DevToolsService = 'https://developertools.powerplatform.microsoft.com';
@@ -109,19 +110,41 @@ async function blobSize(sasUrl: string): Promise<number | undefined> {
 
 export function validateDataverseUrl(input: string): string | undefined {
     try {
-        normalizeDataverseUrl(input);
+        new URL(normalizeDataverseUrl(input));
         return undefined;
-    } catch (err) {
-        return (err as Error).message;
+    } catch {
+        return 'Enter a URL such as https://yourorg.crm.dynamics.com';
     }
 }
 
 export function normalizeDataverseUrl(input: string): string {
     const trimmed = input.trim().replace(/\/+$/, '');
-    if (/\.operations\.dynamics\.com/i.test(trimmed)) {
-        throw new Error('That is the Finance & Operations URL. Enter the Dataverse URL instead (https://<org>.crm.dynamics.com), shown in the Power Platform admin center.');
-    }
     return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+const DataverseRegions = ['crm', 'crm2', 'crm3', 'crm4', 'crm5', 'crm6', 'crm7', 'crm8', 'crm9', 'crm11', 'crm12', 'crm14', 'crm15', 'crm16', 'crm17', 'crm19', 'crm20', 'crm21'];
+
+/** A unified developer environment's F&O host shares its org name with Dataverse; finds the regional Dataverse host. */
+export async function resolveDataverseUrl(input: string): Promise<string> {
+    const url = new URL(normalizeDataverseUrl(input));
+    const match = /^([^.]+)\.operations\.dynamics\.com$/i.exec(url.hostname);
+    if (!match) {
+        return url.origin;
+    }
+    const found = await Promise.all(DataverseRegions.map(async region => {
+        const host = `${match[1]}.${region}.dynamics.com`;
+        try {
+            await dns.lookup(host);
+            return host;
+        } catch {
+            return undefined;
+        }
+    }));
+    const host = found.find(h => h);
+    if (!host) {
+        throw new Error(`No Dataverse environment found for ${url.hostname}. Enter the Dataverse URL (https://<org>.crm.dynamics.com) from the Power Platform admin center.`);
+    }
+    return `https://${host}`;
 }
 
 /** X++: Check Environment Connection — sign in and run every read-only step of the setup. */
@@ -137,8 +160,14 @@ export async function checkEnvironmentConnection(log: vscode.OutputChannel): Pro
     if (!input) {
         return;
     }
-    const dataverseUrl = normalizeDataverseUrl(input);
     log.show(true);
+    let dataverseUrl: string;
+    try {
+        dataverseUrl = await resolveDataverseUrl(input);
+    } catch (err) {
+        vscode.window.showErrorMessage((err as Error).message);
+        return;
+    }
     log.appendLine(`--- Checking ${dataverseUrl}`);
 
     try {

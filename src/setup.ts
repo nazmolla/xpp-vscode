@@ -5,7 +5,7 @@ import * as path from 'path';
 import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import * as vscode from 'vscode';
-import { ClientAssets, getAssetDownloadUrl, getDataverseToken, normalizeDataverseUrl, readUdeEnvironment, UdeEnvironment, validateDataverseUrl } from './ude';
+import { ClientAssets, getAssetDownloadUrl, getDataverseToken, readUdeEnvironment, resolveDataverseUrl, UdeEnvironment, validateDataverseUrl } from './ude';
 
 const ConfigurationsKey = 'HKCU\\Software\\Microsoft\\Dynamics\\AX7\\Development\\Configurations';
 const RequiredFreeBytes = 16 * 1024 ** 3;
@@ -29,7 +29,13 @@ export async function connectEnvironment(context: vscode.ExtensionContext, log: 
     if (!input) {
         return false;
     }
-    const dataverseUrl = normalizeDataverseUrl(input);
+    let dataverseUrl: string;
+    try {
+        dataverseUrl = await resolveDataverseUrl(input);
+    } catch (err) {
+        vscode.window.showErrorMessage((err as Error).message);
+        return false;
+    }
     log.show(true);
 
     return (await vscode.window.withProgress(
