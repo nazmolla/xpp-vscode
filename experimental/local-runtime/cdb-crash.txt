@@ -1,0 +1,10 @@
+sxd *
+sxe -c ".lastevent; kn 60; .loadby sos clr; !clrstack; !pe; q" av
+sxe -c ".lastevent; kn 60; .loadby sos clr; !clrstack; q" sov
+g
+.lastevent
+kn 60
+.loadby sos clr
+!clrstack
+!pe
+q

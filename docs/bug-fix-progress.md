@@ -24,7 +24,7 @@ Fix every issue in [ai-tools-test-log.md](./ai-tools-test-log.md), re-test, buil
 1. In VS Code, confirm U1–U5 and #8: method indentation in the code view, Build Project, a Fatal build reported as
    failed, Delete / Exclude from Project, the inline Add to Project button, and the MCP server restarting after a
    project switch.
-2. Run `xpp_run_tests` / Run Tests once against a deployed package (#31).
+2. Run `xpp_run_tests` / Run Tests once against a deployed package (#31). Local (no deploy) test runtime: experimental, see [experimental/local-runtime](../experimental/local-runtime/README.md) — kernel boots in-process; blocked on table security.
 3. Re-run the end-to-end scenario in `testcust` with the fixed tools. Known fixes for objects created before this
    round (the last `xpp_build` reports them):
    - `XvsDemoOrderType`, `XvsDemoReason`: set `UseEnumValue = No` (build errors).

@@ -29,6 +29,10 @@
   { "issue": "#2 #15", "name": "xpp_create_label", "arguments": { "labelFileId": "XvsProbeLabels", "labelId": "XvsProbeHello", "text": "Hello", "translations": { "fr-CA": "Bonjour" } }, "expect": "Bonjour" },
   { "issue": "#2", "name": "xpp_read_label", "arguments": { "labelFileId": "XvsProbeLabels", "labelId": "XvsProbeHello" }, "expect": "text=Hello" },
   { "issue": "#18", "name": "xpp_remove_from_project", "arguments": { "objectType": "AxEdt", "objectName": "XvsProbeIntEdt" }, "expect": "Excluded .* still in the model" },
+  { "issue": "#36", "name": "xpp_create_object", "arguments": { "objectType": "AxClass", "objectName": "XvsProbeMethods", "modelName": "testcust", "declaration": "public class XvsProbeMethods\n{\n}", "methods": [ { "name": "one", "source": "    public static int one()\n    {\n        return 1;\n    }" }, "    public static int two()\n    {\n        return 2;\n    }" ] }, "expect": "Validation: PASSED" },
+  { "issue": "#36", "name": "xpp_read_object", "arguments": { "objectType": "AxClass", "objectName": "XvsProbeMethods" }, "expect": "=== Methods \\(2\\) ===[\\s\\S]*public static int one\\(\\)[\\s\\S]*public static int two\\(\\)" },
+  { "issue": "#36", "name": "xpp_create_object", "arguments": { "objectType": "AxClass", "objectName": "XvsProbeMethods2", "modelName": "testcust", "declaration": "public class XvsProbeMethods2\n{\n}", "methods": [ 42 ] }, "isError": true, "expect": "must be the method's full X\\+\\+ source" },
+  { "issue": "#36", "name": "xpp_delete_object", "arguments": { "objectType": "AxClass", "objectName": "XvsProbeMethods" }, "expect": "^Deleted AxClass" },
 
   { "issue": "#18", "name": "xpp_delete_object", "arguments": { "objectType": "AxClass", "objectName": "SalesFormLetter", "force": true }, "isError": true, "expect": "not one of your custom models" },
   { "issue": "#18", "name": "xpp_delete_object", "arguments": { "objectType": "AxEnum", "objectName": "XvsDemoStatus" }, "isError": true, "expect": "still referenced by" },

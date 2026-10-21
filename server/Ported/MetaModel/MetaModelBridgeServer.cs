@@ -163,7 +163,7 @@ namespace XppVsCode.Server.MetaModel
                 ObjectName = ExtractJsonString(body, "objectName"),
                 TypedMetadataJson = ExtractJsonObjectRaw(body, "typedMetadata"),
                 Declaration = ExtractJsonString(body, "declaration"),
-                Methods = ExtractJsonStringArray(body, "methods"),
+                Methods = ExtractMethodSources(body),
                 ModelName = ExtractJsonString(body, "modelName"),
                 FormatCode = !"false".Equals(ExtractJsonString(body, "formatCode"), StringComparison.OrdinalIgnoreCase),
                 Properties = ExtractJsonObject(body, "properties"),
@@ -250,7 +250,7 @@ namespace XppVsCode.Server.MetaModel
                 ObjectName = ExtractJsonString(body, "objectName"),
                 TypedMetadataJson = ExtractJsonObjectRaw(body, "typedMetadata"),
                 Declaration = ExtractJsonString(body, "declaration"),
-                Methods = ExtractJsonStringArray(body, "methods"),
+                Methods = ExtractMethodSources(body),
                 RemoveMethodNames = ExtractJsonStringArray(body, "removeMethodNames"),
                 FormatCode = !"false".Equals(ExtractJsonString(body, "formatCode"), StringComparison.OrdinalIgnoreCase),
                 Properties = ExtractJsonObject(body, "properties"),
@@ -1862,6 +1862,35 @@ namespace XppVsCode.Server.MetaModel
                 sb.Append(c);
             }
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// The "methods" array: plain X++ source strings, or objects whose "source" holds the code (agents often send
+        /// {name, source}). Collecting every string token would turn object keys and values into bogus methods.
+        /// </summary>
+        private static string[] ExtractMethodSources(string json)
+        {
+            if (json == null || FindTopLevelKey(json, "methods") < 0) return null;
+            try
+            {
+                var serializer = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+                if (!(serializer.DeserializeObject(json) is Dictionary<string, object> root)
+                    || !root.TryGetValue("methods", out object value) || !(value is object[] items))
+                    return ExtractJsonStringArray(json, "methods");
+                var sources = new List<string>();
+                foreach (object item in items)
+                {
+                    if (item is string text) sources.Add(text);
+                    else if (item is Dictionary<string, object> obj
+                        && (obj.TryGetValue("source", out object s) || obj.TryGetValue("code", out s)) && s is string code)
+                        sources.Add(code);
+                    else
+                        throw new ArgumentException("Each 'methods' item must be the method's full X++ source as a string (or an object with 'source').");
+                }
+                return sources.ToArray();
+            }
+            catch (ArgumentException) { throw; }
+            catch { return ExtractJsonStringArray(json, "methods"); }
         }
 
         private static string[] ExtractJsonStringArray(string json, string key)
