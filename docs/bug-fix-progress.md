@@ -92,3 +92,5 @@ User decisions (2026-10-22):
 | Diagnostics on save | Done | Off by default (slow). |
 | Live syntax diagnostics, formatting, semantic highlighting | Done | Compiler Pass1 parser; own formatter; semantic tokens off by default. |
 | Release + VS port (tools only) | Done | 0.5.0 released and installed (mnazmi.xpp-vscode). Smoke test test/codeIntelSmoke.js all pass; regression 120/120. Publisher renamed MNazmi, Apache-2.0, preview. VS port not needed (xpp/lang is VS Code UI only). |
+
+Published to the VS Code Marketplace as `MNazmi.xpp-vscode` (0.5.0, then 0.5.1 with homepage/issues links), public + preview. Publish later versions with `npx @vscode/vsce publish` after `vsce login MNazmi`. The repo nazmolla/xpp-vscode is being made public by the user so the listing links work.
