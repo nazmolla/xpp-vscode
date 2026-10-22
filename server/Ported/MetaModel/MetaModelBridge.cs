@@ -3706,8 +3706,26 @@ namespace XppVsCode.Server.MetaModel
             TrySetPropertyValue(ds, dto.ParentDataSource, "ParentDataSource", "JoinDataSource", "Parent");
             TrySetPropertyValue(ds, dto.JoinMode, "JoinMode");
             TrySetPropertyValue(ds, dto.LinkType, "LinkType");
-            if (dto.DynamicFields.HasValue)
-                TrySetPropertyValue(ds, dto.DynamicFields.Value ? "true" : "false", "DynamicFields");
+            // An empty field list with Dynamic Fields = No fails the build (FieldListEmpty).
+            bool hasFields = dto.Fields != null && dto.Fields.Count > 0;
+            if (dto.DynamicFields == false && !hasFields)
+                throw new InvalidOperationException("data source '" + (dto.Name ?? dto.Table) + "': dynamicFields is false but no fields are given "
+                    + "(the build would fail with FieldListEmpty). Pass fields: [\"Field1\", ...] or set dynamicFields to true.");
+            bool dynamic = dto.DynamicFields ?? !hasFields;
+            TrySetPropertyValue(ds, dynamic ? "true" : "false", "DynamicFields");
+            if (hasFields && FindProperty(ds.GetType(), "Fields")?.GetValue(ds) is object fieldCollection)
+            {
+                var addField = SingleItemAddMethod(fieldCollection.GetType());
+                Type fieldType = addField?.GetParameters()[0].ParameterType;
+                foreach (string fieldName in dto.Fields.Where(f => !string.IsNullOrWhiteSpace(f)))
+                {
+                    object field = fieldType == null ? null : CreateDefaultInstance(fieldType);
+                    if (field == null) throw new InvalidOperationException("query data source fields cannot be created through the metadata API.");
+                    TrySetPropertyValue(field, fieldName, "Name");
+                    TrySetPropertyValue(field, fieldName, "Field", "DataField");
+                    addField.Invoke(fieldCollection, new[] { field });
+                }
+            }
             if (dto.Relations.HasValue)
                 TrySetPropertyValue(ds, dto.Relations.Value ? "true" : "false", "Relations");
             if (dto.FirstOnly.HasValue)
@@ -3997,6 +4015,12 @@ namespace XppVsCode.Server.MetaModel
             dto.DynamicFields = ReadBoolProperty(ds, "DynamicFields");
             dto.Relations = ReadBoolProperty(ds, "Relations");
             dto.FirstOnly = ReadBoolProperty(ds, "FirstOnly");
+            if (ds.GetType().GetProperty("Fields")?.GetValue(ds) is System.Collections.IEnumerable dsFields)
+            {
+                var names = dsFields.Cast<object>().Select(f => ReadStringProperty(f, "Field", "DataField", "Name"))
+                    .Where(n => !string.IsNullOrEmpty(n)).ToList();
+                if (names.Count > 0) dto.Fields = names;
+            }
 
             var rangesProp = ds.GetType().GetProperty("Ranges");
             var ranges = rangesProp?.GetValue(ds) as System.Collections.IEnumerable;

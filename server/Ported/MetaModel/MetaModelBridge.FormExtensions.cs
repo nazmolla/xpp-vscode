@@ -5,6 +5,7 @@ using System.Text;
 using Microsoft.Dynamics.AX.Metadata.Core.Collections;
 using Microsoft.Dynamics.AX.Metadata.Core.MetaModel;
 using Microsoft.Dynamics.AX.Metadata.MetaModel;
+using Microsoft.Dynamics.AX.Metadata.XppCompiler;
 using Microsoft.Dynamics.AX.Metadata.Storage;
 
 namespace XppVsCode.Server.MetaModel
@@ -131,6 +132,14 @@ namespace XppVsCode.Server.MetaModel
                 if (truncated)
                     sb.AppendLine("... stopped after " + MaxLayoutNodes + " controls. Call again with rootControl set to the container you need.");
 
+                var expected = DescribeExpectedChildren(effective, start);
+                if (expected.Count > 0)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine("Pattern guidance: children each container's pattern expects (Type* = many; required property values are set automatically on new controls; a request that still breaks the pattern is refused):");
+                    foreach (string line in expected) sb.AppendLine("  " + line);
+                }
+
                 sb.AppendLine();
                 sb.Append("Placement: a new top-level control needs parent=<container above>, position=end|begin|after; "
                     + "with after, previousSibling must be a DIRECT child of that parent. "
@@ -174,7 +183,7 @@ namespace XppVsCode.Server.MetaModel
                 RenderLayoutNode(child, depth + 1, maxDepth, sb, ref count, ref truncated);
         }
 
-        private EffectiveForm BuildEffectiveForm(string formName)
+        private EffectiveForm BuildEffectiveForm(string formName, AxFormExtension pending = null)
         {
             var baseForm = MetaService.GetForm(formName);
             if (baseForm == null) return null;
@@ -183,11 +192,15 @@ namespace XppVsCode.Server.MetaModel
             var effective = new EffectiveForm { Form = ObjectCloner.MakeCopy(baseForm) };
             var extensions = new List<KeyValuePair<string, AxFormExtension>>();
 
-            foreach (string extName in GetExtensionNames(MetadataProvider.FormExtensions.GetPrimaryKeys(), formName))
+            var names = GetExtensionNames(MetadataProvider.FormExtensions.GetPrimaryKeys(), formName).ToList();
+            if (pending != null && !names.Contains(pending.Name, StringComparer.OrdinalIgnoreCase)) names.Add(pending.Name);
+            foreach (string extName in names)
             {
                 try
                 {
-                    var ext = MetadataProvider.FormExtensions.Read(extName);
+                    // An unsaved extension (pending) replaces its stored version: used to check changes before saving.
+                    var ext = pending != null && string.Equals(extName, pending.Name, StringComparison.OrdinalIgnoreCase)
+                        ? pending : MetadataProvider.FormExtensions.Read(extName);
                     if (ext == null) continue;
                     extensions.Add(new KeyValuePair<string, AxFormExtension>(extName, ObjectCloner.MakeCopy(ext)));
                     effective.Extensions.Add(extName);
@@ -311,6 +324,9 @@ namespace XppVsCode.Server.MetaModel
             ValidateOwnControlChanges(ext, before, req, errors);
             if (errors.Count > 0) return Fail(FormatPlacementErrors(errors));
 
+            var original = ObjectCloner.MakeCopy(ext);
+            // Errors the build already reports for this form, so only errors this request introduces block it.
+            var errorsBefore = new HashSet<string>(RunFormExtensionValidators(ext).Where(IsErrorSeverity).Select(FormatDiagnostic));
             ApplyTypedMetadata(ext, req);
             ApplyFormExtensionDataSources(ext, req.DataSources);
             var ownReport = ApplyOwnControlChanges(ext, before, req, out var moved);
@@ -319,7 +335,26 @@ namespace XppVsCode.Server.MetaModel
                     ext.Controls.Add(BuildExtensionControl(dto));
             ApplyControlModifications(ext, req.ControlModifications);
 
+            // Property values the form's patterns require for the new controls (a result that still breaks a pattern is
+            // refused below with the build's own message, so a wrong guess is never saved).
+            var newControlNames = new Dictionary<string, FormControlDto>(StringComparer.OrdinalIgnoreCase);
+            FlattenControls(req.Controls ?? new List<FormControlDto>(), newControlNames);
+            var patternApplied = ApplyPatternRequiredProperties(baseForm, ext, newControlNames.Keys.ToList());
+
             MetadataProvider.FormExtensions.Update(ext, saveInfo);
+
+            // The compiler's form extension checks read the saved metadata; errors this request introduces (directly or by
+            // changing a container's contents) restore the previous version, so the build is never left broken.
+            var diagnostics = RunFormExtensionValidators(MetadataProvider.FormExtensions.Read(req.ObjectName) ?? ext);
+            var blocking = diagnostics.Where(d => IsErrorSeverity(d) && !errorsBefore.Contains(FormatDiagnostic(d))).ToList();
+            if (blocking.Count > 0)
+            {
+                MetadataProvider.FormExtensions.Update(original, saveInfo);
+                return Fail("Form extension not saved (previous version kept): with this change the build would report:\n  - "
+                    + string.Join("\n  - ", blocking.Select(FormatDiagnostic).Distinct())
+                    + "\nCall xpp_get_form_layout on the parent to see what its pattern expects, adjust the request and retry.");
+            }
+            var otherDiagnostics = diagnostics.Where(IsErrorSeverity).Select(FormatDiagnostic).Distinct().ToList();
 
             var toVerify = new List<FormControlDto>(req.Controls ?? new List<FormControlDto>());
             toVerify.AddRange(moved);
@@ -336,7 +371,9 @@ namespace XppVsCode.Server.MetaModel
 
             return Ok("Updated AxFormExtension '" + req.ObjectName + "'."
                 + (ownReport.Count > 0 ? "\n" + string.Join("\n", ownReport) : "")
-                + (placement.Placed.Count > 0 ? "\nPlacement verified:\n  - " + string.Join("\n  - ", placement.Placed) : ""));
+                + (patternApplied.Count > 0 ? "\nSet as the form pattern requires:\n  - " + string.Join("\n  - ", patternApplied) : "")
+                + (placement.Placed.Count > 0 ? "\nPlacement verified:\n  - " + string.Join("\n  - ", placement.Placed) : "")
+                + (otherDiagnostics.Count > 0 ? "\nErrors the build already reported for this form before this change (not caused by it):\n  - " + string.Join("\n  - ", otherDiagnostics) : ""));
         }
 
         private static string FormatPlacementErrors(List<string> errors) =>
@@ -617,12 +654,6 @@ namespace XppVsCode.Server.MetaModel
             if (dto.Properties != null)
                 foreach (var kv in dto.Properties)
                     props[kv.Key] = kv.Value;
-            // Tab pages need a pattern on pattern-based forms (else a best-practice warning on every build).
-            if (dto.ControlType == "TabPage" && !props.ContainsKey("Pattern"))
-            {
-                props["Pattern"] = "FieldsFieldGroups";
-                props["PatternVersion"] = "1.1";
-            }
             ApplyProperties(control, props);
 
             if (control.GetType().GetProperty("Controls")?.GetValue(control) is KeyedObjectCollection<AxFormControl> children)

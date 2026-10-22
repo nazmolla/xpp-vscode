@@ -58,8 +58,8 @@ Decisions:
 | #41 #42 | Done | updateControls / removeControls / removeControlModifications; modifiable list from AxFormExtensionValidator |
 | #38 | Done | 87/87 pass |
 | #37 | Done | 90/90 pass |
-| #43 #44 | In progress | |
-| U6 U7 U8 U9 | Todo | |
+| #43 #44 | Done | 104/104 pass. Form extensions: pattern auto-values + compiler validators after save with rollback; layout shows pattern guidance |
+| U6 U7 U8 U9 | In progress | U6 next |
 | #45 #46 XRef | Todo | |
 | U10 spike | Todo | |
 | Release (VS Code), port to VS, deploy, DevExt docs | Todo | |

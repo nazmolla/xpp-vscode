@@ -107,11 +107,12 @@ namespace XppVsCode.Server.MetaModel
             return null;
         }
 
-        private static IEnumerable<string> SubtreeNames(AxFormControl control)
+        private static IEnumerable<string> SubtreeNames(AxFormControl control, ICollection<string> skip = null)
         {
+            if (skip != null && skip.Contains(control.Name)) yield break;
             yield return control.Name;
             foreach (var child in GetChildControls(control))
-                foreach (string n in SubtreeNames(child))
+                foreach (string n in SubtreeNames(child, skip))
                     yield return n;
         }
 
@@ -130,6 +131,9 @@ namespace XppVsCode.Server.MetaModel
             foreach (var ds in effective.Form.DataSources) dataSources[ds.Name] = ds.Table;
             if (req.DataSources != null) foreach (var ds in req.DataSources) dataSources[ds.Name] = ds.Table;
 
+            // Controls moved out of a removed container in the same request survive (moves are applied first).
+            var movedOut = new HashSet<string>((req.UpdateControls ?? new List<FormControlDto>()).Where(WantsMove).Select(d => d.Name),
+                StringComparer.OrdinalIgnoreCase);
             var removing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (string name in req.RemoveControls ?? new List<string>())
             {
@@ -141,7 +145,7 @@ namespace XppVsCode.Server.MetaModel
                     continue;
                 }
                 var own = FindOwnControl(ext, name);
-                if (own != null) foreach (string n in SubtreeNames(own.Control)) removing.Add(n);
+                if (own != null) foreach (string n in SubtreeNames(own.Control, movedOut)) removing.Add(n);
             }
             if (removing.Count > 0)
             {
@@ -170,7 +174,8 @@ namespace XppVsCode.Server.MetaModel
                           + string.Join(", ", ModifiableControlProperties().OrderBy(p => p)) + ")."));
                     continue;
                 }
-                if (removing.Contains(dto.Name)) { errors.Add(label + ": the control is also being removed."); continue; }
+                if ((req.RemoveControls ?? new List<string>()).Contains(dto.Name, StringComparer.OrdinalIgnoreCase)) { errors.Add(label + ": the control is also being removed."); continue; }
+                if (removing.Contains(dto.Name)) { errors.Add(label + ": it is inside a control being removed; move it out (parent/position) or drop the update."); continue; }
                 var control = (AxFormControl)effective.ByName[dto.Name].Control;
                 if (!string.IsNullOrWhiteSpace(dto.ControlType)
                     && FormControlClasses.TryGetValue(dto.ControlType, out Type wanted) && wanted != control.GetType())
@@ -235,19 +240,6 @@ namespace XppVsCode.Server.MetaModel
             var report = new List<string>();
             moved = new List<FormControlDto>();
 
-            var removed = new List<string>();
-            foreach (string name in req.RemoveControls ?? new List<string>())
-            {
-                var own = FindOwnControl(ext, name);
-                if (own == null) continue;
-                var names = new HashSet<string>(SubtreeNames(own.Control), StringComparer.OrdinalIgnoreCase);
-                Detach(ext, own);
-                foreach (var mod in ext.ControlModifications.Where(m => names.Contains(m.Name)).ToList())
-                    ext.ControlModifications.Remove(mod);
-                removed.Add(name + (names.Count > 1 ? " (with " + (names.Count - 1) + " child control(s))" : ""));
-            }
-            if (removed.Count > 0) report.Add("Controls removed: " + string.Join(", ", removed));
-
             var updated = new List<string>();
             foreach (var dto in req.UpdateControls ?? new List<FormControlDto>())
             {
@@ -284,6 +276,20 @@ namespace XppVsCode.Server.MetaModel
                 }
             }
             if (updated.Count > 0) report.Add("Controls updated: " + string.Join("; ", updated));
+
+            var removed = new List<string>();
+            foreach (string name in req.RemoveControls ?? new List<string>())
+            {
+                var own = FindOwnControl(ext, name);
+                if (own == null) continue;
+                var names = new HashSet<string>(SubtreeNames(own.Control), StringComparer.OrdinalIgnoreCase);
+                Detach(ext, own);
+                foreach (var mod in ext.ControlModifications.Where(m => names.Contains(m.Name)).ToList())
+                    ext.ControlModifications.Remove(mod);
+                removed.Add(name + (names.Count > 1 ? " (with " + (names.Count - 1) + " child control(s))" : ""));
+            }
+            if (removed.Count > 0) report.Add("Controls removed: " + string.Join(", ", removed));
+
 
             var dropped = new List<string>();
             foreach (string entry in req.RemoveControlModifications ?? new List<string>())

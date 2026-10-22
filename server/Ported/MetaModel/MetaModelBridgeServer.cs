@@ -975,6 +975,8 @@ namespace XppVsCode.Server.MetaModel
                 sb.Append(",\"linkType\":\"" + EscapeJson(ds.LinkType) + "\"");
             if (ds.DynamicFields.HasValue)
                 sb.Append(",\"dynamicFields\":" + (ds.DynamicFields.Value ? "true" : "false"));
+            if (ds.Fields != null && ds.Fields.Count > 0)
+                sb.Append(",\"fields\":[" + string.Join(",", ds.Fields.Select(f => "\"" + EscapeJson(f) + "\"")) + "]");
             if (ds.Relations.HasValue)
                 sb.Append(",\"relations\":" + (ds.Relations.Value ? "true" : "false"));
             if (ds.FirstOnly.HasValue)
@@ -1709,7 +1711,9 @@ namespace XppVsCode.Server.MetaModel
 
             string dynamicFields = ExtractJsonString(objJson, "dynamicFields");
             if (dynamicFields != null)
-                dto.DynamicFields = "true".Equals(dynamicFields, StringComparison.OrdinalIgnoreCase);
+                dto.DynamicFields = "true".Equals(dynamicFields, StringComparison.OrdinalIgnoreCase)
+                    || "yes".Equals(dynamicFields, StringComparison.OrdinalIgnoreCase);
+            dto.Fields = ExtractJsonStringArray(objJson, "fields")?.ToList();
 
             string relations = ExtractJsonString(objJson, "relations");
             if (relations != null)

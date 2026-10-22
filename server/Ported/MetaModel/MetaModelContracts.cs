@@ -89,6 +89,8 @@ namespace XppVsCode.Server.MetaModel
         public string JoinMode { get; set; }
         public string LinkType { get; set; }
         public bool? DynamicFields { get; set; }
+        // Field names of the data source's table, used when DynamicFields is false.
+        public List<string> Fields { get; set; }
         public bool? Relations { get; set; }
         public bool? FirstOnly { get; set; }
         public List<QueryRangeDto> Ranges { get; set; } = new List<QueryRangeDto>();
