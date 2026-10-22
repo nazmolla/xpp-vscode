@@ -13,7 +13,7 @@ import { readActiveEnvironment } from './environment';
 import { registerMcpProvider } from './mcpProvider';
 import { openObject, XppDocumentSelector, XppNavigation } from './navigation';
 import { PacCommands } from './pac';
-import { findActiveProject, ProjectTreeProvider, readProject, selectProject } from './project';
+import { createProject, findActiveProject, ProjectTreeProvider, readProject, selectProject, syncWorkspaceFolders } from './project';
 import { XppServerClient } from './serverClient';
 import { connectEnvironment } from './setup';
 import { registerTests } from './tests';
@@ -48,8 +48,11 @@ export function activate(context: vscode.ExtensionContext): void {
             if (e.affectsConfiguration('xpp.project')) {
                 server.restart();
                 projectTree.refresh();
+                // U7: the workspace follows the selected or created project (project folder + model folder).
+                void syncWorkspaceFolders().catch(err => log.appendLine('Workspace folders: ' + (err as Error).message));
             }
         }),
+        projectTree,
     );
 
     const command = (id: string, handler: (...args: any[]) => unknown) =>
@@ -118,6 +121,7 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(ElementDesigner.onDidChange.event(e => codeFs.refresh(objectUri(e.objectType, e.objectName))));
     void vscode.commands.executeCommand('setContext', 'xpp.aot.modelView', false);
     command('xpp.selectProject', () => selectProject());
+    command('xpp.createProject', () => createProject());
     command('xpp.build', async () => {
         const project = await readProject();
         await vscode.window.withProgress(

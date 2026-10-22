@@ -1,8 +1,9 @@
-import { promises as fs } from 'fs';
+import { randomUUID } from 'crypto';
+import { promises as fs, watch as fsWatch, FSWatcher } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { elementContextValue, elementOpenCommand, iconFor as aotIcon } from './aot';
+import { elementContextValue, elementOpenCommand, iconFor as aotIcon, listModels } from './aot';
 import { objectUri } from './codeView';
 
 export interface ProjectItem {
@@ -89,16 +90,180 @@ export async function selectProject(): Promise<void> {
     await vscode.workspace.getConfiguration('xpp').update('project', file, vscode.ConfigurationTarget.Global);
 }
 
+const ProjectTypeGuid = 'fc65038c-1b2f-41e1-a629-bed71d161fff';
+
+/** Creates a D365FO project (.rnrproj plus .slnx, as Visual Studio does) for one of your models and selects it. */
+export async function createProject(): Promise<void> {
+    const models = (await listModels()).filter(m => m.isCustom);
+    if (models.length === 0) {
+        throw new Error('No custom model found in the active configuration. Create a model first (Visual Studio: Dynamics 365 > Model Management).');
+    }
+    const model = await vscode.window.showQuickPick(
+        models.map(m => ({ label: m.name, description: m.displayName === m.name ? m.packageName : `${m.displayName} (${m.packageName})`, model: m })),
+        { title: 'Create D365FO project (1/3): model', placeHolder: 'The model the project\'s objects belong to' });
+    if (!model) {
+        return;
+    }
+    const name = await vscode.window.showInputBox({
+        title: 'Create D365FO project (2/3): name',
+        value: `${model.model.name}Project`,
+        validateInput: v => /^[A-Za-z_][A-Za-z0-9_.-]*$/.test(v) ? undefined : 'Letters, digits, _ . - only; start with a letter.',
+    });
+    if (!name) {
+        return;
+    }
+    const defaultParent = path.join(os.homedir(), 'source', 'repos');
+    const where = await vscode.window.showQuickPick(
+        [{ label: defaultParent, description: 'Visual Studio\'s repos folder', dir: defaultParent }, { label: '$(folder-opened) Browse…', description: '', dir: '' }],
+        { title: `Create D365FO project (3/3): parent folder (the project goes to <parent>\\${name})` });
+    if (!where) {
+        return;
+    }
+    let parent = where.dir;
+    if (!parent) {
+        const chosen = await vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false, title: 'Parent folder for the project' });
+        if (!chosen?.[0]) {
+            return;
+        }
+        parent = chosen[0].fsPath;
+    }
+    const dir = path.join(parent, name);
+    const file = path.join(dir, `${name}.rnrproj`);
+    if (await fs.stat(file).then(() => true, () => false)) {
+        throw new Error(`${file} already exists. Select it with "Select D365FO Project".`);
+    }
+    await fs.mkdir(dir, { recursive: true });
+    const guid = newGuid();
+    await fs.writeFile(file, projectXml(name, model.model.name, guid), 'utf8');
+    await fs.writeFile(path.join(dir, `${name}.slnx`),
+        `<Solution>\r\n  <Configurations>\r\n    <BuildType Name="Debug" />\r\n  </Configurations>\r\n  <Project Path="${name}.rnrproj" Type="${ProjectTypeGuid}" Id="${guid}" />\r\n</Solution>\r\n`, 'utf8');
+    await vscode.workspace.getConfiguration('xpp').update('project', file, vscode.ConfigurationTarget.Global);
+    vscode.window.showInformationMessage(`Created D365FO project ${name} for model ${model.model.name}.`);
+}
+
+function newGuid(): string {
+    return randomUUID();
+}
+
+function projectXml(name: string, model: string, guid: string): string {
+    return `<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <BuildTasksDirectory Condition=" '$(BuildTasksDirectory)' == ''">$(MSBuildProgramFiles32)\\MSBuild\\Microsoft\\Dynamics\\AX</BuildTasksDirectory>
+    <Model>${model}</Model>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <OutputPath>bin</OutputPath>
+    <SchemaVersion>2.0</SchemaVersion>
+    <GenerateCrossReferences>True</GenerateCrossReferences>
+    <RunAppCheckerRules>False</RunAppCheckerRules>
+    <LogAppcheckerDiagsAsErrors>False</LogAppcheckerDiagsAsErrors>
+    <DeployOnline>False</DeployOnline>
+    <ProjectGuid>{${guid}}</ProjectGuid>
+    <Name>${name}</Name>
+    <RootNamespace>${name}</RootNamespace>
+    <StartupType>Class</StartupType>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
+    <Configuration>Debug</Configuration>
+    <DBSyncInBuild>False</DBSyncInBuild>
+    <GenerateFormAdaptors>False</GenerateFormAdaptors>
+    <Company></Company>
+    <Partition>initial</Partition>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DataEntityExpandParentChildRelations>False</DataEntityExpandParentChildRelations>
+    <DataEntityUseLabelTextAsFieldName>False</DataEntityUseLabelTextAsFieldName>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DebugSymbols>true</DebugSymbols>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+  </PropertyGroup>
+  <Import Project="$(MSBuildBinPath)\\Microsoft.Common.targets" />
+  <Import Project="$(BuildTasksDirectory)\\Microsoft.Dynamics.Framework.Tools.BuildTasks.17.0.targets" />
+</Project>
+`.replace(/\r?\n/g, '\r\n');
+}
+
+/**
+ * Makes the workspace show the active project: its folder (.rnrproj, .slnx, instructions, source control) and the
+ * folder of its model (the metadata the tools edit), as a multi-root workspace. Folders of earlier projects and
+ * models are replaced; other folders stay.
+ */
+export async function syncWorkspaceFolders(): Promise<void> {
+    const project = await readProject().catch(() => undefined);
+    if (!project) {
+        return;
+    }
+    const models = await listModels();
+    const model = models.find(m => m.name.toLowerCase() === (project.model ?? '').toLowerCase());
+    const wanted: { uri: vscode.Uri; name: string }[] = [{ uri: vscode.Uri.file(path.dirname(project.file)), name: `${project.name} (project)` }];
+    if (model) {
+        wanted.push({ uri: vscode.Uri.file(model.folder), name: `${model.name} (model)` });
+    }
+
+    const same = (a: vscode.Uri, b: vscode.Uri) => a.fsPath.toLowerCase() === b.fsPath.toLowerCase();
+    const current = vscode.workspace.workspaceFolders ?? [];
+    if (wanted.every((w, i) => current[i] && same(current[i].uri, w.uri))) {
+        return;
+    }
+    const modelFolders = models.map(m => m.folder.toLowerCase());
+    const isOurs = async (f: vscode.WorkspaceFolder) =>
+        modelFolders.includes(f.uri.fsPath.toLowerCase())
+        || (await fs.readdir(f.uri.fsPath).catch(() => [] as string[])).some(n => n.toLowerCase().endsWith('.rnrproj'));
+    const keep: { uri: vscode.Uri; name?: string }[] = [];
+    for (const folder of current) {
+        if (!wanted.some(w => same(w.uri, folder.uri)) && !await isOurs(folder)) {
+            keep.push({ uri: folder.uri, name: folder.name });
+        }
+    }
+    vscode.workspace.updateWorkspaceFolders(0, current.length, ...wanted, ...keep);
+}
+
 type ProjectNode = { kind: 'folder'; folder: string; items: ProjectItem[] } | { kind: 'item'; item: ProjectItem };
 
 /** Solution-explorer style view of the active project, grouped by folder. */
-export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode> {
+export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode>, vscode.Disposable {
     private readonly changed = new vscode.EventEmitter<void>();
     readonly onDidChangeTreeData = this.changed.event;
     view?: vscode.TreeView<ProjectNode>;
+    private watcher?: FSWatcher;
+    private watchedFile?: string;
+    private debounce?: NodeJS.Timeout;
 
     refresh(): void {
         this.changed.fire();
+    }
+
+    dispose(): void {
+        this.watcher?.close();
+        this.changed.dispose();
+    }
+
+    /** Tools, the MCP server and other editors write the .rnrproj directly; follow the file itself. */
+    private watch(file: string | undefined): void {
+        if (file?.toLowerCase() === this.watchedFile?.toLowerCase()) {
+            return;
+        }
+        this.watcher?.close();
+        this.watcher = undefined;
+        this.watchedFile = file;
+        if (!file) {
+            return;
+        }
+        try {
+            // Watch the folder: writers may replace the file rather than change it in place.
+            this.watcher = fsWatch(path.dirname(file), (_event, name) => {
+                if (name && name.toString().toLowerCase() !== path.basename(file).toLowerCase()) {
+                    return;
+                }
+                clearTimeout(this.debounce);
+                this.debounce = setTimeout(() => this.refresh(), 400);
+            });
+            this.watcher.on('error', () => { this.watcher?.close(); this.watcher = undefined; this.watchedFile = undefined; });
+        } catch {
+            this.watchedFile = undefined;
+        }
     }
 
     getTreeItem(node: ProjectNode): vscode.TreeItem {
@@ -128,6 +293,9 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode>
             return [];
         }
         const project = await readProject().catch(() => undefined);
+        this.watch(project?.file);
+        // The welcome text depends on it: "no project selected" vs. "the project is empty".
+        void vscode.commands.executeCommand('setContext', 'xpp.hasProject', !!project);
         if (this.view) {
             this.view.description = project ? `${project.name}${project.model ? ` (${project.model})` : ''}` : undefined;
         }
