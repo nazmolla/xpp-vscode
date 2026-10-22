@@ -709,8 +709,14 @@ namespace XppVsCode.Server.Tools
             }
 
             string response = _bridge.Call("delete_object", argsJson);
+            bool deleted = ReadBool(response, "success");
+            if (deleted)
+            {
+                string xrefNote = _xref.RemoveObject(objectType, objectName);
+                if (xrefNote != null) note += "\n" + xrefNote;
+            }
             return JsonHelpers.BuildToolResult(idToken, (JsonHelpers.ExtractJsonString(response, "message") ?? "Delete failed.") + note,
-                isError: !ReadBool(response, "success"));
+                isError: !deleted);
         }
 
         private string HandleReadObject(string idToken, string json)

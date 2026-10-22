@@ -102,6 +102,47 @@ namespace XppVsCode.Server.Tools
         }
 
         /// <summary>Where-used as JSON for the VS Code extension's references list.</summary>
+        /// <summary>
+        /// Removes a deleted object's own cross-reference entries: the references from the object and its members, and
+        /// its names that nothing references any more. References to it from other objects stay (they still use it).
+        /// xppc only drops these on a full model build, so where-used would otherwise list deleted objects.
+        /// </summary>
+        public string RemoveObject(string objectType, string objectName)
+        {
+            if (!TypeToFolder.TryGetValue(objectType ?? "", out string folder)) return null;
+            var health = GetHealth();
+            if (!health.Usable) return null;
+            string objectPath = "/" + folder + "/" + objectName;
+            string like = objectPath.Replace("[", "[[]").Replace("%", "[%]").Replace("_", "[_]") + "/%";
+            try
+            {
+                using (var conn = Open(health.Server, health.Database))
+                using (var tx = conn.BeginTransaction())
+                using (var cmd = new SqlCommand(
+                    "SELECT Id INTO #ids FROM Names WHERE Path = @p OR Path LIKE @like; "
+                    + "DELETE r FROM [References] r JOIN #ids i ON r.SourceId = i.Id; SELECT @@ROWCOUNT; "
+                    + "DELETE n FROM Names n JOIN #ids i ON n.Id = i.Id WHERE NOT EXISTS (SELECT 1 FROM [References] r WHERE r.TargetId = n.Id); SELECT @@ROWCOUNT; "
+                    + "DROP TABLE #ids;", conn, tx) { CommandTimeout = 120 })
+                {
+                    cmd.Parameters.AddWithValue("@p", objectPath);
+                    cmd.Parameters.AddWithValue("@like", like);
+                    var counts = new List<int>();
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        do { while (reader.Read()) counts.Add(reader.GetInt32(0)); } while (reader.NextResult());
+                    }
+                    tx.Commit();
+                    return counts.Count == 2 && counts[0] + counts[1] > 0
+                        ? "Cross-reference entries removed: " + counts[0] + " reference(s) from it and " + counts[1] + " name(s)."
+                        : null;
+                }
+            }
+            catch (Exception ex)
+            {
+                return "Cross-reference entries not removed (" + ex.Message + "); they go away with the next full build of the model.";
+            }
+        }
+
         public string QueryJson(string objectType, string objectName, string memberName, int max, string kindName = null)
         {
             var json = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue };
