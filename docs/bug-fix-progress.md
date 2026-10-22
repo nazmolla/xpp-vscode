@@ -61,5 +61,5 @@ Decisions:
 | #43 #44 | Done | 104/104 pass. Form extensions: pattern auto-values + compiler validators after save with rollback; layout shows pattern guidance |
 | U6 U7 U8 U9 | Done | All compile; confirm by hand in VS Code. Harness: cases with "method" send raw JSON-RPC (xpp/bridge) |
 | #45 #46 XRef | Done | 120/120 pass |
-| U10 spike | In progress | docs/u10-code-intelligence-spike.md |
-| Release (VS Code), port to VS, deploy, DevExt docs | Todo | |
+| U10 spike | Done | docs/u10-code-intelligence-spike.md |
+| Release (VS Code), port to VS, deploy, DevExt docs | In progress | VS Code release first |
