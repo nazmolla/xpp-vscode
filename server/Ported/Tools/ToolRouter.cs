@@ -80,13 +80,14 @@ namespace XppVsCode.Server.Tools
     },
     {
       ""name"": ""xpp_read_object"",
-      ""description"": ""Reads a D365FO X++ object by type and name using the MetaModel API. CRITICAL: This is the ONLY correct way to read X++ objects. NEVER read metadata files directly via Get-Content, the terminal, or file tools — this tool returns everything the XML contains: declaration, every method's signature (with access modifiers such as internal/private/public) and full source, and strongly-typed metadata (typedMetadata graph plus properties, enumValues, fields, indexes, fieldGroups, relations, dataSources), model name and editability. Works for ANY metadata type. For classes with very large source, methods are listed by signature first; call again with methodNames to get their full source."",
+      ""description"": ""Reads a D365FO X++ object by type and name using the MetaModel API. CRITICAL: This is the ONLY correct way to read X++ objects. NEVER read metadata files directly via Get-Content, the terminal, or file tools — this tool returns everything the XML contains: declaration, every method's signature (with access modifiers such as internal/private/public) and full source, and strongly-typed metadata (typedMetadata graph plus properties, enumValues, fields, indexes, fieldGroups, relations, dataSources), model name and editability. Works for ANY metadata type. For classes with very large source, methods are listed by signature first; call again with methodNames to get their full source. Large objects (entities, forms, big tables) return a summary first; ask for what you need with sections."",
       ""inputSchema"": {
         ""type"": ""object"",
         ""properties"": {
           ""objectType"": { ""type"": ""string"", ""description"": ""Any D365FO metadata type: AxClass, AxTable, AxForm, AxEnum, AxEdt, AxView, AxQuery, AxMap, AxReport, AxDataEntityView, AxTableExtension, AxFormExtension, etc."" },
           ""objectName"": { ""type"": ""string"", ""description"": ""The object name."" },
           ""methodNames"": { ""type"": ""array"", ""items"": { ""type"": ""string"" }, ""description"": ""Optional. Return the full source of only these methods (use after a read that listed signatures only)."" },
+          ""sections"": { ""type"": ""array"", ""items"": { ""type"": ""string"" }, ""description"": ""Optional. Return only these sections, e.g. [\""properties\"", \""dataSources\"", \""entityFields\"", \""fields\"", \""relations\"", \""indexes\"", \""fieldGroups\"", \""methods\"", \""declaration\"", \""controls\"", \""typedMetadata\""]; [\""summary\""] lists the sections with their sizes; [\""all\""] returns everything. Without it, objects over 25,000 characters return their small sections plus a list of the large ones."" },
           ""filePath"": { ""type"": ""string"", ""description"": ""Absolute path to the metadata file, if you have it. Prefer objectType + objectName."" }
         },
         ""required"": []
@@ -421,7 +422,7 @@ namespace XppVsCode.Server.Tools
             }
         }
 
-        private string DelegateToBridge(string idToken, string json, string action)
+        private string DelegateToBridge(string idToken, string json, string action, Func<string, string> postText = null)
         {
             string argsJson = JsonHelpers.ExtractToolArgumentsObject(json);
 
@@ -543,6 +544,7 @@ namespace XppVsCode.Server.Tools
 
             string text = sb.ToString().Trim();
             if (string.IsNullOrEmpty(text)) text = isError ? "Operation failed." : "Operation completed.";
+            if (postText != null && !isError) text = postText(text);
 
             return JsonHelpers.BuildToolResult(idToken, text, isError);
         }
@@ -724,10 +726,102 @@ namespace XppVsCode.Server.Tools
 
             // Otherwise use typed API
             if (!string.IsNullOrEmpty(objectType) && !string.IsNullOrEmpty(objectName))
-                return DelegateToBridge(idToken, json, "read_object");
+            {
+                var sections = JsonHelpers.ExtractJsonStringArray(argsJson, "sections")
+                    ?? JsonHelpers.ExtractArgString(argsJson, "sections")?.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+                bool methodsAsked = (JsonHelpers.ExtractJsonStringArray(argsJson, "methodNames")?.Length ?? 0) > 0;
+                return DelegateToBridge(idToken, json, "read_object", text => SelectReadSections(text, sections, methodsAsked));
+            }
 
             return JsonHelpers.BuildToolResult(idToken,
                 "Either (objectType + objectName) or filePath is required.", isError: true);
+        }
+
+        // Reads above this size return the small sections and an index of the large ones (#45).
+        private const int ReadSummaryThreshold = 25000;
+        private const int SummaryInlineSectionChars = 3000;
+
+        private sealed class ReadSection
+        {
+            public string Title;
+            public string Key;
+            public string Body;
+        }
+
+        /// <summary>
+        /// Filters a formatted read result to the requested sections ("=== Title ===" blocks). Without sections, a result
+        /// larger than ReadSummaryThreshold keeps its small sections and lists the large ones with their size.
+        /// </summary>
+        private static string SelectReadSections(string text, string[] wanted, bool methodsAsked)
+        {
+            var lines = text.Replace("\r\n", "\n").Split('\n');
+            var header = new StringBuilder();
+            var sections = new System.Collections.Generic.List<ReadSection>();
+            foreach (string line in lines)
+            {
+                if (line.StartsWith("=== ") && line.EndsWith(" ==="))
+                {
+                    string title = line.Substring(4, line.Length - 8);
+                    string key = new string(title.Split('(')[0].Where(char.IsLetter).ToArray()).ToLowerInvariant();
+                    if (key == "metadatatypedmetadata") key = "typedmetadata";
+                    if (key.StartsWith("entityfields")) key = "entityfields";
+                    sections.Add(new ReadSection { Title = title, Key = key, Body = "" });
+                }
+                else if (sections.Count == 0) header.AppendLine(line);
+                else sections[sections.Count - 1].Body += line + "\n";
+            }
+
+            var requested = (wanted ?? new string[0]).Select(w => new string(w.Where(char.IsLetter).ToArray()).ToLowerInvariant())
+                .Where(w => w.Length > 0).ToList();
+            if (requested.Contains("all") || sections.Count == 0 || (requested.Count == 0 && (text.Length <= ReadSummaryThreshold || methodsAsked)))
+                return text;
+
+            string Describe(ReadSection sec)
+            {
+                string body = sec.Body.Trim();
+                int items = body.StartsWith("[") ? CountTopLevelObjects(body) : -1;
+                return sec.Key + " (" + sec.Title + "): " + body.Length + " chars" + (items >= 0 ? ", " + items + " item(s)" : "");
+            }
+
+            var sb = new StringBuilder(header.ToString().TrimEnd()).AppendLine();
+            if (requested.Count == 0 || requested.Contains("summary"))
+            {
+                bool inlineSmall = requested.Count == 0;
+                sb.AppendLine();
+                sb.AppendLine(inlineSmall
+                    ? "Large object (" + text.Length + " chars): small sections are shown in full, large ones only listed. Call again with sections=[...] (keys below) or sections=[\"all\"]."
+                    : "Sections (call again with sections=[...]):");
+                foreach (var sec in sections.Where(x => !inlineSmall || x.Body.Trim().Length > SummaryInlineSectionChars))
+                    sb.AppendLine("  " + Describe(sec));
+                if (inlineSmall)
+                    foreach (var sec in sections.Where(x => x.Body.Trim().Length <= SummaryInlineSectionChars))
+                        sb.AppendLine().AppendLine("=== " + sec.Title + " ===").Append(sec.Body.TrimEnd()).AppendLine();
+                return sb.ToString().TrimEnd();
+            }
+
+            var unknown = requested.Where(r => !sections.Any(x => x.Key == r || x.Key.StartsWith(r))).ToList();
+            foreach (var sec in sections.Where(x => requested.Any(r => x.Key == r || x.Key.StartsWith(r))))
+                sb.AppendLine().AppendLine("=== " + sec.Title + " ===").Append(sec.Body.TrimEnd()).AppendLine();
+            if (unknown.Count > 0)
+                sb.AppendLine().AppendLine("Not in this object's output: " + string.Join(", ", unknown) + ". Available sections: "
+                    + string.Join(", ", sections.Select(x => x.Key)) + ".");
+            return sb.ToString().TrimEnd();
+        }
+
+        private static int CountTopLevelObjects(string json)
+        {
+            int depth = 0, count = 0;
+            bool inStr = false, esc = false;
+            foreach (char c in json)
+            {
+                if (esc) { esc = false; continue; }
+                if (c == '\\') { esc = true; continue; }
+                if (c == '"') { inStr = !inStr; continue; }
+                if (inStr) continue;
+                if (c == '[' || c == '{') { if (depth == 1 && c == '{') count++; depth++; }
+                else if (c == ']' || c == '}') depth--;
+            }
+            return count;
         }
 
         private string HandleFindObject(string idToken, string json)
