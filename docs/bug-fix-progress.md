@@ -37,3 +37,28 @@ Still to check by hand inside Visual Studio: delete/exclude/select through DTE a
    - Tab pages in the form extensions need a pattern; field-group-bound controls need their fields (warnings).
    - Remaining design items: label file `testcust` labels in en-US and fr-CA applied to captions, a SysTest test class
      for the validator/message/processor logic, then a clean build.
+
+## Round 2 (2026-10-22): open items #37-#46, XRef note, U6-U10
+
+Order: #39, #40, #41+#42, #38, #37, #43+#44, U6, U7, U8, U9, #45, #46, XRef (optional), U10 (spike doc only), release, VS port.
+Per item: reproduce with the server binary, fix, add a case to `scripts/tool-regression.json` (probe objects `XvsProbe*`,
+deleted by later cases), run `node scripts/tool-regression.js --project C:\Users\Mohamed Nazmi\source\repos\TestProj\TestProj.rnrproj`,
+mark Fixed in the test log. `testcust`/TestProj hold the user's current run (`HS*` objects): never change or delete those.
+
+Decisions:
+- U7: after selecting or creating a project, switch automatically to a multi-root workspace with the project folder and the model folder (user, 2026-10-22).
+
+| Item | Status | Notes |
+|---|---|---|
+| Log entries #37-#46, U6-U10 committed | Done | `b8e3104` |
+| Baseline regression | 41/42 | #12 #16 case used `SalesTable.testcust` (gone from the user's run); now self-contained (`CustGroup.XvsProbe`) |
+| #39 (+ new #47) | Done | 57/57 pass. Harness has `--issue <regex>` for quick runs. Server built, not yet packaged/released |
+| #40 | In progress | |
+| #41 #42 | Todo | |
+| #38 | Todo | |
+| #37 | Todo | |
+| #43 #44 | Todo | |
+| U6 U7 U8 U9 | Todo | |
+| #45 #46 XRef | Todo | |
+| U10 spike | Todo | |
+| Release (VS Code), port to VS, deploy, DevExt docs | Todo | |

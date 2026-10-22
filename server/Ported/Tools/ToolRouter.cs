@@ -449,6 +449,13 @@ namespace XppVsCode.Server.Tools
             {
                 bool valid = ReadBool(validation, "valid");
                 sb.AppendLine("Validation: " + (valid ? "PASSED" : "FAILED") + " - " + JsonHelpers.ExtractJsonString(validation, "message"));
+                if (!valid)
+                {
+                    // The object is saved but does not match the request: report it as an error so it is not missed.
+                    isError = true;
+                    sb.AppendLine("The object was saved, but it does not contain everything requested (see the mismatches above). "
+                        + "Fix it with xpp_update_object, or delete it with xpp_delete_object.");
+                }
             }
 
             if (isSuccess && (action == "list_objects" || action == "find_object")

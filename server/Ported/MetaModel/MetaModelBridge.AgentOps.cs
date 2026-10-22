@@ -169,6 +169,7 @@ namespace XppVsCode.Server.MetaModel
                 return json.Serialize(Failure("Cannot resolve model '" + model + "'."));
 
             string labelContent = objectType == "AxLabelFile" ? LabelContentPath(objectName) : null;
+            string stagingHint = objectType == "AxDataEntityViewExtension" ? StagingExtensionHint(objectName) : "";
             var delete = FindProviderMethod(type, "Delete", typeof(string), typeof(ModelSaveInfo));
             if (delete == null)
                 return json.Serialize(Failure("Objects of type " + objectType + " cannot be deleted through the metadata API."));
@@ -187,7 +188,7 @@ namespace XppVsCode.Server.MetaModel
             {
                 ["success"] = true,
                 ["message"] = "Deleted " + objectType + " '" + objectName + "' from model " + model + "."
-                    + (removed ? " Removed it from project " + project.Caption + "." : ""),
+                    + (removed ? " Removed it from project " + project.Caption + "." : "") + stagingHint,
             });
         }
 
@@ -378,6 +379,8 @@ namespace XppVsCode.Server.MetaModel
             if (extension == null) return Fail("AxMenuExtension '" + req.ObjectName + "' not found.");
             var saveInfo = GetExtensionSaveInfo("AxMenuExtension", req.ObjectName, out string error);
             if (saveInfo == null) return Fail(error);
+            if (!string.IsNullOrWhiteSpace(req.TypedMetadataJson))
+                return Fail("typedMetadata is not supported for AxMenuExtension; pass menuElements (name, menuItemName, menuItemType, parent) instead. Nothing was saved.");
 
             string report = ApplyMenuElements(extension, req.MenuElements, out error);
             if (error != null) return Fail(error);

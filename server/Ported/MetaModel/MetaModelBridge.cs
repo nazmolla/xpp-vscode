@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -97,6 +97,9 @@ namespace XppVsCode.Server.MetaModel
             {
                 string preError = PreValidateCreate(request);
                 if (preError != null) return Fail(preError);
+                if (request.ObjectType != "AxLabelFile" && ObjectExists(request.ObjectType, request.ObjectName))
+                    return Fail(request.ObjectType + " '" + request.ObjectName + "' already exists (model "
+                        + ModelOf(request.ObjectType, request.ObjectName) + "). Nothing was changed; use xpp_update_object to modify it.");
 
                 if (request.ObjectType == "AxTable" || request.ObjectType == "AxTableExtension")
                 {
@@ -852,7 +855,18 @@ namespace XppVsCode.Server.MetaModel
                     try
                     {
                         object expected = ParseTypedMetadataToNode(req.ObjectType, req.TypedMetadataJson);
-                        object actual = ParseTypedMetadataToNode(req.ObjectType, readResult.TypedMetadataJson);
+                        // With "$type" the request may set subtype properties that the proxy-based read omits;
+                        // compare against the object's full graph then.
+                        string actualJson = readResult.TypedMetadataJson;
+                        object actual = null;
+                        if (req.TypedMetadataJson.Contains("\"$type\""))
+                        {
+                            object live = ReadViaMetadataProvider(req.ObjectType, req.ObjectName, out _);
+                            string full = live != null ? BuildFullGraphJson(live) : null;
+                            if (full != null)
+                                actual = new JavaScriptSerializer { MaxJsonLength = int.MaxValue, RecursionLimit = 64 }.DeserializeObject(full);
+                        }
+                        if (actual == null) actual = ParseTypedMetadataToNode(req.ObjectType, actualJson);
                         ValidateMetadataSubset(expected, actual, "typedMetadata", mismatches, 0);
                     }
                     catch (Exception ex)
@@ -1119,6 +1133,8 @@ namespace XppVsCode.Server.MetaModel
 
                 foreach (var kv in expDict)
                 {
+                    // "$type" names the concrete subtype; the actual graph carries it only for polymorphic members.
+                    if (kv.Key == "$type" || kv.Key == "__type") continue;
                     if (!actDict.TryGetValue(kv.Key, out object actVal))
                     {
                         mismatches.Add(path + "." + kv.Key + ": missing");
@@ -2918,6 +2934,7 @@ namespace XppVsCode.Server.MetaModel
         private static void ApplyTypedMetadataGraph(object target, string objectType, string typedMetadataJson)
         {
             if (target == null || string.IsNullOrWhiteSpace(typedMetadataJson)) return;
+            CheckTypedMetadataKeys(target.GetType(), typedMetadataJson);
 
             try
             {
@@ -2952,7 +2969,9 @@ namespace XppVsCode.Server.MetaModel
                 RecursionLimit = 64
             };
 
-            Type proxyType = ResolveProxyType(objectType);
+            // Proxies model only the base types; "$type" (as written by xpp_read_object) names a subtype whose
+            // extra properties (e.g. DataField of AxDataEntityViewMappedField) the proxy would drop.
+            Type proxyType = typedMetadataJson.Contains("\"$type\"") ? null : ResolveProxyType(objectType);
             if (proxyType != null)
             {
                 object proxyObj = serializer.Deserialize(typedMetadataJson, proxyType);
@@ -3020,11 +3039,15 @@ namespace XppVsCode.Server.MetaModel
                 try { child = prop.GetValue(target); } catch { }
 
                 // Support nested metadata on read-only properties when they expose an existing object.
+                string wantedType = Convert.ToString(GetNodeValue(childNode, "$type"));
+                if (child != null && !string.IsNullOrEmpty(wantedType)
+                    && !string.Equals(child.GetType().Name, wantedType, StringComparison.OrdinalIgnoreCase))
+                    child = prop.CanWrite ? CreateNodeInstance(propType, childNode) : child;
                 if (child == null)
                 {
                     if (!prop.CanWrite) continue;
-                    child = CreateDefaultInstance(propType);
-                    if (child == null) continue;
+                    try { child = CreateNodeInstance(propType, childNode); }
+                    catch when (string.IsNullOrEmpty(wantedType)) { continue; }
                 }
 
                 ApplyObjectNode(child, childNode);
@@ -3073,12 +3096,9 @@ namespace XppVsCode.Server.MetaModel
                     }
                     if (childDict != null)
                     {
-                        object item = CreateDefaultInstance(itemType);
-                        if (item != null)
-                        {
-                            ApplyObjectNode(item, childDict);
-                            addValue = item;
-                        }
+                        object item = CreateNodeInstance(itemType, childDict);
+                        ApplyObjectNode(item, childDict);
+                        addValue = item;
                     }
                 }
 
@@ -3318,6 +3338,119 @@ namespace XppVsCode.Server.MetaModel
             {
                 return null;
             }
+        }
+
+        private static readonly Dictionary<string, Type> _subtypeCache = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
+
+        // Rejects typedMetadata keys that are not properties of the target type (or of the "$type" subtype), so a
+        // misspelled or unsupported key fails the call instead of being dropped without a trace.
+        private static void CheckTypedMetadataKeys(Type targetType, string typedMetadataJson)
+        {
+            var serializer = new JavaScriptSerializer { MaxJsonLength = int.MaxValue, RecursionLimit = 64 };
+            var unknown = new List<string>();
+            CollectUnknownKeys(targetType, serializer.DeserializeObject(typedMetadataJson) as Dictionary<string, object>, "typedMetadata", unknown, 0);
+            if (unknown.Count > 0)
+                throw new InvalidOperationException("unknown properties: " + string.Join(", ", unknown.Take(20))
+                    + ". Check the names with xpp_get_object_type_schema or xpp_read_object. Nothing was applied.");
+        }
+
+        private static void CollectUnknownKeys(Type type, Dictionary<string, object> node, string path, List<string> unknown, int depth)
+        {
+            if (type == null || node == null || depth > 12) return;
+            string typeName = Convert.ToString(GetNodeValue(node, "$type", "__type"));
+            if (!string.IsNullOrWhiteSpace(typeName))
+            {
+                Type sub = ResolveSubtype(type, typeName.Trim());
+                if (sub == null) { unknown.Add(path + ".$type (" + typeName + " is not a " + type.Name + ")"); return; }
+                type = sub;
+            }
+            foreach (var kv in node)
+            {
+                if (kv.Key == "$type" || kv.Key == "__type") continue;
+                var prop = FindProperty(type, kv.Key);
+                if (prop == null) { unknown.Add(path + "." + kv.Key); continue; }
+                Type propType = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+                if (kv.Value is Dictionary<string, object> child)
+                {
+                    CollectUnknownKeys(propType, child, path + "." + kv.Key, unknown, depth + 1);
+                }
+                else if (kv.Value is object[] || kv.Value is System.Collections.ArrayList)
+                {
+                    Type itemType = TypedCollectionItemType(propType);
+                    var items = ToObjectArray(kv.Value) ?? new object[0];
+                    for (int i = 0; i < items.Length; i++)
+                        if (items[i] is Dictionary<string, object> itemNode && itemType != null)
+                            CollectUnknownKeys(itemType, itemNode, path + "." + kv.Key + "[" + i + "]", unknown, depth + 1);
+                }
+            }
+        }
+
+        private static Type TypedCollectionItemType(Type collectionType)
+        {
+            Type fallback = null;
+            foreach (var m in collectionType.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+            {
+                if (m.Name != "Add" || m.IsGenericMethod) continue;
+                var ps = m.GetParameters();
+                if (ps.Length != 1) continue;
+                if (ps[0].ParameterType != typeof(object)) return ps[0].ParameterType;
+                fallback = ps[0].ParameterType;
+            }
+            return fallback == typeof(object) ? null : fallback;
+        }
+
+        // Instance for a typed-metadata node: the concrete type named by "$type" (must derive from baseType), else baseType.
+        // Throws instead of skipping, so a payload is never saved with parts silently dropped.
+        private static object CreateNodeInstance(Type baseType, Dictionary<string, object> node)
+        {
+            string typeName = Convert.ToString(GetNodeValue(node, "$type", "__type"));
+            Type concrete = baseType;
+            if (!string.IsNullOrWhiteSpace(typeName))
+            {
+                concrete = ResolveSubtype(baseType, typeName.Trim());
+                if (concrete == null)
+                    throw new InvalidOperationException("\"$type\": \"" + typeName + "\" is not a " + baseType.Name
+                        + " type. Use one of: " + string.Join(", ", ListConcreteSubtypes(baseType)) + ".");
+            }
+            object instance = CreateDefaultInstance(concrete);
+            if (instance == null)
+            {
+                string name = Convert.ToString(GetNodeValue(node, "Name", "name"));
+                throw new InvalidOperationException(baseType.Name + " is abstract, so the item"
+                    + (string.IsNullOrEmpty(name) ? "" : " '" + name + "'")
+                    + " needs \"$type\" with its concrete type: one of " + string.Join(", ", ListConcreteSubtypes(baseType)) + ".");
+            }
+            return instance;
+        }
+
+        private static Type ResolveSubtype(Type baseType, string typeName)
+        {
+            string key = baseType.FullName + "|" + typeName;
+            lock (_subtypeCache)
+            {
+                if (_subtypeCache.TryGetValue(key, out Type cached)) return cached;
+            }
+            Type found = string.Equals(baseType.Name, typeName, StringComparison.OrdinalIgnoreCase) ? baseType : null;
+            if (found == null)
+            {
+                foreach (Type t in CandidateSubtypes(baseType))
+                    if (string.Equals(t.Name, typeName, StringComparison.OrdinalIgnoreCase)) { found = t; break; }
+            }
+            lock (_subtypeCache) { _subtypeCache[key] = found; }
+            return found;
+        }
+
+        private static IEnumerable<string> ListConcreteSubtypes(Type baseType)
+        {
+            return CandidateSubtypes(baseType).Where(t => !t.IsAbstract).Select(t => t.Name).OrderBy(n => n).Take(40);
+        }
+
+        private static IEnumerable<Type> CandidateSubtypes(Type baseType)
+        {
+            Type[] types;
+            try { types = baseType.Assembly.GetTypes(); }
+            catch (ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t != null).ToArray(); }
+            return types.Where(t => t.IsClass && t.IsPublic && baseType.IsAssignableFrom(t));
         }
 
         private static PropertyInfo FindProperty(Type type, string name)

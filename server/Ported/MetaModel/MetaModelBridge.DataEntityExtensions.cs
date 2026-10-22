@@ -43,10 +43,61 @@ namespace XppVsCode.Server.MetaModel
             var entity = MetaService.GetDataEntityView(ExtensionBaseName(req.ObjectName));
             if (entity == null) return Fail("Data entity '" + ExtensionBaseName(req.ObjectName) + "' not found.");
 
-            var plan = PlanEntityFields(entity, req.ObjectName, ext, req.EntityFields, out error);
+            // typedMetadata.Fields is the extension's full field list: mapped fields go through the same checks
+            // (data source, data field, name clashes, staging table) as entityFields.
+            Dictionary<string, object> typedNode = null;
+            List<AxDataEntityViewField> typedFields = null;
+            if (!string.IsNullOrWhiteSpace(req.TypedMetadataJson))
+            {
+                CheckTypedMetadataKeys(ext.GetType(), req.TypedMetadataJson);
+                typedNode = ParseTypedMetadataToNode("AxDataEntityViewExtension", req.TypedMetadataJson) as Dictionary<string, object>;
+                var fieldNodes = ToObjectArray(GetNodeValue(typedNode, "Fields"));
+                if (fieldNodes != null)
+                {
+                    typedFields = new List<AxDataEntityViewField>();
+                    foreach (object entry in fieldNodes)
+                    {
+                        var dict = ToDictionary(entry);
+                        if (dict == null) continue;
+                        if (GetNodeValue(dict, "$type", "__type") == null && GetNodeValue(dict, "DataField") != null)
+                            dict["$type"] = nameof(AxDataEntityViewMappedField);
+                        if (GetNodeValue(dict, "$type", "__type") == null)
+                            return Fail("typedMetadata.Fields '" + GetNodeValue(dict, "Name") + "': give \"$type\" (one of "
+                                + string.Join(", ", ListConcreteSubtypes(typeof(AxDataEntityViewField)).Where(n => n != nameof(AxDataEntityViewField)))
+                                + "), or DataSource and DataField for a mapped field. Nothing was saved.");
+                        var field = (AxDataEntityViewField)CreateNodeInstance(typeof(AxDataEntityViewField), dict);
+                        ApplyObjectNode(field, dict);
+                        typedFields.Add(field);
+                    }
+                }
+            }
+
+            var requested = new List<EntityFieldDto>(req.EntityFields ?? new List<EntityFieldDto>());
+            if (typedFields != null)
+                foreach (var mapped in typedFields.OfType<AxDataEntityViewMappedField>())
+                    requested.Add(new EntityFieldDto { Name = mapped.Name, DataSource = mapped.DataSource, DataField = mapped.DataField });
+
+            var plan = PlanEntityFields(entity, req.ObjectName, ext, requested, out error);
             if (plan == null) return Fail(error);
 
-            foreach (var p in plan.Where(p => !p.AlreadyInExtension))
+            var removed = new List<string>();
+            if (typedFields != null)
+            {
+                var keep = new HashSet<string>(typedFields.Select(f => f.Name), StringComparer.OrdinalIgnoreCase);
+                removed.AddRange(ext.Fields.Where(f => !keep.Contains(f.Name)).Select(f => f.Name));
+                foreach (var f in typedFields)
+                {
+                    var existing = ext.Fields.FirstOrDefault(x => string.Equals(x.Name, f.Name, StringComparison.OrdinalIgnoreCase));
+                    if (existing != null) ext.Fields.Remove(existing);
+                }
+                foreach (string name in removed)
+                    ext.Fields.Remove(ext.Fields.First(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase)));
+                foreach (var f in typedFields)
+                    ext.Fields.Add(f);
+            }
+
+            var typedNames = new HashSet<string>((typedFields ?? new List<AxDataEntityViewField>()).Select(f => f.Name), StringComparer.OrdinalIgnoreCase);
+            foreach (var p in plan.Where(p => !p.AlreadyInExtension && !typedNames.Contains(p.Field.Name)))
             {
                 var field = new AxDataEntityViewMappedField
                 {
@@ -59,6 +110,8 @@ namespace XppVsCode.Server.MetaModel
                 ext.Fields.Add(field);
             }
 
+            if (typedNode != null)
+                ApplyObjectNode(ext, typedNode, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Fields", "Name" });
             ApplyPropertyModifications(ext, req.Properties);
             MetadataProvider.DataEntityViewExtensions.Update(ext, saveInfo);
 
@@ -68,7 +121,12 @@ namespace XppVsCode.Server.MetaModel
                 report.Append("\nEntity fields added: " + string.Join(", ", added.Select(p => p.Field.Name + " (" + p.Field.DataSource + "." + p.Field.DataField + ")")));
             var present = plan.Where(p => p.AlreadyInExtension).ToList();
             if (present.Count > 0)
-                report.Append("\nAlready in this extension: " + string.Join(", ", present.Select(p => p.Field.Name)));
+                report.Append(typedFields != null
+                    ? "\nEntity fields updated: " + string.Join(", ", present.Select(p => p.Field.Name))
+                    : "\nAlready in this extension: " + string.Join(", ", present.Select(p => p.Field.Name)));
+            if (removed.Count > 0)
+                report.Append("\nEntity fields removed (not in typedMetadata.Fields): " + string.Join(", ", removed)
+                    + RemoveStagingFields(req.ObjectName, removed));
 
             if (plan.Count > 0)
             {
@@ -254,6 +312,36 @@ namespace XppVsCode.Server.MetaModel
         {
             int dot = extensionName.IndexOf('.');
             return dot > 0 ? extensionName.Substring(dot + 1) : extensionName;
+        }
+
+        private string StagingExtensionName(string entityExtensionName)
+        {
+            var entity = MetaService.GetDataEntityView(ExtensionBaseName(entityExtensionName));
+            string staging = entity?.DataManagementStagingTable;
+            return string.IsNullOrEmpty(staging) ? null : staging + "." + ExtensionSuffix(entityExtensionName);
+        }
+
+        private string StagingExtensionHint(string entityExtensionName)
+        {
+            string name = StagingExtensionName(entityExtensionName);
+            return name != null && MetaService.GetTableExtension(name) != null
+                ? "\nThe staging table extension '" + name + "' still exists; delete it too (xpp_delete_object, AxTableExtension) if it only holds this extension's fields."
+                : "";
+        }
+
+        /// <summary>Removes fields dropped from an entity extension from its staging table extension as well.</summary>
+        private string RemoveStagingFields(string entityExtensionName, List<string> fieldNames)
+        {
+            string name = StagingExtensionName(entityExtensionName);
+            var tableExt = name == null ? null : MetadataProvider.TableExtensions.Read(name);
+            if (tableExt == null) return "";
+            var gone = tableExt.Fields.Where(f => fieldNames.Contains(f.Name, StringComparer.OrdinalIgnoreCase)).ToList();
+            if (gone.Count == 0) return "";
+            var saveInfo = GetExtensionSaveInfo("AxTableExtension", name, out string error);
+            if (saveInfo == null) return "\nStaging table: could not remove " + string.Join(", ", gone.Select(f => f.Name)) + ": " + error;
+            foreach (var f in gone) tableExt.Fields.Remove(f);
+            MetadataProvider.TableExtensions.Update(tableExt, saveInfo);
+            return "\nStaging table extension " + name + ": fields removed: " + string.Join(", ", gone.Select(f => f.Name)) + ".";
         }
 
         /// <summary>Checks a create request before the blank object is saved, so failures leave nothing behind.</summary>

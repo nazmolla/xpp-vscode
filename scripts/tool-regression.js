@@ -1,5 +1,5 @@
 // Regression check for the agent (MCP) tools against the built server and the active D365FO configuration.
-// Usage: node scripts/tool-regression.js [--project <path to .rnrproj>] [--cases <json file>]
+// Usage: node scripts/tool-regression.js [--project <path to .rnrproj>] [--cases <json file>] [--issue <regex on the issue tag>]
 // Each case: { name, arguments, expect: regex the response must match, isError?: expected error flag }.
 // Probe objects created by the cases are deleted by later cases; run against a project of your own custom model.
 const { spawn, execSync } = require('child_process');
@@ -11,7 +11,8 @@ const opt = name => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] 
 const root = path.resolve(__dirname, '..');
 const casesFile = opt('--cases') ?? path.join(__dirname, 'tool-regression.json');
 const project = opt('--project');
-const cases = JSON.parse(fs.readFileSync(casesFile, 'utf8'));
+const issueFilter = opt('--issue') ? new RegExp(opt('--issue')) : null;
+const cases = JSON.parse(fs.readFileSync(casesFile, 'utf8')).filter(c => !issueFilter || issueFilter.test(c.issue ?? ''));
 
 const reg = execSync('reg query "HKCU\\Software\\Microsoft\\Dynamics\\AX7\\Development\\Configurations" /v CurrentMetadataConfig', { encoding: 'utf8' });
 const config = /CurrentMetadataConfig\s+REG_SZ\s+(.+)/.exec(reg)?.[1]?.trim();
