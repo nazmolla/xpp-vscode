@@ -62,4 +62,12 @@ Decisions:
 | U6 U7 U8 U9 | Done | All compile; confirm by hand in VS Code. Harness: cases with "method" send raw JSON-RPC (xpp/bridge) |
 | #45 #46 XRef | Done | 120/120 pass |
 | U10 spike | Done | docs/u10-code-intelligence-spike.md |
-| Release (VS Code), port to VS, deploy, DevExt docs | In progress | VS Code v0.4.0 packaged, installed, pushed. Next: port tool fixes to vsix-companion |
+| Release (VS Code), port to VS, deploy, DevExt docs | Done | VS Code v0.4.0 installed (`52545dd`); VS extension 0.5.6 built, installed with VSIXInstaller, DevExt docs updated, pushed (`f41e06b`) |
+
+Round 2 is complete. Still to check by hand:
+- VS Code: U6 (project view refresh, empty-project text, Create D365FO Project), U7 (multi-root workspace switch),
+  U8 (label editor), U9 (F12 / Peek / Shift+F12 / hover in `xpp:` documents).
+- Visual Studio (0.5.6): the ported tools inside VS (no automated run there); `xpp_create_label` uses the VS label
+  controllers, security label search resolves labels through them.
+- Version note: the VS extension went 0.5.2 -> 0.5.6 because auto-version bumps on every build attempt.
+- Next work, if wanted: the U10 backlog (docs/u10-code-intelligence-spike.md), P1 items first.
