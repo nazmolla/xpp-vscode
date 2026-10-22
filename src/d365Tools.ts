@@ -17,12 +17,25 @@ type TreeArg = {
     model?: { name: string };
 };
 
-interface ToolNode {
+export interface ToolNode {
     label: string;
     icon: string;
     command?: string;
+    commandArgs?: unknown[];
     description?: string;
+    tooltip?: string;
     children?: ToolNode[];
+    /** Children computed when the node is expanded (e.g. the Code Intelligence switches). */
+    dynamicChildren?: () => ToolNode[];
+    /** Shows a checkbox bound to this state; toggling calls onToggle. */
+    checked?: boolean;
+    onToggle?: (checked: boolean) => void;
+}
+
+/** Extra top-level nodes contributed by other parts of the extension, with a change event to refresh them. */
+export interface ToolsContribution {
+    nodes(): ToolNode[];
+    onDidChange: vscode.Event<void>;
 }
 
 /** The Dynamics 365 menu of Visual Studio, as a view. */
@@ -87,18 +100,39 @@ const ToolsMenu: ToolNode[] = [
 ];
 
 export class ToolsTreeProvider implements vscode.TreeDataProvider<ToolNode> {
+    private readonly changed = new vscode.EventEmitter<void>();
+    readonly onDidChangeTreeData = this.changed.event;
+
+    constructor(private readonly contributions: ToolsContribution[] = []) {
+        for (const c of contributions) {
+            c.onDidChange(() => this.changed.fire());
+        }
+    }
+
     getTreeItem(node: ToolNode): vscode.TreeItem {
-        const item = new vscode.TreeItem(node.label, node.children ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None);
+        const hasChildren = !!node.children || !!node.dynamicChildren;
+        const item = new vscode.TreeItem(node.label, hasChildren
+            ? (node.dynamicChildren ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.Expanded)
+            : vscode.TreeItemCollapsibleState.None);
         item.iconPath = new vscode.ThemeIcon(node.icon);
         item.description = node.description;
+        item.tooltip = node.tooltip;
+        // Stable ids keep the expanded state when the tree refreshes.
+        item.id = node.label + '|' + (node.command ?? '') + '|' + (node.checked === undefined ? '' : 'cb');
+        if (node.checked !== undefined) {
+            item.checkboxState = node.checked ? vscode.TreeItemCheckboxState.Checked : vscode.TreeItemCheckboxState.Unchecked;
+        }
         if (node.command) {
-            item.command = { command: node.command, title: node.label };
+            item.command = { command: node.command, title: node.label, arguments: node.commandArgs };
         }
         return item;
     }
 
     getChildren(node?: ToolNode): ToolNode[] {
-        return node ? node.children ?? [] : ToolsMenu;
+        if (!node) {
+            return [...ToolsMenu.slice(0, -1), ...this.contributions.flatMap(c => c.nodes()), ...ToolsMenu.slice(-1)];
+        }
+        return node.dynamicChildren ? node.dynamicChildren() : node.children ?? [];
     }
 }
 
@@ -108,10 +142,16 @@ export function registerTools(
     server: XppServerClient,
     refreshTrees: () => void,
     command: (id: string, handler: (...args: any[]) => unknown) => void,
+    contributions: ToolsContribution[] = [],
 ): void {
-    context.subscriptions.push(vscode.window.registerTreeDataProvider('xpp.tools', new ToolsTreeProvider()));
+    const view = vscode.window.createTreeView('xpp.tools', { treeDataProvider: new ToolsTreeProvider(contributions) });
+    context.subscriptions.push(view, view.onDidChangeCheckboxState(e => {
+        for (const [node, state] of e.items) {
+            node.onToggle?.(state === vscode.TreeItemCheckboxState.Checked);
+        }
+    }));
 
-    command('xpp.tools.options', () => vscode.commands.executeCommand('workbench.action.openSettings', '@ext:nazmolla.xpp-vscode'));
+    command('xpp.tools.options', () => vscode.commands.executeCommand('workbench.action.openSettings', '@ext:MNazmi.xpp-vscode'));
     command('xpp.tools.createModel', () => createModel(server, refreshTrees));
     command('xpp.tools.updateModel', (arg?: TreeArg) => updateModel(server, arg?.model?.name));
     command('xpp.tools.modelDependencies', (arg?: TreeArg) => modelDependencies(arg?.model?.name));

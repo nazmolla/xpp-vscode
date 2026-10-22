@@ -82,13 +82,13 @@ User decisions (2026-10-22):
 | Item | Status | Notes |
 |---|---|---|
 | CoC / extension index investigation | Done | XRef: ExtensionOf attribute + TypeReference on same line = extended element; wrapper = MethodCall to same-named method. Pre/Post/SubscribesTo same way. Form/data event handlers not in XRef: class-file scan (cached). Server: `ExtensionIndex.cs`, `CodeIntel.cs` (xpp/lang), `MetaModelBridge.Members.cs` (type_members). Compiler parser Pass1 works standalone (syntax). VS SourceCodeFormatter needs a running VS -> own formatter. No open-source X++ parser exists. |
-| Settings UI (Code intelligence node, toggles) | Todo | |
-| Outline / document symbols | Todo | |
-| Implementations (overrides, CoC, handlers) + code lens | Todo | |
-| Call hierarchy, type hierarchy | Todo | |
-| Completion, signature help, label completion | Todo | |
-| Hover (labels, EDT, enum) | Todo | |
-| Workspace symbols | Todo | |
-| Diagnostics on save | Todo | |
-| Live syntax diagnostics, formatting, semantic highlighting | Todo | |
-| Release + VS port (tools only) | Todo | |
+| Settings UI (Code intelligence node, toggles) | Done | Code intelligence node with checkboxes in the tools tree; 11 `xpp.codeIntelligence.*` settings; slow ones marked. |
+| Outline / document symbols | Done | Macro spans filtered, selection range clamped. |
+| Implementations (overrides, CoC, handlers) + code lens | Done | SalesFormLetter: 9 CoC classes, 5 implementations of run. |
+| Call hierarchy, type hierarchy | Done | run: 44 incoming / 47 outgoing; 10 subtypes. |
+| Completion, signature help, label completion | Done | Members incl. base types and CoC extension methods; `::` statics; @ labels; multi-line signatures. |
+| Hover (labels, EDT, enum) | Done |  |
+| Workspace symbols | Done |  |
+| Diagnostics on save | Done | Off by default (slow). |
+| Live syntax diagnostics, formatting, semantic highlighting | Done | Compiler Pass1 parser; own formatter; semantic tokens off by default. |
+| Release + VS port (tools only) | Done | 0.5.0 released and installed (mnazmi.xpp-vscode). Smoke test test/codeIntelSmoke.js all pass; regression 120/120. Publisher renamed MNazmi, Apache-2.0, preview. VS port not needed (xpp/lang is VS Code UI only). |

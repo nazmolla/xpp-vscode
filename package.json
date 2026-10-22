@@ -2,14 +2,14 @@
   "name": "xpp-vscode",
   "displayName": "F&O Studio for VS Code",
   "description": "A full Dynamics 365 Finance & Operations development environment in VS Code: Application Explorer, designers, X++ code, build, deploy, debugging, and AI agent tools.",
-  "version": "0.4.0",
-  "publisher": "nazmolla",
+  "version": "0.5.0",
+  "publisher": "MNazmi",
   "icon": "media/icon.png",
   "galleryBanner": {
     "color": "#2a1b5c",
     "theme": "dark"
   },
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/nazmolla/xpp-vscode.git"
@@ -465,6 +465,23 @@
         "command": "xpp.pac.dbSync",
         "title": "Synchronize Database (pac)",
         "category": "X++"
+      },
+      {
+        "command": "xpp.codeIntel.rebuildIndex",
+        "title": "Rebuild Extension Index",
+        "category": "X++",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "xpp.codeIntel.showExtensions",
+        "title": "Show Extensions and Handlers?",
+        "category": "X++",
+        "icon": "$(extensions)"
+      },
+      {
+        "command": "xpp.codeIntel.toggle",
+        "title": "Toggle Code Intelligence Feature",
+        "category": "X++"
       }
     ],
     "menus": {
@@ -715,6 +732,10 @@
         {
           "command": "xpp.excludeFromProject",
           "when": "false"
+        },
+        {
+          "command": "xpp.codeIntel.toggle",
+          "when": "false"
         }
       ]
     },
@@ -771,6 +792,61 @@
           "type": "string",
           "default": "",
           "description": "Web client URL of your environment (e.g. https://yourorg.operations.dynamics.com), used by Open in Browser and Open Table Browser."
+        },
+        "xpp.codeIntelligence.outline": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Outline and breadcrumbs: methods and members of the open object. Also switchable in the Dynamics 365 view under Code Intelligence."
+        },
+        "xpp.codeIntelligence.navigation": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Go to Implementations (overrides, Chain of Command, event handlers, subclasses), call hierarchy and type hierarchy. Also switchable in the Dynamics 365 view under Code Intelligence."
+        },
+        "xpp.codeIntelligence.workspaceSymbols": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Go to Symbol in Workspace (Ctrl+T) over elements and methods of all models. Also switchable in the Dynamics 365 view under Code Intelligence."
+        },
+        "xpp.codeIntelligence.completion": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Completion after . and ::, label references in strings, keywords; signature help. Also switchable in the Dynamics 365 view under Code Intelligence."
+        },
+        "xpp.codeIntelligence.hover": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Hover details: label texts, EDT and enum details, method signatures. Also switchable in the Dynamics 365 view under Code Intelligence."
+        },
+        "xpp.codeIntelligence.codeLens": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Code lens: reference, override, Chain of Command and handler counts; what a CoC or handler method wraps. Also switchable in the Dynamics 365 view under Code Intelligence."
+        },
+        "xpp.codeIntelligence.syntaxCheck": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Live syntax check with the X++ compiler parser. Also switchable in the Dynamics 365 view under Code Intelligence."
+        },
+        "xpp.codeIntelligence.formatting": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Format Document / Format Selection with a 4-space Allman layout. Also switchable in the Dynamics 365 view under Code Intelligence."
+        },
+        "xpp.codeIntelligence.eventHandlerIndex": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "(Slow the first time) Include form and data event handlers ([FormControlEventHandler], [DataEventHandler], ...), which the cross-reference database does not record. The first scan takes about a minute and is cached. Also switchable in the Dynamics 365 view under Code Intelligence."
+        },
+        "xpp.codeIntelligence.semanticHighlighting": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "(Slow) Semantic highlighting: colour classes, tables, enums, EDTs, methods and fields. Looks up every identifier of the open document. Also switchable in the Dynamics 365 view under Code Intelligence."
+        },
+        "xpp.codeIntelligence.diagnosticsOnSave": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "(Slow) Build the project with the X++ compiler after saving code, so semantic errors reach Problems (about 10 s per save). Also switchable in the Dynamics 365 view under Code Intelligence."
         }
       }
     }
@@ -786,5 +862,6 @@
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.101.0",
     "typescript": "^5.6.0"
-  }
+  },
+  "preview": true
 }

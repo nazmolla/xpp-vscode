@@ -86,3 +86,12 @@ Effort: S (days), M (1-2 weeks), L (several weeks). Risk: how likely the approac
 3. XRef freshness: does `xppc -xref` for a project update rows for that project only, and how long does it take? Determines whether code lens can refresh on save.
 4. Second server process: memory cost of two metadata providers (expect several hundred MB each); alternatively one process with a request queue and priorities.
 5. Licensing: the VS language service assemblies are part of the D365 tools for Visual Studio; use them only when installed, never copy them.
+
+## Implementation findings (round 3)
+
+- **No open-source X++ parser, grammar or formatter** exists that is usable; everything builds on the installed compiler and the cross-reference database.
+- **Syntax:** the compiler's `Pass1.ParseMethod` runs standalone (no metadata) and returns real syntax errors in milliseconds.
+- **Formatting:** Visual Studio's `SourceCodeFormatter` needs a running Visual Studio, so F&O Studio has its own formatter (Allman braces, re-indent; idempotent).
+- **Chain of Command:** in XRef, an `ExtensionOf` attribute reference (kind 7) plus a type reference (kind 2) on the same line gives the extended element; a wrapper method is a method call (kind 1) to the same-named method. Pre/Post handlers and `SubscribesTo` follow the same shape. The whole index builds in about 6 s and is cached on disk (`%LOCALAPPDATA%\XppVsCode\cache`); custom models are rescanned from disk on each refresh. Reverse lookups ("which CoC wraps this method") are dictionary lookups and never block the editor.
+- **Form and data event handlers** are not in XRef; a class-file scan (about 50 s cold, 4 s warm) finds them and is cached. It is a separate, switchable feature.
+- Each feature is a setting (`xpp.codeIntelligence.*`) with checkboxes in the Dynamics 365 view; semantic highlighting and compile on save are off by default.

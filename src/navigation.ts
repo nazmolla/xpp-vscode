@@ -12,7 +12,7 @@ interface Match {
 }
 
 /** What a symbol in code refers to: an object, or a member (method, field, enum value) of one. */
-interface Symbol {
+export interface Symbol {
     objectType: string;
     objectName: string;
     member?: string;
@@ -101,7 +101,7 @@ export class XppNavigation implements vscode.DefinitionProvider, vscode.HoverPro
     }
 
     /** The symbol at the position: a type, or a member with the type it belongs to. */
-    private async resolve(document: vscode.TextDocument, position: vscode.Position): Promise<Symbol | undefined> {
+    async resolve(document: vscode.TextDocument, position: vscode.Position): Promise<Symbol | undefined> {
         const range = document.getWordRangeAtPosition(position, /[A-Za-z_]\w*/);
         if (!range) {
             return undefined;
@@ -148,7 +148,7 @@ export class XppNavigation implements vscode.DefinitionProvider, vscode.HoverPro
         return this.findType(word);
     }
 
-    private async findType(name: string): Promise<Symbol | undefined> {
+    async findType(name: string): Promise<Symbol | undefined> {
         const key = name.toLowerCase();
         if (!this.typeCache.has(key)) {
             const result = await this.server.bridge('find_object', { objectName: name, exactMatch: true, maxResults: 10 }).catch(() => undefined);
@@ -161,7 +161,7 @@ export class XppNavigation implements vscode.DefinitionProvider, vscode.HoverPro
         return this.typeCache.get(key) ?? undefined;
     }
 
-    private async baseOf(symbol: Symbol): Promise<Symbol | undefined> {
+    async baseOf(symbol: Symbol): Promise<Symbol | undefined> {
         if (symbol.objectType !== 'AxClass') {
             return undefined;
         }
@@ -174,7 +174,7 @@ export class XppNavigation implements vscode.DefinitionProvider, vscode.HoverPro
      * Where a symbol is defined: a method's signature line in its object or a base class, else the object itself
      * (fields, enum values and kernel members have no code; the object opens at the line naming them, when there is one).
      */
-    private async definition(symbol: Symbol): Promise<{ location?: vscode.Location; owner: Symbol; signature?: string }> {
+    async definition(symbol: Symbol): Promise<{ location?: vscode.Location; owner: Symbol; signature?: string }> {
         let owner: Symbol | undefined = { objectType: symbol.objectType, objectName: symbol.objectName };
         if (!symbol.member) {
             return { location: new vscode.Location(objectUri(owner.objectType, owner.objectName), new vscode.Position(0, 0)), owner };
@@ -211,12 +211,12 @@ export class XppNavigation implements vscode.DefinitionProvider, vscode.HoverPro
     }
 }
 
-async function documentText(uri: vscode.Uri): Promise<string> {
+export async function documentText(uri: vscode.Uri): Promise<string> {
     return Promise.resolve(vscode.workspace.openTextDocument(uri)).then(d => d.getText(), () => '');
 }
 
 /** The object a code view document shows, if any. */
-function currentObject(document: vscode.TextDocument): Symbol | undefined {
+export function currentObject(document: vscode.TextDocument): Symbol | undefined {
     if (document.uri.scheme !== XppScheme) {
         return undefined;
     }
@@ -292,4 +292,4 @@ export async function openObject(server: XppServerClient): Promise<void> {
     pick.show();
 }
 
-export const XppDocumentSelector: vscode.DocumentSelector = [{ scheme: XppScheme, language: 'xpp' }, { scheme: 'file', language: 'xpp' }];
+export const XppDocumentSelector: vscode.DocumentSelector = [{ scheme: XppScheme, language: 'xpp' }, { scheme: 'file', language: 'xpp' }, { scheme: 'untitled', language: 'xpp' }];

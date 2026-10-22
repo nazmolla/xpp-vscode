@@ -19,18 +19,21 @@ import { XppServerClient } from './serverClient';
 import { connectEnvironment } from './setup';
 import { registerTests } from './tests';
 import { checkEnvironmentConnection } from './ude';
+import { CodeIntelligence } from './codeIntel/providers';
 
 export function activate(context: vscode.ExtensionContext): void {
     const log = vscode.window.createOutputChannel('X++');
     const buildOutput = vscode.window.createOutputChannel('X++ Build');
     const server = new XppServerClient(context, log, findActiveProject);
+    // Language features run in a server process of their own, so index builds never block the designers.
+    const languageServer = new XppServerClient(context, log, findActiveProject);
     const builder = new XppBuilder(buildOutput);
     const projectTree = new ProjectTreeProvider();
     const aotTree = new AotTreeProvider();
     const codeFs = new XppCodeFileSystem(server);
     const navigation = new XppNavigation(server);
     const pac = new PacCommands();
-    context.subscriptions.push(log, buildOutput, server, builder);
+    context.subscriptions.push(log, buildOutput, server, languageServer, builder);
 
     registerMcpProvider(context, log);
 
@@ -49,6 +52,7 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.workspace.onDidChangeConfiguration(e => {
             if (e.affectsConfiguration('xpp.project')) {
                 server.restart();
+                languageServer.restart();
                 projectTree.refresh();
                 // U7: the workspace follows the selected or created project (project folder + model folder).
                 void syncWorkspaceFolders().catch(err => log.appendLine('Workspace folders: ' + (err as Error).message));
@@ -115,10 +119,13 @@ export function activate(context: vscode.ExtensionContext): void {
     });
     command('xpp.aot.clearFilter', () => aotTree.setFilter(''));
     new XppDebugger(server, log).register(context);
+    const codeIntel = new CodeIntelligence(languageServer, server, navigation, log);
+    context.subscriptions.push(codeIntel);
+    codeIntel.register(command);
     registerTools(context, server, () => {
         aotTree.refresh();
         projectTree.refresh();
-    }, command);
+    }, command, [codeIntel]);
     command('xpp.designer.new', (node: DesignerNodeContext) => ElementDesigner.runAction('new', node));
     command('xpp.designer.newMethod', (node: DesignerNodeContext) => ElementDesigner.runAction('newMethod', node));
     command('xpp.designer.override', (node: DesignerNodeContext) => ElementDesigner.runAction('override', node));

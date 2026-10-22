@@ -28,6 +28,17 @@ It works against a unified developer environment (UDE) and uses the same metadat
 - **Methods of nested nodes** (data sources, fields, controls) open in their own editor.
 - **Navigation:** Go to / Peek Definition (F12) for element names and members: `Type::method`, `this.`, `super.`, `variable.method()` (the variable's declared type), and calls to methods of the object or its base classes. **Find All References** (Shift+F12) uses the cross-reference database. Hover shows the element or the method signature.
 
+### Code intelligence
+Each feature can be turned on or off under **Code intelligence** in the Dynamics 365 view, or with the `xpp.codeIntelligence.*` settings. Features marked *slow* use more CPU or disk.
+- **Outline** and breadcrumbs for classes, tables and forms; **Go to Symbol in Workspace** (`Ctrl+T`) for elements and `Class.method`.
+- **Chain of Command:** **Go to Implementations** (`Ctrl+F12`) on a class or method lists overrides, CoC extension classes, the CoC methods that wrap it, and Pre/Post and event handlers (form and data events too). The index is built from the cross-reference database in a few seconds and kept on disk, so asking "what extends this method" never blocks the editor. **Show Extensions** and **Rebuild Extension Index** are in the Dynamics 365 view.
+- **Code lens** above each class and method: references, overrides, CoC classes and handlers.
+- **Call hierarchy** and **type hierarchy** (base classes and subclasses).
+- **Completion** after `.` and `::` (fields, methods of the type and its base types, methods added by CoC extensions), `@` labels and keywords; **signature help** for method calls.
+- **Hover** shows label text, EDT details and enum values.
+- **Syntax errors** while typing (X++ compiler parser), **compile on save** (*slow*, off by default), **formatting** (Format Document / Selection) and **semantic highlighting** (*slow*, off by default).
+- **Event handler index** (*slow*): scans class files for form and data event handlers, which the cross-reference database doesn't contain.
+
 ### Build, deploy and debug
 - **Build Model** with the X++ compiler (`Ctrl+Shift+B`), and **Build Project**, which reports only the problems in the project's objects. Errors appear in the Problems panel at the right line. A compiler crash (Fatal) or a missing output assembly fails the build.
 - **Run Tests:** runs SysTest test classes on the environment the way Visual Studio's Test Explorer does, and shows each test's result. Tests run against the deployed code, so build and deploy first.
@@ -82,9 +93,12 @@ The tools are registered automatically. `node scripts/tool-regression.js --proje
 | `xpp.build.runAppCheckerRules` | Run AppChecker rules during the build |
 | `xpp.pacPath` | Path to `pac` |
 | `xpp.debuggerProxyPath` | Path to `Microsoft.Dynamics.AX.DebuggerProxy.exe`, if not in the default location |
+| `xpp.codeIntelligence.<feature>` | Turn each code intelligence feature on or off (also in the Dynamics 365 view) |
 
 ## Status
 
 Preview. The debugger has not yet been verified end to end against a live environment.
+
+Licensed under the [Apache License 2.0](LICENSE).
 
 *F&O Studio is an independent project and is not affiliated with or endorsed by Microsoft. Dynamics 365 is a trademark of Microsoft Corporation.*
