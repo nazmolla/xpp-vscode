@@ -9,6 +9,7 @@ import { FormDesigner } from './designer';
 import { registerTools } from './d365Tools';
 import { XppDebugger } from './debug';
 import { DesignerNodeContext, ElementDesigner } from './elementDesigner';
+import { LabelEditor } from './labelEditor';
 import { readActiveEnvironment } from './environment';
 import { registerMcpProvider } from './mcpProvider';
 import { openObject, XppDocumentSelector, XppNavigation } from './navigation';
@@ -89,7 +90,11 @@ export function activate(context: vscode.ExtensionContext): void {
     command('xpp.refreshAot', () => aotTree.refresh());
     command('xpp.openDesigner', async (arg?: string | ElementRef, name?: string) => {
         const element = typeof arg === 'string' ? { objectType: arg, objectName: name ?? '' } : elementOf(arg);
-        if (element?.objectName) {
+        if (element?.objectName && element.objectType === 'AxLabelFile') {
+            // U8: a label file opens on its labels; its properties are one click away.
+            LabelEditor.open(context, server, element.objectName,
+                () => ElementDesigner.open(context, server, element.objectType, element.objectName));
+        } else if (element?.objectName) {
             ElementDesigner.open(context, server, element.objectType, element.objectName);
         }
     });

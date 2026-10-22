@@ -1,6 +1,7 @@
 // Regression check for the agent (MCP) tools against the built server and the active D365FO configuration.
 // Usage: node scripts/tool-regression.js [--project <path to .rnrproj>] [--cases <json file>] [--issue <regex on the issue tag>]
-// Each case: { name, arguments, expect: regex the response must match, isError?: expected error flag }.
+// Each case: { name, arguments, expect: regex the response must match, isError?: expected error flag },
+// or { method, params, ... } to send a raw JSON-RPC request (the response JSON is matched).
 // Probe objects created by the cases are deleted by later cases; run against a project of your own custom model.
 const { spawn, execSync } = require('child_process');
 const fs = require('fs');
@@ -46,13 +47,15 @@ const call = (method, params) => new Promise(resolve => {
   await call('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'tool-regression', version: '1' } });
   let failed = 0;
   for (const c of cases) {
-    const res = await call('tools/call', { name: c.name, arguments: c.arguments ?? {} });
-    const text = res.error ? 'RPC ERROR ' + res.error.message : res.result.content.map(p => p.text).join('\n');
-    const isError = !!(res.error || res.result.isError);
+    // A case with "method" sends that JSON-RPC request directly (e.g. xpp/bridge actions used by the extension UI).
+    const res = c.method ? await call(c.method, c.params ?? {}) : await call('tools/call', { name: c.name, arguments: c.arguments ?? {} });
+    const text = res.error ? 'RPC ERROR ' + res.error.message
+      : c.method ? (typeof res.result === 'string' ? res.result : JSON.stringify(res.result)) : res.result.content.map(p => p.text).join('\n');
+    const isError = !!(res.error || (c.method ? /"success":false/.test(text) : res.result.isError));
     const problems = [];
     if (c.expect && !new RegExp(c.expect, 'm').test(text)) problems.push(`expected /${c.expect}/`);
     if (c.isError !== undefined && c.isError !== isError) problems.push(`expected isError=${c.isError}, got ${isError}`);
-    const label = `${c.name} ${JSON.stringify(c.arguments ?? {}).slice(0, 100)}`;
+    const label = `${c.name ?? c.params?.action ?? c.method} ${JSON.stringify(c.arguments ?? c.params?.body ?? {}).slice(0, 100)}`;
     if (problems.length) {
       failed++;
       console.log(`FAIL ${c.issue ?? ''} ${label}\n  ${problems.join('; ')}\n  got: ${text.slice(0, 600).replace(/\n/g, '\n       ')}`);

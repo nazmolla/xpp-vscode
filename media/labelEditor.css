@@ -1,0 +1,25 @@
+body { font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); padding: 0 8px; }
+#toolbar { display: flex; gap: 8px; align-items: center; padding: 8px 0; position: sticky; top: 0; background: var(--vscode-editor-background); z-index: 1; }
+#title { font-weight: 600; }
+#badge { font-size: 0.85em; padding: 1px 6px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
+#search { flex: 0 1 320px; }
+.spacer { flex: 1; }
+input { background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); padding: 3px 5px; width: 100%; box-sizing: border-box; font: inherit; }
+button { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); border: none; padding: 3px 9px; cursor: pointer; font: inherit; }
+button:hover { background: var(--vscode-button-secondaryHoverBackground); }
+#add { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+#languagePicker { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 6px; margin-bottom: 6px; border: 1px solid var(--vscode-panel-border); max-height: 160px; overflow: auto; }
+#languagePicker label { white-space: nowrap; }
+#languagePicker input { width: auto; }
+.error { color: var(--vscode-errorForeground); padding: 4px 0; }
+.muted, .missing { color: var(--vscode-descriptionForeground); }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 3px 6px; border-bottom: 1px solid var(--vscode-panel-border); vertical-align: top; }
+th { position: sticky; top: 42px; background: var(--vscode-editor-background); }
+td.id { font-family: var(--vscode-editor-font-family); white-space: nowrap; }
+td.comment { color: var(--vscode-descriptionForeground); }
+td.actions, th.actions { white-space: nowrap; width: 1%; }
+td.actions button { margin-left: 4px; }
+tr:hover td { background: var(--vscode-list-hoverBackground); }
+tr.editing td { background: var(--vscode-list-inactiveSelectionBackground); }
+#footer { padding: 8px 0; }

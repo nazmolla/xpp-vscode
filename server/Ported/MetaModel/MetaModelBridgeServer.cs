@@ -89,6 +89,14 @@ namespace XppVsCode.Server.MetaModel
                 case "delete_object":
                     return _bridge.DeleteObjectJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
                         "true".Equals(ExtractJsonString(body, "checkOnly"), StringComparison.OrdinalIgnoreCase));
+                case "label_file_entries":
+                    return _bridge.LabelFileEntriesJson(ExtractJsonString(body, "labelFile"), ExtractJsonString(body, "search"),
+                        ExtractJsonStringArray(body, "languages")?.ToList(), int.TryParse(ExtractJsonString(body, "limit"), out int labelLimit) ? labelLimit : 500);
+                case "save_label":
+                    return _bridge.SaveLabelJson(ExtractJsonString(body, "labelFile"), ExtractJsonString(body, "labelId"),
+                        ExtractJsonObject(body, "texts"), ExtractJsonString(body, "comment"));
+                case "delete_label":
+                    return _bridge.DeleteLabelJson(ExtractJsonString(body, "labelFile"), ExtractJsonString(body, "labelId"));
                 case "build":
                     return _bridge.BuildJson(ExtractJsonString(body, "modelName"),
                         string.Equals(ExtractJsonString(body, "scope"), "project", StringComparison.OrdinalIgnoreCase),
