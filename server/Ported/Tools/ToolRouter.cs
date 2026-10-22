@@ -224,18 +224,19 @@ namespace XppVsCode.Server.Tools
     },
     {
       ""name"": ""xpp_create_label"",
-      ""description"": ""Creates a label in a label file of your own model, in the given language and optionally in more languages in the same call (translations). The label file must exist: create it with xpp_create_object objectType=AxLabelFile (objectName = label file ID, properties.Languages = 'en-US,fr-CA'). The response gives the reference to use in properties: @<labelFileId>:<labelId>."",
+      ""description"": ""Creates labels in a label file of your own model: one label (labelId + text) or many at once (labels array; prefer this over repeated calls), each in the given language and optionally in more languages (translations). Each label file is written once per call; the result lists every label and language as created, unchanged (same text already there) or FAILED. The label file must exist: create it with xpp_create_object objectType=AxLabelFile (objectName = label file ID, properties.Languages = 'en-US,fr-CA'). The response gives the reference to use in properties: @<labelFileId>:<labelId>."",
       ""inputSchema"": {
         ""type"": ""object"",
         ""properties"": {
           ""labelFileId"": { ""type"": ""string"", ""description"": ""The label file ID."" },
           ""language"": { ""type"": ""string"", ""description"": ""Language code of 'text'. Default en-US."" },
-          ""labelId"": { ""type"": ""string"", ""description"": ""The label ID to create (letters and digits, e.g. XvsDemoStatus)."" },
+          ""labelId"": { ""type"": ""string"", ""description"": ""The label ID to create (letters and digits, e.g. XvsDemoStatus). Omit when using labels."" },
           ""text"": { ""type"": ""string"", ""description"": ""The label text."" },
           ""translations"": { ""type"": ""object"", ""description"": ""Optional texts in other languages of the same label file, keyed by language code, e.g. fr-CA."" },
-          ""comment"": { ""type"": ""string"", ""description"": ""Optional comment."" }
+          ""comment"": { ""type"": ""string"", ""description"": ""Optional comment."" },
+          ""labels"": { ""type"": ""array"", ""items"": { ""type"": ""object"", ""properties"": { ""labelId"": { ""type"": ""string"" }, ""text"": { ""type"": ""string"", ""description"": ""Text in 'language'."" }, ""comment"": { ""type"": ""string"" }, ""translations"": { ""type"": ""object"", ""description"": ""Texts in other languages, keyed by language code."" } }, ""required"": [""labelId"", ""text""] }, ""description"": ""Several labels in one call (instead of labelId/text)."" }
         },
-        ""required"": [""labelFileId"", ""labelId"", ""text""]
+        ""required"": [""labelFileId""]
       }
     },
     {
@@ -817,10 +818,11 @@ namespace XppVsCode.Server.Tools
             string labelFileId = JsonHelpers.ExtractArgString(argsJson, "labelFileId");
             string labelId = JsonHelpers.ExtractArgString(argsJson, "labelId");
             string text = JsonHelpers.ExtractArgString(argsJson, "text");
+            bool hasList = argsJson != null && argsJson.Contains("\"labels\"");
 
-            if (string.IsNullOrEmpty(labelFileId) || string.IsNullOrEmpty(labelId) || string.IsNullOrEmpty(text))
+            if (string.IsNullOrEmpty(labelFileId) || (!hasList && (string.IsNullOrEmpty(labelId) || string.IsNullOrEmpty(text))))
                 return JsonHelpers.BuildToolResult(idToken,
-                    "Parameters 'labelFileId', 'labelId', and 'text' are required.", isError: true);
+                    "Parameter 'labelFileId' is required, plus either 'labels' (array of {labelId, text, comment?, translations?}) or 'labelId' and 'text'.", isError: true);
 
             return DelegateToBridge(idToken, json, "create_label");
         }

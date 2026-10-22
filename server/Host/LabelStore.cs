@@ -65,10 +65,29 @@ namespace XppVsCode.Server.Host
         public bool Exists(string path, string labelId) =>
             Parse(File.ReadAllLines(path, Encoding.UTF8)).Any(e => string.Equals(e.Id, labelId, StringComparison.OrdinalIgnoreCase));
 
-        /// <summary>Inserts the label in ID order, as the Visual Studio label editor does.</summary>
-        public void Insert(string path, string labelId, string text, string comment)
+        /// <summary>Existing labels of a file by ID (one read).</summary>
+        public Dictionary<string, LabelEntry> ReadAll(string path)
+        {
+            var result = new Dictionary<string, LabelEntry>(StringComparer.OrdinalIgnoreCase);
+            foreach (var e in Parse(File.ReadAllLines(path, Encoding.UTF8))) result[e.Id] = e;
+            return result;
+        }
+
+        /// <summary>Inserts several labels in ID order with a single read and a single write of the file.</summary>
+        public void InsertMany(string path, IEnumerable<LabelEntry> labels)
         {
             var lines = File.ReadAllLines(path, Encoding.UTF8).ToList();
+            foreach (var label in labels)
+                InsertInto(lines, label.Id, label.Text, label.Comment);
+            File.WriteAllLines(path, lines, new UTF8Encoding(true));
+        }
+
+        /// <summary>Inserts the label in ID order, as the Visual Studio label editor does.</summary>
+        public void Insert(string path, string labelId, string text, string comment) =>
+            InsertMany(path, new[] { new LabelEntry { Id = labelId, Text = text, Comment = comment } });
+
+        private static void InsertInto(List<string> lines, string labelId, string text, string comment)
+        {
             var block = new List<string> { labelId + "=" + text.Replace("\r", " ").Replace("\n", " ") };
             if (!string.IsNullOrWhiteSpace(comment))
                 block.Add(" ;" + comment.Replace("\r", " ").Replace("\n", " "));
@@ -84,7 +103,6 @@ namespace XppVsCode.Server.Host
                 }
             }
             lines.InsertRange(insertAt, block);
-            File.WriteAllLines(path, lines, new UTF8Encoding(true));
         }
 
         private IEnumerable<string> Roots()

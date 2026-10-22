@@ -57,8 +57,8 @@ Decisions:
 | #40 (+ new #48 composite entities) | Done | 72/72 pass. User asked (2026-10-22) for full AxCompositeDataEntityView create/update + staging checks |
 | #41 #42 | Done | updateControls / removeControls / removeControlModifications; modifiable list from AxFormExtensionValidator |
 | #38 | Done | 87/87 pass |
-| #37 | In progress | |
-| #43 #44 | Todo | |
+| #37 | Done | 90/90 pass |
+| #43 #44 | In progress | |
 | U6 U7 U8 U9 | Todo | |
 | #45 #46 XRef | Todo | |
 | U10 spike | Todo | |

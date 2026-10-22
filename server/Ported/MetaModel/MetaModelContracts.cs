@@ -330,6 +330,15 @@ namespace XppVsCode.Server.MetaModel
         public string Comment { get; set; }
     }
 
+    // One label of an xpp_create_label call: text in the call's language plus optional translations.
+    public sealed class LabelRequestDto
+    {
+        public string LabelId { get; set; }
+        public string Text { get; set; }
+        public string Comment { get; set; }
+        public Dictionary<string, string> Translations { get; set; }
+    }
+
     public sealed class ProjectItemInfo
     {
         public string Name { get; set; }

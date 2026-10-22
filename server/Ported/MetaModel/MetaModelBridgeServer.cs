@@ -567,24 +567,27 @@ namespace XppVsCode.Server.MetaModel
         {
             string labelFileId = ExtractJsonString(body, "labelFileId");
             string language = ExtractJsonString(body, "language");
-            string labelId = ExtractJsonString(body, "labelId");
-            string text = ExtractJsonString(body, "text");
-            string comment = ExtractJsonString(body, "comment");
-            var result = _bridge.CreateLabel(labelFileId, language, labelId, text, comment);
-            var translations = ExtractJsonObject(body, "translations");
-            if (result.Success && translations != null)
-            {
-                var lines = new List<string> { result.Message };
-                foreach (var t in translations)
+            var labels = new List<LabelRequestDto>();
+            string single = ExtractJsonString(body, "labelId");
+            if (!string.IsNullOrEmpty(single))
+                labels.Add(new LabelRequestDto
                 {
-                    var r = _bridge.CreateLabel(labelFileId, t.Key, labelId, t.Value, comment);
-                    lines.Add((r.Success ? "" : "FAILED " + t.Key + ": ") + r.Message);
-                    if (!r.Success) result.Success = false;
-                }
-                result.Message = string.Join("\n", lines);
-            }
-            if (result.Success)
-                result.Message += "\nUse it as @" + labelFileId + ":" + labelId;
+                    LabelId = single,
+                    Text = ExtractJsonString(body, "text"),
+                    Comment = ExtractJsonString(body, "comment"),
+                    Translations = ExtractJsonObject(body, "translations")
+                });
+            string array = ExtractJsonArray(body, "labels");
+            if (array != null)
+                foreach (string obj in SplitJsonObjects(array))
+                    labels.Add(new LabelRequestDto
+                    {
+                        LabelId = ExtractJsonString(obj, "labelId") ?? ExtractJsonString(obj, "id"),
+                        Text = ExtractJsonString(obj, "text"),
+                        Comment = ExtractJsonString(obj, "comment"),
+                        Translations = ExtractJsonObject(obj, "translations")
+                    });
+            var result = _bridge.CreateLabels(labelFileId, language, labels);
             return SerializeResult(result);
         }
 

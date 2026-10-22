@@ -1786,6 +1786,111 @@ namespace XppVsCode.Server.MetaModel
 
         // ── Project ──
 
+        private static readonly System.Text.RegularExpressions.Regex LabelIdPattern =
+            new System.Text.RegularExpressions.Regex(@"^[A-Za-z_][A-Za-z0-9_]*$");
+
+        /// <summary>
+        /// Creates several labels (each with optional translations). Every language's label file is read once and
+        /// written once. Same ID with the same text is reported as unchanged; same ID with another text fails.
+        /// </summary>
+        public MetaModelResult CreateLabels(string labelFileId, string language, List<LabelRequestDto> labels)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            if (MetaService == null) return Fail("MetaModel service not available.");
+            if (labels == null || labels.Count == 0) return Fail("No labels given.");
+            string baseLanguage = string.IsNullOrWhiteSpace(language) ? "en-US" : language.Trim();
+
+            var lines = new List<string>();
+            bool failed = false;
+            var perLanguage = new Dictionary<string, List<KeyValuePair<LabelRequestDto, string>>>(StringComparer.OrdinalIgnoreCase);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var label in labels)
+            {
+                string id = label.LabelId?.Trim();
+                if (string.IsNullOrEmpty(id) || !LabelIdPattern.IsMatch(id))
+                {
+                    lines.Add("FAILED '" + label.LabelId + "': the label ID must be letters, digits or _ (e.g. XvsDemoStatus).");
+                    failed = true;
+                    continue;
+                }
+                if (string.IsNullOrWhiteSpace(label.Text))
+                {
+                    lines.Add("FAILED " + id + ": text is required.");
+                    failed = true;
+                    continue;
+                }
+                if (!seen.Add(id))
+                {
+                    lines.Add("FAILED " + id + ": listed more than once in this call.");
+                    failed = true;
+                    continue;
+                }
+                label.LabelId = id;
+                AddFor(perLanguage, baseLanguage, label, label.Text);
+                foreach (var t in label.Translations ?? new Dictionary<string, string>())
+                {
+                    if (string.IsNullOrWhiteSpace(t.Value)) { lines.Add("FAILED " + id + " " + t.Key + ": empty translation."); failed = true; continue; }
+                    AddFor(perLanguage, t.Key, label, t.Value);
+                }
+            }
+
+            var outcome = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var group in perLanguage)
+            {
+                try
+                {
+                    string path = _labels.FindLabelFile(labelFileId, group.Key);
+                    string fileError = path == null
+                        ? "label file '" + labelFileId + "' has no " + group.Key + " language (create it with xpp_create_object AxLabelFile, properties.Languages)"
+                        : !_labels.IsWritable(path) ? "label file '" + labelFileId + "' is not in your custom metadata folder" : null;
+                    var existing = fileError == null ? _labels.ReadAll(path) : null;
+                    var toInsert = new List<LabelEntry>();
+                    foreach (var item in group.Value)
+                    {
+                        string state;
+                        if (fileError != null) { state = "FAILED (" + fileError + ")"; failed = true; }
+                        else if (existing.TryGetValue(item.Key.LabelId, out var current))
+                        {
+                            if (string.Equals(current.Text, item.Value, StringComparison.Ordinal)) state = "unchanged (already there)";
+                            else { state = "FAILED (already exists with text '" + current.Text + "')"; failed = true; }
+                        }
+                        else
+                        {
+                            toInsert.Add(new LabelEntry { Id = item.Key.LabelId, Text = item.Value, Comment = item.Key.Comment });
+                            state = "created";
+                        }
+                        Outcome(outcome, item.Key.LabelId).Add(group.Key + " " + state + (state == "created" ? ": " + item.Value : ""));
+                    }
+                    if (toInsert.Count > 0) _labels.InsertMany(path, toInsert);
+                }
+                catch (Exception ex)
+                {
+                    failed = true;
+                    foreach (var item in group.Value)
+                        Outcome(outcome, item.Key.LabelId).Add(group.Key + " FAILED (" + ex.Message + ")");
+                }
+            }
+
+            foreach (var label in labels.Where(l => outcome.ContainsKey(l.LabelId ?? "")))
+                lines.Add("@" + labelFileId + ":" + label.LabelId + " - " + string.Join("; ", outcome[label.LabelId]));
+            int created = outcome.Values.SelectMany(v => v).Count(s => s.Contains(" created"));
+            lines.Insert(0, (failed ? "Some labels failed. " : "") + "Labels in " + labelFileId + ": " + created + " text(s) written, "
+                + perLanguage.Count + " label file(s) touched.");
+            return new MetaModelResult { Success = !failed, Message = string.Join("\n", lines) };
+        }
+
+        private static void AddFor(Dictionary<string, List<KeyValuePair<LabelRequestDto, string>>> map, string language, LabelRequestDto label, string text)
+        {
+            if (!map.TryGetValue(language, out var list)) map[language] = list = new List<KeyValuePair<LabelRequestDto, string>>();
+            list.Add(new KeyValuePair<LabelRequestDto, string>(label, text));
+        }
+
+        private static List<string> Outcome(Dictionary<string, List<string>> map, string id)
+        {
+            if (!map.TryGetValue(id, out var list)) map[id] = list = new List<string>();
+            return list;
+        }
+
         public MetaModelResult AddToProject(string objectType, string objectName)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
