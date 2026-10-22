@@ -111,8 +111,9 @@ export function activate(context: vscode.ExtensionContext): void {
     });
     command('xpp.aot.modelView', () => aotTree.setModelView(true));
     command('xpp.aot.classicView', () => aotTree.setModelView(false));
-    command('xpp.aot.filter', async () => {
-        const filter = await vscode.window.showInputBox({ title: 'Filter Application Explorer', prompt: 'Part of an element name', value: aotTree.filter });
+    command('xpp.aot.filter', async (value?: unknown) => {
+        const filter = typeof value === 'string' ? value
+            : await vscode.window.showInputBox({ title: 'Filter Application Explorer', prompt: 'Part of an element name', value: aotTree.filter });
         if (filter !== undefined) {
             aotTree.setFilter(filter);
         }

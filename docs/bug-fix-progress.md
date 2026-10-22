@@ -126,3 +126,5 @@ Published to the VS Code Marketplace as `MNazmi.xpp-vscode` (0.5.0, then 0.5.1 w
 | Regression | Done | 139/139 (R5 cases: fields, ranges, bp, patterns). |
 
 0.7.0 published to the Marketplace (VS Code repo 8cce940).
+
+0.7.1: README screenshots of standard objects only (docs/images, captured with scripts/screenshots.ps1 + test/screenshots.js in a throw-away profile without a project); fixes: View References separator showed '?' (PowerShell pipe mangled the middle dot), form preview rendered an action pane's buttons twice when it has no tabs.

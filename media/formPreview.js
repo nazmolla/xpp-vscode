@@ -112,7 +112,10 @@ window.XppFormPreview = function (options) {
             const body = el('div', 'actionpane-body');
             const first = tabs[0] || node;
             first.children.forEach(c => body.append(renderNode(c, depth + 1)));
-            node.children.filter(c => c.type !== 'ActionPaneTab').forEach(c => body.append(renderNode(c, depth + 1)));
+            // Without tabs the pane itself was rendered as the first tab above; its children must not appear twice.
+            if (tabs.length) {
+                node.children.filter(c => c.type !== 'ActionPaneTab').forEach(c => body.append(renderNode(c, depth + 1)));
+            }
             pane.append(body);
             return pane;
         }

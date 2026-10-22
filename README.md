@@ -16,6 +16,10 @@ It works against a unified developer environment (UDE) and uses the same metadat
   - Compare Code, Compare Metadata.
   - Open in Browser, Open Table Browser.
 
+![Application Explorer filtered on CustGroup: categories in Visual Studio's order](docs/images/aot.png)
+
+![View References of CustGroup: every reference opens the code at its line](docs/images/references.png)
+
 ### Element designer
 - **Node tree and Properties grid** for every element type, generated from the metadata classes Visual Studio's designer uses.
 - **Looks like Visual Studio's designer:** the same node order and icons for every element type; a class lists its methods, an enum its values.
@@ -28,10 +32,18 @@ It works against a unified developer environment (UDE) and uses the same metadat
 - **Read-only for others' elements:** elements outside your models can be viewed but not changed; extend them instead.
 - **Label editor:** label ID, text and comment, with search and the label file's other languages side by side; New label, Edit, Delete (every language) and Copy @reference for your own label files. Properties opens the property grid.
 
+![Table designer: CustGroup with Visual Studio's node order, Events node and Properties](docs/images/table-designer.png)
+
+![Form designer: CustGroup with the rendered preview](docs/images/form-designer.png)
+
+![Entity relationship diagram of CustGroup](docs/images/erd.png)
+
 ### Code
 - **Code view** shows a class the way Visual Studio does: the declaration, then the methods inside its braces. Objects in your own models are editable.
 - **Methods of nested nodes** (data sources, fields, controls) open in their own editor.
 - **Navigation:** Go to / Peek Definition (F12) for element names and members: `Type::method`, `this.`, `super.`, `variable.method()` (the variable's declared type), and calls to methods of the object or its base classes. **Find All References** (Shift+F12) uses the cross-reference database. Hover shows the element or the method signature.
+
+![Code view of SalesFormLetter with code lens: references, Chain of Command, overrides, handlers](docs/images/code.png)
 
 ### Code intelligence
 Each feature can be turned on or off under **Code intelligence** in the Dynamics 365 view, or with the `xpp.codeIntelligence.*` settings. Features marked *slow* use more CPU or disk.
@@ -43,6 +55,10 @@ Each feature can be turned on or off under **Code intelligence** in the Dynamics
 - **Hover** shows label text, EDT details and enum values.
 - **Syntax errors** while typing (X++ compiler parser), **compile on save** (*slow*, off by default), **formatting** (Format Document / Selection) and **semantic highlighting** (*slow*, off by default).
 - **Event handler index** (*slow*): scans class files for form and data event handlers, which the cross-reference database doesn't contain.
+
+![Peek Implementations on SalesFormLetter.run: the Chain of Command extensions and handlers](docs/images/implementations.png)
+
+![Completion on a CustTable buffer](docs/images/completion.png)
 
 ### Build, deploy and debug
 - **Build Model** with the X++ compiler (`Ctrl+Shift+B`), and **Build Project**, which reports only the problems in the project's objects. Errors appear in the Problems panel at the right line. A compiler crash (Fatal) or a missing output assembly fails the build.

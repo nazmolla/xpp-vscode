@@ -132,7 +132,7 @@ export async function referencesDiagram(server: XppServerClient, objectType: str
         children: [...elements.entries()].map(([name, refs]) => ({
             label: name, objectType: type, objectName: name, description: `${refs.length} reference(s)`,
             children: refs.map(r => ({
-                label: `${r.member}${r.line > 0 ? ` ? line ${r.line}` : ''}`,
+                label: `${r.member}${r.line > 0 ? ` · line ${r.line}` : ''}`,
                 description: r.kind,
                 open: () => openReference(r),
             })),
