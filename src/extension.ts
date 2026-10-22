@@ -39,6 +39,7 @@ export function activate(context: vscode.ExtensionContext): void {
         projectTree.view = vscode.window.createTreeView('xpp.project', { treeDataProvider: projectTree }),
         aotTree.view = vscode.window.createTreeView('xpp.aot', { treeDataProvider: aotTree, showCollapseAll: true }),
         vscode.languages.registerDefinitionProvider(XppDocumentSelector, navigation),
+        vscode.languages.registerReferenceProvider(XppDocumentSelector, navigation),
         vscode.languages.registerHoverProvider(XppDocumentSelector, navigation),
         vscode.workspace.onDidSaveTextDocument(doc => {
             if (doc.fileName.endsWith('.rnrproj')) {
