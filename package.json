@@ -2,7 +2,7 @@
   "name": "xpp-vscode",
   "displayName": "F&O Studio for VS Code",
   "description": "A full Dynamics 365 Finance & Operations development environment in VS Code: Application Explorer, designers, X++ code, build, deploy, debugging, and AI agent tools.",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "publisher": "MNazmi",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -331,6 +331,12 @@
         "category": "Dynamics 365"
       },
       {
+        "command": "xpp.viewErd",
+        "title": "View Entity Relationship Diagram (ERD)",
+        "category": "X++",
+        "icon": "$(type-hierarchy)"
+      },
+      {
         "command": "xpp.addToProject",
         "title": "Add to Project",
         "category": "Dynamics 365",
@@ -397,6 +403,16 @@
       {
         "command": "xpp.designer.delete",
         "title": "Delete",
+        "category": "X++"
+      },
+      {
+        "command": "xpp.designer.copyEventHandler",
+        "title": "Copy Event Handler Method",
+        "category": "X++"
+      },
+      {
+        "command": "xpp.designer.findEventHandlers",
+        "title": "Find Event Handlers",
         "category": "X++"
       },
       {
@@ -643,6 +659,11 @@
           "group": "4_refs@3"
         },
         {
+          "command": "xpp.viewErd",
+          "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\btable\\b/",
+          "group": "4_refs@4"
+        },
+        {
           "command": "xpp.compare",
           "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\bcode\\b/",
           "group": "6_compare@1"
@@ -698,6 +719,91 @@
           "command": "xpp.designer.delete",
           "when": "webviewId == 'xppElementDesigner' && xppEditable && xppCanDelete",
           "group": "9_delete@1"
+        },
+        {
+          "command": "xpp.viewCode",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\bcode\\b/",
+          "group": "0_navigation@2"
+        },
+        {
+          "command": "xpp.openFormDesigner",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\bform\\b/",
+          "group": "0_navigation@3"
+        },
+        {
+          "command": "xpp.addToProject",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot",
+          "group": "0_2_project@1"
+        },
+        {
+          "command": "xpp.deleteObject",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\bcustom\\b/",
+          "group": "0_9_delete@2"
+        },
+        {
+          "command": "xpp.runTests",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\bclass\\b/",
+          "group": "0_5_run@3"
+        },
+        {
+          "command": "xpp.createExtension",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\bextensible\\b/",
+          "group": "0_3_extend@1"
+        },
+        {
+          "command": "xpp.createCodeExtension",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\bcoc\\b/",
+          "group": "0_3_extend@2"
+        },
+        {
+          "command": "xpp.findReferences",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\brefs\\b/",
+          "group": "0_4_refs@1"
+        },
+        {
+          "command": "xpp.viewReferences",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\brefs\\b/",
+          "group": "0_4_refs@2"
+        },
+        {
+          "command": "xpp.viewHierarchy",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\bhier\\b/",
+          "group": "0_4_refs@3"
+        },
+        {
+          "command": "xpp.compare",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\bcode\\b/",
+          "group": "0_6_compare@1"
+        },
+        {
+          "command": "xpp.compareMetadata",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot",
+          "group": "0_6_compare@2"
+        },
+        {
+          "command": "xpp.openTableBrowser",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\btable\\b/",
+          "group": "0_5_run@1"
+        },
+        {
+          "command": "xpp.openInBrowser",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\bbrowser\\b/ && !(xppRoot =~ /\\btable\\b/)",
+          "group": "0_5_run@2"
+        },
+        {
+          "command": "xpp.designer.copyEventHandler",
+          "when": "webviewId == 'xppElementDesigner' && (xppIsEvent || xppIsMethod)",
+          "group": "1_open@2"
+        },
+        {
+          "command": "xpp.designer.findEventHandlers",
+          "when": "webviewId == 'xppElementDesigner' && xppHasEvents",
+          "group": "1_open@3"
+        },
+        {
+          "command": "xpp.viewErd",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\btable\\b/",
+          "group": "0_4_refs@4"
         }
       ],
       "commandPalette": [
@@ -739,6 +845,14 @@
         },
         {
           "command": "xpp.codeIntel.toggle",
+          "when": "false"
+        },
+        {
+          "command": "xpp.designer.copyEventHandler",
+          "when": "false"
+        },
+        {
+          "command": "xpp.designer.findEventHandlers",
           "when": "false"
         }
       ]
@@ -851,6 +965,41 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "(Slow) Build the project with the X++ compiler after saving code, so semantic errors reach Problems (about 10 s per save). Also switchable in the Dynamics 365 view under Code Intelligence."
+        },
+        "xpp.erd.depth": {
+          "type": "integer",
+          "default": 1,
+          "minimum": 1,
+          "maximum": 5,
+          "description": "Levels of related tables the entity relationship diagram (ERD) follows from the table it starts from. Also adjustable in the diagram."
+        },
+        "xpp.erd.direction": {
+          "type": "string",
+          "default": "outgoing",
+          "enum": [
+            "outgoing",
+            "incoming",
+            "both"
+          ],
+          "enumDescriptions": [
+            "Tables the table refers to (its relations)",
+            "Tables that refer to the table (their relations to it)",
+            "Both"
+          ],
+          "description": "Which relations the ERD follows."
+        },
+        "xpp.erd.fields": {
+          "type": "string",
+          "default": "keys",
+          "enum": [
+            "keys",
+            "all"
+          ],
+          "enumDescriptions": [
+            "Primary key and the fields of the drawn relations",
+            "All fields"
+          ],
+          "description": "Fields shown in each ERD table box."
         }
       }
     }
@@ -865,6 +1014,7 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.101.0",
+    "@vscode/codicons": "^0.0.46-24",
     "typescript": "^5.6.0"
   },
   "preview": true

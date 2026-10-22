@@ -62,6 +62,7 @@ namespace XppVsCode.Server.Tools
                     case "members": return Members(body);
                     case "syntax": return Syntax(body);
                     case "labels": return Labels(body);
+                    case "event_handlers": return EventHandlers(body);
                     default: return Fail("Unknown language action '" + action + "'.");
                 }
             }
@@ -186,6 +187,31 @@ namespace XppVsCode.Server.Tools
                     }
                 }
             }
+            return Ok(new Dictionary<string, object> { ["items"] = items, ["indexReady"] = ready, ["indexStatus"] = _index.Status });
+        }
+
+        /// <summary>
+        /// Handlers of an element's events (designer Events node): path is the handled element, e.g. /Tables/CustTable,
+        /// /Forms/F/DataSources/DS, /Forms/F/DataSources/DS/Fields/F, /Forms/F/Controls/C or /Classes/C/Methods/m;
+        /// event narrows to one event (Inserted, Clicked, ...) or Pre / Post / Delegate.
+        /// </summary>
+        private string EventHandlers(string body)
+        {
+            string path = Str(body, "path");
+            if (string.IsNullOrEmpty(path)) return Fail("path is required.");
+            string ev = Str(body, "event");
+            bool ready = IndexReady(body);
+            var items = new List<Dictionary<string, object>>();
+            if (ready)
+                foreach (var h in _index.HandlersOf(path, Flag(body, "includeChildren")))
+                {
+                    if (!string.IsNullOrEmpty(ev) && !ev.Equals(h.Event, StringComparison.OrdinalIgnoreCase) && !ev.Equals(h.Kind, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    var item = Element("/Classes/" + h.Class + "/Methods/" + h.Method, "Event handler", HandlerDetail(h));
+                    item["event"] = string.IsNullOrEmpty(h.Event) ? h.Kind : h.Event;
+                    item["target"] = h.Target;
+                    items.Add(item);
+                }
             return Ok(new Dictionary<string, object> { ["items"] = items, ["indexReady"] = ready, ["indexStatus"] = _index.Status });
         }
 

@@ -1272,6 +1272,12 @@ namespace XppVsCode.Server.MetaModel
 
             try
             {
+                // Collect names of every type first, then rank: exact name, then names starting with the
+                // text, then shorter names. Stopping at the first maxResults hits buried e.g. the SalesTable table
+                // under dozens of SalesTable* classes.
+                const int candidateCap = 5000;
+                string needle = (objectName ?? "").Trim();
+                var candidates = new List<KeyValuePair<string, string>>();
                 var typeSearchers = GetTypeSearchers(objectType);
                 foreach (var searcher in typeSearchers)
                 {
@@ -1286,24 +1292,16 @@ namespace XppVsCode.Server.MetaModel
                             }
 
                             bool match = exactMatch
-                                ? name.Equals(objectName, StringComparison.OrdinalIgnoreCase)
-                                : name.IndexOf(objectName, StringComparison.OrdinalIgnoreCase) >= 0;
+                                ? name.Equals(needle, StringComparison.OrdinalIgnoreCase)
+                                : name.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0;
 
                             if (match)
                             {
-                                string modelName = GetObjectModelName(searcher.TypeName, name);
-                                result.Matches.Add(new FoundObject
-                                {
-                                    ObjectType = searcher.TypeName,
-                                    ObjectName = name,
-                                    ModelName = modelName,
-                                    IsCustom = IsCustomModel(modelName)
-                                });
-
-                                if (result.Matches.Count >= maxResults) break;
+                                candidates.Add(new KeyValuePair<string, string>(searcher.TypeName, name));
+                                if (candidates.Count >= candidateCap) break;
                             }
                         }
-                        if (result.Matches.Count >= maxResults || budgetExceeded) break;
+                        if (candidates.Count >= candidateCap || budgetExceeded) break;
                     }
                     catch (Exception typeEx)
                     {
@@ -1311,6 +1309,24 @@ namespace XppVsCode.Server.MetaModel
                         // This allows partial results even if one metadata extractor fails
                         System.Diagnostics.Debug.WriteLine("FindObject type search error for type '" + searcher.TypeName + "': " + typeEx.Message);
                     }
+                }
+
+                var ranked = candidates
+                    .OrderBy(c => c.Value.Equals(needle, StringComparison.OrdinalIgnoreCase) ? 0
+                        : c.Value.StartsWith(needle, StringComparison.OrdinalIgnoreCase) ? 1 : 2)
+                    .ThenBy(c => c.Value.Length)
+                    .ThenBy(c => c.Value, StringComparer.OrdinalIgnoreCase)
+                    .Take(maxResults);
+                foreach (var c in ranked)
+                {
+                    string modelName = GetObjectModelName(c.Key, c.Value);
+                    result.Matches.Add(new FoundObject
+                    {
+                        ObjectType = c.Key,
+                        ObjectName = c.Value,
+                        ModelName = modelName,
+                        IsCustom = IsCustomModel(modelName)
+                    });
                 }
             }
             catch (Exception ex)

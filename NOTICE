@@ -6,3 +6,6 @@ Licensed under the Apache License, Version 2.0 (see LICENSE).
 This software works with Microsoft Dynamics 365 Finance and Operations development tools installed on the user's machine.
 It does not include or redistribute any Microsoft assemblies. Dynamics 365 is a trademark of Microsoft Corporation;
 this project is independent and is not affiliated with or endorsed by Microsoft.
+
+Third-party components:
+- media/codicons: Codicons by Microsoft Corporation (https://github.com/microsoft/vscode-codicons), MIT License for the code and CC BY 4.0 for the icons.

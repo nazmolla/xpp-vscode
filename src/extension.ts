@@ -131,6 +131,8 @@ export function activate(context: vscode.ExtensionContext): void {
     command('xpp.designer.override', (node: DesignerNodeContext) => ElementDesigner.runAction('override', node));
     command('xpp.designer.delete', (node: DesignerNodeContext) => ElementDesigner.runAction('delete', node));
     command('xpp.designer.openMethod', (node: DesignerNodeContext) => ElementDesigner.runAction('openMethod', node));
+    command('xpp.designer.copyEventHandler', (node: DesignerNodeContext) => ElementDesigner.runAction('copyEventHandler', node));
+    command('xpp.designer.findEventHandlers', (node: DesignerNodeContext) => ElementDesigner.runAction('findEventHandlers', node));
     context.subscriptions.push(ElementDesigner.onDidChange.event(e => codeFs.refresh(objectUri(e.objectType, e.objectName))));
     void vscode.commands.executeCommand('setContext', 'xpp.aot.modelView', false);
     command('xpp.selectProject', () => selectProject());

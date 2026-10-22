@@ -128,6 +128,8 @@ export class CodeIntelligence implements vscode.Disposable, ToolsContribution {
             this.showExtensions(arg));
         command('xpp.codeIntel.peek', (uri: vscode.Uri, line: number, character: number, kinds: string[]) => this.peek(uri, line, character, kinds));
         command('xpp.codeIntel.goto', (target: LangElement) => this.open(target));
+        command('xpp.codeIntel.eventHandlers', (query: { path: string; event?: string; includeChildren?: boolean }, title?: string) =>
+            this.showEventHandlers(query, title ?? query.path));
 
         // The index is built in the language server's background as soon as an X++ document is open.
         if (vscode.workspace.textDocuments.some(d => d.languageId === 'xpp')) {
@@ -160,6 +162,31 @@ export class CodeIntelligence implements vscode.Disposable, ToolsContribution {
                 { label: 'Show Extensions and Handlers…', icon: 'extensions', command: 'xpp.codeIntel.showExtensions' },
             ],
         }];
+    }
+
+    /** Handlers of an event (designer Events node), from the extension index. */
+    private async showEventHandlers(query: { path: string; event?: string; includeChildren?: boolean }, title: string): Promise<void> {
+        const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: 'Finding event handlers?' },
+            () => this.lang.lang('event_handlers', { ...query, includeChildren: !!query.includeChildren, ...this.scanEvents() }));
+        if (!result.success) {
+            throw new Error(result.message);
+        }
+        const items: (LangElement & { event?: string; detail?: string })[] = result.items ?? [];
+        if (items.length === 0) {
+            const note = !result.indexReady ? ' The extension index is still building; try again in a moment.'
+                : !enabled('eventHandlerIndex') && !/\/Methods\//.test(query.path) ? ' Form and data event handlers are found only when "Form and data event handlers" is on (Code intelligence).' : '';
+            vscode.window.showInformationMessage(`No event handlers for ${title}.${note}`);
+            return;
+        }
+        const picked = await vscode.window.showQuickPick(items.map(item => ({
+            label: `${item.objectName}.${item.member ?? ''}`,
+            description: item.event,
+            detail: item.detail,
+            item,
+        })), { title: `${items.length} event handler(s) for ${title}`, matchOnDescription: true, matchOnDetail: true });
+        if (picked) {
+            await this.open(picked.item);
+        }
     }
 
     /** Starts (or forces) the extension index build and follows its status. */

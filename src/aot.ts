@@ -26,18 +26,26 @@ type AotNode =
 
 /** Application Explorer categories and the element types under each, in Visual Studio's order. */
 const Categories: [string, string[]][] = [
-    ['Analytics', ['AxAggregateDataEntity', 'AxAggregateDimension', 'AxAggregateMeasurement', 'AxKPI', 'AxPerspective']],
-    ['Business Process and Workflow', ['AxWorkflowApproval', 'AxWorkflowApprovalExtension', 'AxWorkflowAutomatedTask', 'AxWorkflowCategory', 'AxWorkflowHierarchyProvider', 'AxWorkflowProvider', 'AxWorkflowTask', 'AxWorkflowTaskExtension', 'AxWorkflowType', 'AxWorkflowTypeExtension']],
-    ['Code', ['AxClass', 'AxMacroDictionary']],
-    ['Configuration', ['AxConfigurationKey', 'AxConfigurationKeyGroup', 'AxLicenseCode']],
-    ['Data Model', ['AxCompositeDataEntityView', 'AxDataEntityView', 'AxDataEntityViewExtension', 'AxMap', 'AxMapExtension', 'AxQuery', 'AxQuerySimpleExtension', 'AxTable', 'AxTableExtension', 'AxTableCollection', 'AxView', 'AxViewExtension']],
     ['Data Types', ['AxEnum', 'AxEnumExtension', 'AxEdt', 'AxEdtExtension']],
-    ['Labels and Resources', ['AxLabelFile', 'AxResource']],
+    ['Data Model', ['AxTable', 'AxTableExtension', 'AxView', 'AxViewExtension', 'AxQuery', 'AxQuerySimpleExtension', 'AxDataEntityView',
+        'AxDataEntityViewExtension', 'AxCompositeDataEntityView', 'AxAggregateDataEntity', 'AxMap', 'AxMapExtension', 'AxTableCollection']],
+    ['Code', ['AxClass', 'AxMacroDictionary']],
+    ['User Interface', ['AxForm', 'AxFormExtension', 'AxTile', 'AxTileExtension', 'AxMenu', 'AxMenuExtension', 'AxMenuItemDisplay', 'AxMenuItemDisplayExtension',
+        'AxMenuItemAction', 'AxMenuItemActionExtension', 'AxMenuItemOutput', 'AxMenuItemOutputExtension', 'AxFormPart', 'AxInfoPart', 'AxPartCue', 'AxPartCueGroup']],
+    ['AI', ['AxSkill']],
+    ['Analytics', ['AxAggregateDimension', 'AxAggregateMeasurement', 'AxKPI', 'AxAggregateCalculatedMeasureTemplate', 'AxAggregateCalculatedMeasureTemplateOtherPeriod']],
+    ['Reports', ['AxReport', 'AxReportEmbeddedImage', 'AxReportExternalDataSource', 'AxReportLayoutTemplate', 'AxReportListStyleTemplate',
+        'AxReportMatrixStyleTemplate', 'AxReportPieDoughnutChartStyleTemplate', 'AxReportTableStyleTemplate', 'AxReportXYChartStyleTemplate']],
+    ['Business Process and Workflow', ['AxWorkflowCategory', 'AxWorkflowApproval', 'AxWorkflowApprovalExtension', 'AxWorkflowTask', 'AxWorkflowTaskExtension',
+        'AxWorkflowAutomatedTask', 'AxWorkflowTemplate', 'AxWorkflowTemplateExtension', 'AxWorkflowDueDateCalculationProvider',
+        'AxWorkflowHierarchyAssignmentProvider', 'AxWorkflowParticipantAssignmentProvider', 'AxWorkflowQueueAssignmentProvider']],
+    ['Label Files', ['AxLabelFile']],
+    ['Resources', ['AxResource']],
+    ['Configuration', ['AxConfigurationKey', 'AxConfigurationKeyGroup', 'AxLicenseCode']],
+    ['Security', ['AxSecurityRole', 'AxSecurityRoleExtension', 'AxSecurityDuty', 'AxSecurityDutyExtension', 'AxSecurityPrivilege', 'AxSecurityPolicy',
+        'AxSecurityDirectAccessPermission']],
     ['References', ['AxReference']],
-    ['Reports', ['AxReport', 'AxReportDataSource', 'AxReportEmbeddedImage', 'AxReportImage', 'AxReportLayout', 'AxReportStyleTemplate']],
-    ['Security', ['AxSecurityDuty', 'AxSecurityDutyExtension', 'AxSecurityPermission', 'AxSecurityPolicy', 'AxSecurityPrivilege', 'AxSecurityRole', 'AxSecurityRoleExtension']],
-    ['Services', ['AxService', 'AxServiceExtension', 'AxServiceGroup', 'AxServiceGroupExtension']],
-    ['User Interface', ['AxForm', 'AxFormExtension', 'AxMenu', 'AxMenuExtension', 'AxMenuItemAction', 'AxMenuItemActionExtension', 'AxMenuItemDisplay', 'AxMenuItemDisplayExtension', 'AxMenuItemOutput', 'AxMenuItemOutputExtension', 'AxTile', 'AxTileExtension']],
+    ['Services', ['AxService', 'AxServiceGroup']],
 ];
 
 const TypeLabels: Record<string, string> = {
@@ -49,7 +57,7 @@ const TypeLabels: Record<string, string> = {
     AxConfigurationKeyGroup: 'Configuration Key Groups', AxLicenseCode: 'License Codes', AxCompositeDataEntityView: 'Composite Data Entities',
     AxDataEntityView: 'Data Entities', AxDataEntityViewExtension: 'Data Entity Extensions', AxMap: 'Maps', AxMapExtension: 'Map Extensions', AxQuery: 'Queries',
     AxQuerySimpleExtension: 'Query Extensions', AxTable: 'Tables', AxTableExtension: 'Table Extensions', AxTableCollection: 'Table Collections', AxView: 'Views',
-    AxViewExtension: 'View Extensions', AxEnum: 'Base Enums', AxEnumExtension: 'Base Enum Extensions', AxEdt: 'Extended Data Types', AxEdtExtension: 'EDT Extensions',
+    AxViewExtension: 'View Extensions', AxEnum: 'Base Enums', AxEnumExtension: 'Base Enum Extensions', AxEdt: 'Extended Data Types', AxEdtExtension: 'Extended Data Type Extensions',
     AxLabelFile: 'Label Files', AxResource: 'Resources', AxReference: 'References', AxReport: 'Reports', AxReportDataSource: 'Report Data Sources',
     AxReportEmbeddedImage: 'Report Embedded Images', AxReportImage: 'Report Images', AxReportLayout: 'Report Layouts', AxReportStyleTemplate: 'Report Style Templates',
     AxSecurityDuty: 'Security Duties', AxSecurityDutyExtension: 'Security Duty Extensions', AxSecurityPermission: 'Security Permissions', AxSecurityPolicy: 'Security Policies',
@@ -58,6 +66,15 @@ const TypeLabels: Record<string, string> = {
     AxFormExtension: 'Form Extensions', AxMenu: 'Menus', AxMenuExtension: 'Menu Extensions', AxMenuItemAction: 'Action Menu Items',
     AxMenuItemActionExtension: 'Action Menu Item Extensions', AxMenuItemDisplay: 'Display Menu Items', AxMenuItemDisplayExtension: 'Display Menu Item Extensions',
     AxMenuItemOutput: 'Output Menu Items', AxMenuItemOutputExtension: 'Output Menu Item Extensions', AxTile: 'Tiles', AxTileExtension: 'Tile Extensions',
+    AxSkill: 'Skills', AxFormPart: 'Form Parts', AxInfoPart: 'Info Parts', AxPartCue: 'Cues', AxPartCueGroup: 'Cue Groups',
+    AxAggregateCalculatedMeasureTemplate: 'Calculated Measure Templates', AxAggregateCalculatedMeasureTemplateOtherPeriod: 'Calculated Measure Templates (Other Period)',
+    AxReportExternalDataSource: 'Report Data Sources', AxReportLayoutTemplate: 'Report Layout Templates', AxReportListStyleTemplate: 'List Style Templates',
+    AxReportMatrixStyleTemplate: 'Matrix Style Templates', AxReportPieDoughnutChartStyleTemplate: 'Pie/Doughnut Chart Style Templates',
+    AxReportTableStyleTemplate: 'Table Style Templates', AxReportXYChartStyleTemplate: 'XY Chart Style Templates',
+    AxWorkflowTemplate: 'Workflow Types', AxWorkflowTemplateExtension: 'Workflow Type Extensions',
+    AxWorkflowDueDateCalculationProvider: 'Due Date Calculation Providers', AxWorkflowHierarchyAssignmentProvider: 'Hierarchy Assignment Providers',
+    AxWorkflowParticipantAssignmentProvider: 'Participant Assignment Providers', AxWorkflowQueueAssignmentProvider: 'Queue Assignment Providers',
+    AxSecurityDirectAccessPermission: 'Direct Access Permissions',
 };
 
 /** Element types that have X++ code. */
@@ -225,7 +242,10 @@ export class AotTreeProvider implements vscode.TreeDataProvider<AotNode> {
         for (const [category, types] of Categories) {
             const shown = present ? types.filter(t => present.has(t)) : types;
             if (shown.length > 0 && (await this.typeNodes(shown, model)).length > 0) {
-                nodes.push({ kind: 'category', category, model, types: shown });
+                // A category holding only its own type (Label Files, Resources, References) is that type's node, like Visual Studio.
+                nodes.push(types.length === 1 && typeLabel(types[0]) === category
+                    ? { kind: 'type', objectType: types[0], model }
+                    : { kind: 'category', category, model, types: shown });
             }
         }
         // Types this version doesn't know yet still show up, under Other.

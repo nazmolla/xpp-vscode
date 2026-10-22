@@ -1,3 +1,4 @@
+import { ErdPanel } from './erd';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -176,10 +177,16 @@ export function registerTools(
             await hierarchyDiagram(server, element.objectType, element.objectName);
         }
     });
+    command('xpp.viewErd', async (arg?: TreeArg) => {
+        const element = elementOf(arg) ?? await pickElement(server, 'Entity relationship diagram', ['AxTable']);
+        if (element) {
+            await ErdPanel.show(server, element.objectName);
+        }
+    });
     command('xpp.viewReferences', async (arg?: TreeArg) => {
         const element = elementOf(arg) ?? await pickElement(server, 'View references');
         if (element) {
-            await referencesDiagram(server, element.objectType, element.objectName);
+            await referencesDiagram(server, element.objectType, element.objectName, openReference);
         }
     });
     context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(MetadataScheme, new MetadataDocuments(server)));

@@ -66,12 +66,14 @@ body.has-preview main {
 .row.selected { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
 .row .type { color: var(--vscode-descriptionForeground); font-size: 0.9em; }
 .row.selected .type { color: inherit; opacity: 0.8; }
-.toggle { width: 12px; display: inline-block; text-align: center; }
-.icon { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-.icon.element { background: var(--vscode-charts-blue); }
-.icon.folder { background: var(--vscode-charts-yellow); }
-.icon.item { background: var(--vscode-charts-green); }
-.icon.method { background: var(--vscode-charts-purple); border-radius: 50%; }
+.twisty { width: 16px; font-size: 14px !important; color: var(--vscode-foreground); opacity: .8; }
+.icon { font-size: 15px !important; width: 16px; color: var(--vscode-foreground); }
+.icon.element { color: var(--vscode-charts-blue); }
+.icon.folder { color: var(--vscode-foreground); opacity: .9; }
+.icon.item { color: var(--vscode-symbolIcon-fieldForeground, var(--vscode-charts-blue)); }
+.icon.method { color: var(--vscode-symbolIcon-methodForeground, var(--vscode-charts-purple)); }
+.icon.event, .icon.codicon-zap { color: var(--vscode-charts-yellow); }
+.row.selected .icon { color: inherit; }
 
 .props-header { font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--vscode-panel-border); }
 table.props { border-collapse: collapse; width: 100%; }

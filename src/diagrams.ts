@@ -24,6 +24,8 @@ export interface DiagramNode {
     description?: string;
     objectType?: string;
     objectName?: string;
+    /** Opens something more specific than the element (e.g. a reference's line). */
+    open?: () => Thenable<unknown> | Promise<unknown>;
     children?: DiagramNode[];
 }
 
@@ -35,7 +37,7 @@ export class DiagramPanel {
         const nodes: DiagramNode[] = [];
         const render = (node: DiagramNode): string => {
             const id = nodes.push(node) - 1;
-            const link = node.objectType && node.objectName ? ` class="link" data-id="${id}"` : '';
+            const link = node.open || (node.objectType && node.objectName) ? ` class="link" data-id="${id}"` : '';
             const description = node.description ? ` <span class="desc">${escapeHtml(node.description)}</span>` : '';
             const children = node.children?.length ? `<ul>${node.children.map(render).join('')}</ul>` : '';
             return `<li><span class="node"${link}>${escapeHtml(node.label)}</span>${description}${children}</li>`;
@@ -60,7 +62,9 @@ document.querySelectorAll('.link').forEach(e => e.addEventListener('click', () =
 </script></body></html>`;
         panel.webview.onDidReceiveMessage(message => {
             const node = nodes[message.id];
-            if (node?.objectType && node.objectName) {
+            if (node?.open) {
+                Promise.resolve(node.open()).catch(err => vscode.window.showErrorMessage((err as Error).message));
+            } else if (node?.objectType && node.objectName) {
                 const open = elementOpenCommand(node.objectType, node.objectName);
                 void vscode.commands.executeCommand(open.command, ...(open.arguments ?? []));
             }
@@ -109,23 +113,29 @@ async function derivedOf(server: XppServerClient, objectType: string, objectName
 }
 
 /** Where-used grouped by referencing element type, like Visual Studio's View references diagram. */
-export async function referencesDiagram(server: XppServerClient, objectType: string, objectName: string): Promise<void> {
+export async function referencesDiagram(server: XppServerClient, objectType: string, objectName: string,
+    openReference: (reference: any) => Promise<unknown>): Promise<void> {
     const result = await server.bridge('where_used', { objectType, objectName, maxResults: '1000' });
     if (!result.success) {
         throw new Error(result.message);
     }
-    const groups = new Map<string, Map<string, string[]>>();
+    const groups = new Map<string, Map<string, any[]>>();
     for (const r of result.references as any[]) {
         const type = r.objectType ?? 'Other';
-        const byElement = groups.get(type) ?? new Map<string, string[]>();
-        byElement.set(r.objectName, [...(byElement.get(r.objectName) ?? []), r.member]);
+        const byElement = groups.get(type) ?? new Map<string, any[]>();
+        byElement.set(r.objectName, [...(byElement.get(r.objectName) ?? []), r]);
         groups.set(type, byElement);
     }
     const children: DiagramNode[] = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([type, elements]) => ({
         label: typeLabel(type),
         description: String(elements.size),
-        children: [...elements.entries()].map(([name, members]) => ({
-            label: name, objectType: type, objectName: name, description: [...new Set(members)].slice(0, 5).join(', '),
+        children: [...elements.entries()].map(([name, refs]) => ({
+            label: name, objectType: type, objectName: name, description: `${refs.length} reference(s)`,
+            children: refs.map(r => ({
+                label: `${r.member}${r.line > 0 ? ` ? line ${r.line}` : ''}`,
+                description: r.kind,
+                open: () => openReference(r),
+            })),
         })),
     }));
     DiagramPanel.show(`References to ${objectName}${result.more ? ' (first 1000)' : ''}`, [{ label: objectName, objectType, objectName, children }]);

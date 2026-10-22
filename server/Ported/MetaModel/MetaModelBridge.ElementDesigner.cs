@@ -29,6 +29,43 @@ namespace XppVsCode.Server.MetaModel
             "DataSources", "Design", "Parts", "Ranges", "Controls", "Methods", "Events", "StateMachines",
         };
 
+        // Per element type, from Visual Studio's designer (Events nodes are added by the extension after Methods).
+        private static readonly Dictionary<string, string[]> TypeNodeOrder = new Dictionary<string, string[]>(StringComparer.Ordinal)
+        {
+            ["AxTable"] = new[] { "Fields", "FieldGroups", "Indexes", "FullTextIndexes", "Relations", "DeleteActions", "StateMachines", "Mappings", "Methods" },
+            ["AxTableExtension"] = new[] { "Fields", "FieldGroups", "Indexes", "FullTextIndexes", "Relations", "DeleteActions", "StateMachines", "Mappings", "Methods" },
+            ["AxView"] = new[] { "ViewMetadata", "Fields", "FieldGroups", "Indexes", "Relations", "StateMachines", "Mappings", "Methods" },
+            ["AxDataEntityView"] = new[] { "ViewMetadata", "DataSources", "Fields", "FieldGroups", "Keys", "Relations", "Ranges", "DeleteActions", "StateMachines", "Mappings", "Methods" },
+            ["AxForm"] = new[] { "Methods", "DataSources", "Parts", "Design" },
+            ["AxEdtString"] = new[] { "ArrayElements", "Relations", "TableReferences" },
+        };
+
+        private static string[] NodeOrderFor(Type type)
+        {
+            if (TypeNodeOrder.TryGetValue(type.Name, out var order)) return order;
+            if (type.Name.StartsWith("AxQuery", StringComparison.Ordinal)) return new[] { "Methods", "DataSources" };
+            if (type.Name.StartsWith("AxEdt", StringComparison.Ordinal)) return TypeNodeOrder["AxEdtString"];
+            // Form controls and designs: Methods (and Events) first, then the child controls.
+            if (type.Name.StartsWith("AxForm", StringComparison.Ordinal) && (type.Name.EndsWith("Control", StringComparison.Ordinal) || type.Name.Contains("Design")))
+                return new[] { "Methods", "Controls" };
+            return NodeOrder;
+        }
+
+        /// <summary>Folders Visual Studio doesn't show: their children appear directly under the parent.</summary>
+        private static bool InlineFolder(Type owner, string collection) =>
+            (collection == "Methods" && owner.Name.StartsWith("AxClass", StringComparison.Ordinal))
+            || (collection == "EnumValues" && owner.Name.StartsWith("AxEnum", StringComparison.Ordinal))
+            || (collection == "ViewMetadata" && owner.Name.StartsWith("AxDataEntityView", StringComparison.Ordinal))
+            || (collection == "Controls" && owner.Name.StartsWith("AxForm", StringComparison.Ordinal));
+
+        // Collections the designer tree leaves out, like Visual Studio (they stay in metadata dumps and compares).
+        private static bool HiddenTreeNode(Type owner, string collection, List<string> path) =>
+            (collection == "Implements" && owner.Name.StartsWith("AxClass", StringComparison.Ordinal))
+            || (collection == "Methods" && path.Count == 1 && path[0] == "ViewMetadata");
+
+        private static string TreeLabel(Type owner, string collection) =>
+            collection == "Relations" && owner.Name.StartsWith("AxEdt", StringComparison.Ordinal) ? "Table Relations" : SplitWords(collection);
+
         private string _elementCacheKey;
         private object _elementCacheObject;
         private string _elementCacheModel;
@@ -140,6 +177,7 @@ namespace XppVsCode.Server.MetaModel
                 catch { continue; }
 
                 var childPath = new List<string>(path) { prop.Name };
+                if (HiddenTreeNode(obj.GetType(), prop.Name, path)) continue;
                 if (value is IEnumerable items && !(value is string))
                 {
                     var folder = new List<object>();
@@ -164,14 +202,18 @@ namespace XppVsCode.Server.MetaModel
                         }
                     }
                     count++;
-                    children.Add(new Dictionary<string, object>
+                    var folderNode = new Dictionary<string, object>
                     {
-                        ["name"] = SplitWords(prop.Name), ["type"] = prop.Name, ["kind"] = "folder", ["path"] = childPath, ["children"] = folder,
-                    });
+                        ["name"] = TreeLabel(obj.GetType(), prop.Name), ["type"] = prop.Name, ["kind"] = "folder", ["path"] = childPath, ["children"] = folder,
+                    };
+                    if (InlineFolder(obj.GetType(), prop.Name)) folderNode["inline"] = true;
+                    children.Add(folderNode);
                 }
                 else if (value != null)
                 {
-                    children.Add(ElementNode(value, SplitWords(prop.Name), value.GetType().Name, childPath, "item", ref count));
+                    var itemNode = ElementNode(value, SplitWords(prop.Name), value.GetType().Name, childPath, "item", ref count);
+                    if (InlineFolder(obj.GetType(), prop.Name)) itemNode["inline"] = true;
+                    children.Add(itemNode);
                 }
             }
             return new Dictionary<string, object>
@@ -191,10 +233,11 @@ namespace XppVsCode.Server.MetaModel
                     && (HasAttribute(p, "AxCollectionPropertyAttribute") || p.Name == "Methods"))
                 .GroupBy(p => p.Name).Select(g => g.First())
                 .ToList();
+            var order = NodeOrderFor(type);
             return props.OrderBy(p =>
             {
-                int index = Array.IndexOf(NodeOrder, p.Name);
-                return index < 0 ? NodeOrder.Length : index;
+                int index = Array.IndexOf(order, p.Name);
+                return index < 0 ? order.Length : index;
             });
         }
 

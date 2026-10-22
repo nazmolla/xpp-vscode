@@ -1,7 +1,8 @@
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
-import { CodeTypes, typeLabel } from './aot';
+import { CodeTypes, elementContextValue, typeLabel } from './aot';
 import { methodUri, objectUri } from './codeView';
+import { addEventNodes, copyEventHandler, EventSpec, eventLabel, handlerQuery } from './events';
 import { XppServerClient } from './serverClient';
 import { methodSpans } from './xppSource';
 
@@ -10,10 +11,18 @@ export interface DesignerNodeContext {
     xppPath: string;
     xppKind: string;
     xppType?: string;
+    xppEventSpec?: EventSpec;
 }
+
+/** Element types whose own methods can have Pre/Post handlers and delegates with subscribers. */
+const HandlerElementTypes = new Set(['AxClass', 'AxTable', 'AxForm', 'AxDataEntityView', 'AxView']);
 
 interface NodeTypes {
     collections: { path: string[]; label: string; types: { typeName: string; label: string }[] }[];
+}
+
+function baseType(objectType: string): string {
+    return ({ AxTableExtension: 'AxTable', AxFormExtension: 'AxForm', AxDataEntityViewExtension: 'AxDataEntityView' } as Record<string, string>)[objectType] ?? objectType;
 }
 
 const NamePattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -46,7 +55,8 @@ export class ElementDesigner {
     }
 
     /** Runs a right-click action on the designer the menu was opened in. */
-    static async runAction(action: 'new' | 'newMethod' | 'override' | 'delete' | 'openMethod', node: DesignerNodeContext): Promise<void> {
+    static async runAction(action: 'new' | 'newMethod' | 'override' | 'delete' | 'openMethod' | 'copyEventHandler' | 'findEventHandlers',
+        node: DesignerNodeContext): Promise<void> {
         const designer = ElementDesigner.active;
         if (!designer) {
             return;
@@ -59,6 +69,11 @@ export class ElementDesigner {
                 case 'override': return await designer.overrideMethod(node.xppKind === 'folder' ? path.slice(0, -1) : path);
                 case 'delete': return await designer.deleteNode(path, node.xppKind);
                 case 'openMethod': return await designer.openMethod(path);
+                case 'copyEventHandler': {
+                    const spec = node.xppEventSpec ?? await designer.methodEvent(path, true);
+                    return spec ? await copyEventHandler(spec) : undefined;
+                }
+                case 'findEventHandlers': return await designer.findEventHandlers(path, node);
             }
         } catch (err) {
             vscode.window.showErrorMessage((err as Error).message);
@@ -103,6 +118,8 @@ export class ElementDesigner {
                 return this.setProperty(message.path, message.property, message.value);
             case 'openMethod':
                 return this.openMethod(message.path);
+            case 'copyEventHandler':
+                return copyEventHandler(message.spec);
             case 'viewCode':
                 await vscode.commands.executeCommand('vscode.open', objectUri(this.objectType, this.objectName));
                 return;
@@ -119,12 +136,14 @@ export class ElementDesigner {
             if (!tree.success) {
                 throw new Error(tree.message ?? `${this.objectName} not found.`);
             }
+            addEventNodes(this.objectType, this.objectName, tree.root);
             this.post({
                 type: 'tree',
                 data: tree,
                 typeLabel: typeLabel(this.objectType),
                 hasCode: CodeTypes.has(this.objectType),
                 isForm: this.objectType === 'AxForm',
+                element: { objectType: this.objectType, objectName: this.objectName, context: elementContextValue(this.objectType, !!tree.editable) },
             });
             if (this.objectType === 'AxForm' || this.objectType === 'AxFormExtension') {
                 const form = await this.server.bridge('get_form_tree', { formName: this.objectName.split('.')[0] });
@@ -262,6 +281,63 @@ export class ElementDesigner {
     }
 
     /** The element's own methods open in its code view; methods of other nodes open on their own. */
+    /** Pre/Post handler or delegate subscriber of one of the element's own methods. */
+    private async methodEvent(path: string[], askPrePost: boolean): Promise<EventSpec | undefined> {
+        if (path.length !== 2 || path[0] !== 'Methods' || !HandlerElementTypes.has(this.objectType)) {
+            vscode.window.showInformationMessage('Event handlers can be written for methods of classes, tables, views, data entities and forms (not for methods of nested nodes or extensions).');
+            return undefined;
+        }
+        const document = await vscode.workspace.openTextDocument(objectUri(this.objectType, this.objectName));
+        const lines = document.getText().split(/\r?\n/);
+        const span = methodSpans(document.getText()).find(s => s.name.toLowerCase() === path[1].toLowerCase());
+        let header = '';
+        for (let i = span?.startLine ?? 0; i < lines.length && i < (span?.startLine ?? 0) + 30; i++) {
+            header += ' ' + lines[i].replace(/\/\/.*$/, '');
+            if (/\)/.test(lines[i]) && new RegExp(`\\b${path[1]}\\s*\\(`, 'i').test(header)) {
+                break;
+            }
+        }
+        const base = { element: this.objectName, elementType: this.objectType, method: path[1], isStatic: /\bstatic\b/.test(header) };
+        if (/\bdelegate\b/.test(header)) {
+            const params = new RegExp(`\\b${path[1]}\\s*\\(([^)]*)\\)`, 'i').exec(header)?.[1].replace(/\s+/g, ' ').trim() ?? '';
+            return { ...base, kind: 'Delegate', parameters: params };
+        }
+        if (!askPrePost) {
+            return { ...base, kind: 'Post' };
+        }
+        const picked = await vscode.window.showQuickPick([
+            { label: 'Post-event handler', handler: 'Post' as const },
+            { label: 'Pre-event handler', handler: 'Pre' as const },
+        ], { title: `Copy event handler for ${this.objectName}.${path[1]}` });
+        return picked ? { ...base, kind: picked.handler } : undefined;
+    }
+
+    /** Lists the handlers of an event, of all events of a node (Events folder) or of a method, from the extension index. */
+    private async findEventHandlers(path: string[], node: DesignerNodeContext): Promise<void> {
+        let query: { path: string; event?: string; includeChildren: boolean };
+        let title: string;
+        if (node.xppEventSpec) {
+            query = handlerQuery(node.xppEventSpec);
+            title = eventLabel(node.xppEventSpec);
+        } else if (node.xppKind === 'method') {
+            const spec = await this.methodEvent(path, false);
+            if (!spec) {
+                return;
+            }
+            query = { ...handlerQuery(spec), event: undefined };
+            title = `${this.objectName}.${path[1]}`;
+        } else {
+            const owner = path[path.length - 1] === 'Events' ? path.slice(0, -1) : path;
+            const spec: EventSpec = owner.length === 0 ? { kind: 'Data', element: this.objectName.split('.')[0], elementType: baseType(this.objectType) }
+                : owner[0] === 'DataSources' && owner.length === 2 ? { kind: 'FormDataSource', element: this.objectName.split('.')[0], elementType: 'AxForm', dataSource: owner[1] }
+                : owner[0] === 'DataSources' && owner.length === 4 ? { kind: 'FormDataField', element: this.objectName.split('.')[0], elementType: 'AxForm', dataSource: owner[1], field: owner[3] }
+                : { kind: 'FormControl', element: this.objectName.split('.')[0], elementType: 'AxForm', control: owner[owner.length - 1] };
+            query = handlerQuery(spec, true);
+            title = [spec.element, spec.dataSource, spec.field, spec.control].filter(Boolean).join('.');
+        }
+        await vscode.commands.executeCommand('xpp.codeIntel.eventHandlers', query, title);
+    }
+
     private async openMethod(path: string[]): Promise<void> {
         if (path.length !== 2 || !CodeTypes.has(this.objectType)) {
             await vscode.window.showTextDocument(methodUri(this.objectType, this.objectName, path));
@@ -281,8 +357,9 @@ export class ElementDesigner {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="${media('codicons/codicon.css')}" rel="stylesheet">
 <link href="${media('formPreview.css')}" rel="stylesheet">
 <link href="${media('element.css')}" rel="stylesheet">
 </head>

@@ -126,5 +126,9 @@
   { "issue": "#18", "name": "xpp_delete_object", "arguments": { "objectType": "AxLabelFile", "objectName": "XvsProbeLabels_en-US" }, "expect": "^Deleted AxLabelFile" },
   { "issue": "#18", "name": "xpp_delete_object", "arguments": { "objectType": "AxLabelFile", "objectName": "XvsProbeLabels_fr-CA" }, "expect": "^Deleted AxLabelFile" },
 
+  {"issue": "R4 search", "method": "xpp/bridge", "params": {"action": "find_object", "body": {"objectName": "SALESTABLE", "exactMatch": false, "maxResults": 3}}, "expect": "\"matches\":\\[\\{\"objectType\":\"AxTable\",\"objectName\":\"SalesTable\""},
+  {"issue": "R4 erd", "method": "xpp/bridge", "params": {"action": "table_erd", "body": {"tables": ["CustGroup"]}}, "expect": "\"name\":\"CustGroup\"[\\s\\S]*\"primaryKey\":\\[\"CustGroup\"\\][\\s\\S]*\"relatedTable\":\"PaymTerm\""},
+  {"issue": "R4 erd", "method": "xpp/bridge", "params": {"action": "incoming_relations", "body": {"table": "CustGroup"}}, "expect": "\"tables\":\\[[^\\]]*\"CustTable\""},
+  {"issue": "R4 events", "method": "xpp/lang", "params": {"action": "event_handlers", "body": {"path": "/Tables/CustTable", "event": "ValidatedDelete"}}, "expect": "CustTable_onValidatedDelete"},
   { "issue": "#29 U3", "name": "xpp_build", "arguments": { "scope": "project" }, "expect": "^BUILD (SUCCEEDED|FAILED): testcust" }
 ]

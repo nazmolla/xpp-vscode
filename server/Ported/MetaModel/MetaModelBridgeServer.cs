@@ -89,6 +89,10 @@ namespace XppVsCode.Server.MetaModel
                 case "delete_object":
                     return _bridge.DeleteObjectJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
                         "true".Equals(ExtractJsonString(body, "checkOnly"), StringComparison.OrdinalIgnoreCase));
+                case "table_erd":
+                    return _bridge.TableErdJson(XppVsCode.Server.Tools.JsonHelpers.ExtractJsonStringArray(body, "tables"));
+                case "incoming_relations":
+                    return _bridge.IncomingRelationsJson(ExtractJsonString(body, "table"), "true".Equals(ExtractJsonString(body, "force"), StringComparison.OrdinalIgnoreCase));
                 case "type_members":
                     return _bridge.TypeMembersJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
                 case "label_file_entries":

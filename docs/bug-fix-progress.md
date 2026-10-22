@@ -94,3 +94,16 @@ User decisions (2026-10-22):
 | Release + VS port (tools only) | Done | 0.5.0 released and installed (mnazmi.xpp-vscode). Smoke test test/codeIntelSmoke.js all pass; regression 120/120. Publisher renamed MNazmi, Apache-2.0, preview. VS port not needed (xpp/lang is VS Code UI only). |
 
 Published to the VS Code Marketplace as `MNazmi.xpp-vscode` (0.5.0, then 0.5.1 with homepage/issues links), public + preview. Publish later versions with `npx @vscode/vsce publish` after `vsce login MNazmi`. The repo nazmolla/xpp-vscode is being made public by the user so the listing links work.
+
+## Round 4 (2026-10-22): user feedback on 0.5.1
+
+| Item | Status | Notes |
+|---|---|---|
+| Open X++ object search buries exact names (SALESTABLE listed classes only) | Done | find_object collects all candidates (cap 5000), ranks exact > prefix > shorter, then resolves models for the top N. |
+| View References: entries not clickable | Done | Diagram shows each reference (member, line, kind) under its element; click opens the code at the line (same as Find References). |
+| Designer root: Application Explorer right-click actions | Done | Root node carries the element context; webview/context entries mirror the AOT element menu (xppRoot). |
+| ERD (VS Code only) | Done | View Entity Relationship Diagram on tables (AOT, project, designer root). Levels 1-5, outgoing / incoming / both, keys or all fields; settings xpp.erd.*; changeable in the diagram; double-click re-centres; export SVG / Mermaid, copy Mermaid. Server: table_erd, incoming_relations (table XML scan, cached, ~2 s cold / 0.1 s warm). |
+| Events nodes, copy event handler, find event handlers | Done | Events folders on tables, entities, forms, data sources, data source fields, controls (VS event enums). Copy Event Handler Method (double-click too) generates VS's handler; methods give Pre/Post or delegate subscriber. Find Event Handlers uses the extension index (xpp/lang event_handlers). |
+| Designer tree looks like VS | Done | Codicons per node type (bundled media/codicons), chevrons (the gray blob was formPreview.css's .toggle switch style), VS node order per element type, inline class methods / enum values / child controls / entity view metadata, Name (Control Type), root Name [Model], no counts. |
+| AOT categories in VS order; AI > Skills | Done | Data Types, Data Model, Code, User Interface, AI (Skills = AxSkill), Analytics, Reports, Business Process and Workflow, Label Files, Resources, Configuration, Security, References, Services. Folder names corrected (AxWorkflowTemplate, report templates, providers, direct access permissions). System Documentation (kernel) not available. |
+

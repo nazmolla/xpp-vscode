@@ -12,12 +12,16 @@ It works against a unified developer environment (UDE) and uses the same metadat
 - **Right-click actions:**
   - Open Designer, View Code, Open Form Layout.
   - Add to Project, Create Extension, Create Code Extension (Chain of Command).
-  - Find References, View References, View Hierarchy.
+  - Find References, View References (every reference opens the code at its line), View Hierarchy, View Entity Relationship Diagram (tables).
   - Compare Code, Compare Metadata.
   - Open in Browser, Open Table Browser.
 
 ### Element designer
 - **Node tree and Properties grid** for every element type, generated from the metadata classes Visual Studio's designer uses.
+- **Looks like Visual Studio's designer:** the same node order and icons for every element type; a class lists its methods, an enum its values.
+- **Right-click on the element itself** offers the Application Explorer actions (references, extensions, compare, ERD...).
+- **Events nodes** on tables, data entities, forms, form data sources, fields and controls: **Copy Event Handler Method** (or double-click) puts Visual Studio's handler on the clipboard; on a method it writes a Pre/Post handler or a delegate subscriber. **Find Event Handlers** lists the existing handlers.
+- **Entity relationship diagram** (ERD) of a table and its related tables: choose the levels, outgoing/incoming relations and the fields shown; double-click a table to centre on it; export SVG or Mermaid.
 - **Right-click actions:** New (any node type a folder accepts, such as fields, field groups, indexes, relations, data sources and controls), New Method, Override Method, Delete.
 - **Forms:** a preview rendered like the web client, with Table of Contents and FastTab patterns, column layout, field labels from EDTs and toggles for Yes/No fields.
 - **Read-only for others' elements:** elements outside your models can be viewed but not changed; extend them instead.
@@ -93,6 +97,7 @@ The tools are registered automatically. `node scripts/tool-regression.js --proje
 | `xpp.build.runAppCheckerRules` | Run AppChecker rules during the build |
 | `xpp.pacPath` | Path to `pac` |
 | `xpp.debuggerProxyPath` | Path to `Microsoft.Dynamics.AX.DebuggerProxy.exe`, if not in the default location |
+| `xpp.erd.depth`, `xpp.erd.direction`, `xpp.erd.fields` | Defaults for the entity relationship diagram (also changeable in the diagram) |
 | `xpp.codeIntelligence.<feature>` | Turn each code intelligence feature on or off (also in the Dynamics 365 view) |
 
 ## Status

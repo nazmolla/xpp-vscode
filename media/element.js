@@ -6,6 +6,68 @@
     const errorEl = document.getElementById('error');
     const previewEl = document.getElementById('preview');
     let editable = false;
+    let element = null;
+    let elementModel = '';
+
+    // Codicons per node, like Visual Studio's designer icons.
+    const ElementIcons = [
+        [/^AxTable/, 'table'], [/^AxClass/, 'symbol-class'], [/^AxForm/, 'window'], [/^AxEnum/, 'symbol-enum'], [/^AxEdt/, 'symbol-type-parameter'],
+        [/^AxView/, 'eye'], [/^AxQuery/, 'filter'], [/^Ax(Composite|Aggregate)?DataEntity/, 'symbol-structure'], [/^AxMap/, 'symbol-interface'],
+        [/^AxMenuItem/, 'link'], [/^AxMenu/, 'menu'], [/^AxSecurity/, 'shield'], [/^AxLabelFile/, 'symbol-string'], [/^AxReport/, 'graph'],
+        [/^AxService/, 'server'], [/^AxWorkflow/, 'workflow'], [/^Ax(ConfigurationKey|LicenseCode)/, 'key'], [/^AxTile/, 'preview'], [/^AxSkill/, 'sparkle'],
+    ];
+    const FolderIcons = {
+        Fields: 'symbol-field', FieldGroups: 'group-by-ref-type', Indexes: 'list-ordered', FullTextIndexes: 'whole-word', Relations: 'references',
+        DeleteActions: 'trash', StateMachines: 'type-hierarchy-sub', Mappings: 'arrow-swap', Methods: 'symbol-method', Events: 'zap',
+        DataSources: 'database', Parts: 'layout', Ranges: 'filter', Keys: 'key', Design: 'layout', ArrayElements: 'symbol-array',
+        TableReferences: 'table', ViewMetadata: 'eye', EnumValues: 'symbol-enum-member', DataSourceLinks: 'link', DerivedDataSources: 'type-hierarchy',
+        Controls: 'symbol-misc',
+    };
+    const ControlIcons = [
+        [/ActionPane/, 'tools'], [/ButtonGroup/, 'symbol-namespace'], [/MenuButton/, 'menu'], [/Button/, 'symbol-event'], [/Grid|ListView|Table/, 'table'],
+        [/TabPage/, 'folder'], [/Tab/, 'folder-library'], [/Group/, 'symbol-namespace'], [/String|Guid/, 'symbol-string'],
+        [/Int|Real/, 'symbol-number'], [/Date|Time/, 'calendar'], [/CheckBox/, 'check'], [/ComboBox|Radio|Segmented/, 'list-selection'],
+        [/Image/, 'file-media'], [/Html|Static/, 'note'], [/Tree/, 'list-tree'], [/Filter/, 'search'],
+    ];
+    const pick = (list, text, fallback) => (list.find(([re]) => re.test(text || '')) || [null, fallback])[1];
+
+    function iconOf(node) {
+        if (node.kind === 'element') return pick(ElementIcons, element && element.objectType, 'symbol-file');
+        if (node.kind === 'folder') return FolderIcons[node.type] || 'folder';
+        if (node.kind === 'method') return 'symbol-method';
+        if (node.kind === 'event') return 'zap';
+        const type = node.type || '';
+        if (/^Form.*Control$/.test(type)) return pick(ControlIcons, type, 'symbol-misc');
+        if (/EnumValue/.test(type)) return 'symbol-enum-member';
+        if (/FieldGroup/.test(type)) return 'group-by-ref-type';
+        if (/Field/.test(type)) return 'symbol-field';
+        if (/Index/.test(type)) return 'list-ordered';
+        if (/Relation/.test(type)) return 'references';
+        if (/DataSource/.test(type)) return 'database';
+        if (/Design/.test(type)) return 'layout';
+        if (/Range/.test(type)) return 'filter';
+        if (/StateMachine/.test(type)) return 'type-hierarchy-sub';
+        return 'symbol-property';
+    }
+
+    // Form controls read "Name (Button Group)", like Visual Studio.
+    function controlTypeLabel(type) {
+        const m = /^Form(\w+?)Control$/.exec(type || '');
+        return m ? m[1].replace(/([a-z])([A-Z])/g, '$1 $2') : null;
+    }
+
+    // Children as shown: inline folders (class methods, enum values, nested controls) are replaced by their children.
+    function visibleChildren(node) {
+        const result = [];
+        for (const child of node.children) {
+            if (child.inline) {
+                for (const grand of visibleChildren(child)) result.push({ node: grand.node, parent: grand.parent === child ? child : grand.parent });
+            } else {
+                result.push({ node: child, parent: node });
+            }
+        }
+        return result;
+    }
     let selectedPath = null;
     let selectedRow = null;
     let pendingSelect = null;
@@ -63,6 +125,8 @@
     function renderTree(msg) {
         const data = msg.data;
         editable = data.editable;
+        element = msg.element || null;
+        elementModel = data.model || '';
         document.getElementById('title').textContent = `${data.objectName} (${msg.typeLabel})`;
         const badge = document.getElementById('badge');
         badge.textContent = data.editable ? data.model : `${data.model || 'standard'} · read-only`;
@@ -103,7 +167,7 @@
         for (let li = row.parentElement.parentElement; li && li !== treeEl; li = li.parentElement) {
             if (li.tagName === 'UL' && li.hidden) {
                 const ownerRow = li.parentElement.querySelector(':scope > .row');
-                toggleNode(ownerRow, li, ownerRow.querySelector('.toggle'), ownerRow._node.path);
+                toggleNode(ownerRow, li, ownerRow.querySelector('.twisty'), ownerRow._node.path);
             }
         }
         row.scrollIntoView({ block: 'nearest' });
@@ -117,9 +181,10 @@
     }
 
     function contextFor(node, parent) {
-        const folders = node.children.filter(c => c.kind === 'folder');
+        const folders = node.children.filter(c => c.kind === 'folder' && c.type !== 'Events');
         const hasMethods = node.kind === 'folder' ? node.type === 'Methods' : folders.some(c => c.type === 'Methods');
-        const canAdd = node.kind === 'folder' ? node.type !== 'Methods' : folders.some(c => c.type !== 'Methods');
+        const canAdd = node.kind === 'folder' ? node.type !== 'Methods' && node.type !== 'Events' : folders.some(c => c.type !== 'Methods');
+        const isEvents = node.kind === 'event' || (node.kind === 'folder' && node.type === 'Events');
         return JSON.stringify({
             webviewSection: 'xppNode',
             xppKind: node.kind,
@@ -127,9 +192,14 @@
             xppCanAdd: canAdd,
             xppHasMethods: hasMethods,
             xppIsMethod: node.kind === 'method',
+            xppIsEvent: node.kind === 'event',
+            xppHasEvents: isEvents || node.kind === 'method' || node.path.length === 0 || node.children.some(c => c.type === 'Events'),
+            ...(node.eventSpec ? { xppEventSpec: node.eventSpec } : {}),
             xppCanDelete: (node.kind === 'item' || node.kind === 'method') && !!parent && parent.kind === 'folder',
             xppPath: JSON.stringify(node.path),
             xppType: node.type,
+            // The element itself: the Application Explorer's element actions (references, extensions, compare...).
+            ...(node.path.length === 0 && element ? { xppRoot: element.context, item: { objectType: element.objectType, objectName: element.objectName }, objectType: element.objectType, objectName: element.objectName } : {}),
             preventDefaultContextMenuItems: true,
         });
     }
@@ -148,44 +218,42 @@
             controlRows.set(control.toLowerCase(), row);
         }
 
-        const hasChildren = node.children.length > 0;
+        const shown = visibleChildren(node);
+        const hasChildren = shown.length > 0;
         // Folders start collapsed below the first level, like Visual Studio.
         if (hasChildren && depth >= 1 && !collapsed.has('init:' + pathKey(node.path))) {
             collapsed.add('init:' + pathKey(node.path));
             collapsed.add(pathKey(node.path));
         }
         const toggle = document.createElement('span');
-        toggle.className = 'toggle';
-        toggle.textContent = hasChildren ? (collapsed.has(pathKey(node.path)) ? '\u25B8' : '\u25BE') : '';
+        toggle.className = 'twisty codicon ' + (hasChildren ? (collapsed.has(pathKey(node.path)) ? 'codicon-chevron-right' : 'codicon-chevron-down') : 'codicon-blank');
         row.appendChild(toggle);
 
         const icon = document.createElement('span');
-        icon.className = 'icon ' + node.kind;
+        icon.className = `icon codicon codicon-${iconOf(node)} ${node.kind}`;
         row.appendChild(icon);
 
         const name = document.createElement('span');
         name.className = 'name';
-        name.textContent = node.name;
+        name.textContent = node.kind === 'element' && elementModel ? `${node.name} [${elementModel}]` : node.name;
         row.appendChild(name);
 
-        if (node.kind === 'item' && node.type) {
+        const controlType = node.kind === 'item' ? controlTypeLabel(node.type) : null;
+        if (controlType) {
             const type = document.createElement('span');
             type.className = 'type';
-            type.textContent = node.type;
+            type.textContent = `(${controlType})`;
             row.appendChild(type);
         }
         if (node.kind === 'folder') {
-            const count = document.createElement('span');
-            count.className = 'type';
-            count.textContent = `(${node.children.length})`;
-            row.appendChild(count);
+            row.title = `${node.name}: ${node.children.length} item(s)`;
         }
         li.appendChild(row);
 
         if (hasChildren) {
             const ul = document.createElement('ul');
             ul.hidden = collapsed.has(pathKey(node.path));
-            node.children.forEach(child => ul.appendChild(renderNode(child, depth + 1, node)));
+            shown.forEach(child => ul.appendChild(renderNode(child.node, depth + 1, child.parent)));
             li.appendChild(ul);
             toggle.addEventListener('click', e => {
                 e.stopPropagation();
@@ -198,6 +266,8 @@
         row.addEventListener('dblclick', () => {
             if (node.kind === 'method') {
                 send('openMethod', { path: node.path });
+            } else if (node.kind === 'event') {
+                send('copyEventHandler', { spec: node.eventSpec });
             } else if (hasChildren) {
                 toggleNode(row, li.querySelector('ul'), toggle, node.path);
             }
@@ -214,7 +284,8 @@
             collapsed.add(key);
         }
         ul.hidden = collapsed.has(key);
-        toggle.textContent = ul.hidden ? '\u25B8' : '\u25BE';
+        toggle.classList.toggle('codicon-chevron-right', ul.hidden);
+        toggle.classList.toggle('codicon-chevron-down', !ul.hidden);
     }
 
     function select(row, fromPreview) {
@@ -238,6 +309,12 @@
             const info = document.createElement('div');
             info.className = 'muted';
             info.textContent = `${node.name}: ${node.children.length} item(s).`;
+            propsEl.appendChild(info);
+        } else if (node.kind === 'event') {
+            propsEl.innerHTML = '';
+            const info = document.createElement('div');
+            info.className = 'muted';
+            info.textContent = `${node.name}: right-click to copy an event handler method or to find the existing handlers. Double-click copies the handler.`;
             propsEl.appendChild(info);
         } else if (node.kind === 'method') {
             propsEl.innerHTML = '';
@@ -263,7 +340,7 @@
         } else if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && selectedRow) {
             const ul = selectedRow.parentElement.querySelector(':scope > ul');
             if (ul && (e.key === 'ArrowRight') === ul.hidden) {
-                toggleNode(selectedRow, ul, selectedRow.querySelector('.toggle'), selectedRow._node.path);
+                toggleNode(selectedRow, ul, selectedRow.querySelector('.twisty'), selectedRow._node.path);
             }
             e.preventDefault();
         } else if (e.key === 'Enter' && selectedRow && selectedRow._node.kind === 'method') {
