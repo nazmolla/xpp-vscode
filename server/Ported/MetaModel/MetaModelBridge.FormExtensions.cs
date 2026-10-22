@@ -308,10 +308,12 @@ namespace XppVsCode.Server.MetaModel
                 return Fail("Base form '" + baseForm + "' not found.");
 
             var errors = ValidateFormExtensionRequest(before, req);
+            ValidateOwnControlChanges(ext, before, req, errors);
             if (errors.Count > 0) return Fail(FormatPlacementErrors(errors));
 
             ApplyTypedMetadata(ext, req);
             ApplyFormExtensionDataSources(ext, req.DataSources);
+            var ownReport = ApplyOwnControlChanges(ext, before, req, out var moved);
             if (req.Controls != null)
                 foreach (var dto in req.Controls)
                     ext.Controls.Add(BuildExtensionControl(dto));
@@ -319,12 +321,21 @@ namespace XppVsCode.Server.MetaModel
 
             MetadataProvider.FormExtensions.Update(ext, saveInfo);
 
-            var placement = VerifyFormPlacement(baseForm, req.Controls, before);
+            var toVerify = new List<FormControlDto>(req.Controls ?? new List<FormControlDto>());
+            toVerify.AddRange(moved);
+            var placement = VerifyFormPlacement(baseForm, toVerify, before);
+            if (req.RemoveControls != null && req.RemoveControls.Count > 0)
+            {
+                var after = BuildEffectiveForm(baseForm);
+                foreach (string name in req.RemoveControls.Where(n => after.ByName.ContainsKey(n)))
+                    placement.Errors.Add("'" + name + "' is still on the form after removal.");
+            }
             if (placement.Errors.Count > 0)
                 return Fail("Saved AxFormExtension '" + req.ObjectName + "', but the placement check failed:\n  - "
                     + string.Join("\n  - ", placement.Errors));
 
             return Ok("Updated AxFormExtension '" + req.ObjectName + "'."
+                + (ownReport.Count > 0 ? "\n" + string.Join("\n", ownReport) : "")
                 + (placement.Placed.Count > 0 ? "\nPlacement verified:\n  - " + string.Join("\n  - ", placement.Placed) : ""));
         }
 
@@ -385,16 +396,7 @@ namespace XppVsCode.Server.MetaModel
                 }
             }
 
-            if (req.ControlModifications != null)
-            {
-                foreach (var mod in req.ControlModifications)
-                {
-                    if (!effective.ByName.ContainsKey(mod.Name ?? ""))
-                        errors.Add("controlModifications: control '" + mod.Name + "' not found on the form.");
-                    else if (mod.Properties == null || mod.Properties.Count == 0)
-                        errors.Add("controlModifications: '" + mod.Name + "' has no properties to change.");
-                }
-            }
+            ValidateControlModifications(effective, req, errors);
 
             return errors;
         }

@@ -270,7 +270,10 @@ namespace XppVsCode.Server.MetaModel
                 EntityFields = ParseEntityFields(body),
                 MenuElements = ParseMenuElements(body),
                 SkipStagingTable = "true".Equals(ExtractJsonString(body, "skipStagingTable"), StringComparison.OrdinalIgnoreCase),
-                RemoveSecurityItems = ExtractJsonStringArray(body, "removeSecurityItems")?.ToList()
+                RemoveSecurityItems = ExtractJsonStringArray(body, "removeSecurityItems")?.ToList(),
+                UpdateControls = ParseFormControls(body, "updateControls"),
+                RemoveControls = ExtractJsonStringArray(body, "removeControls")?.ToList(),
+                RemoveControlModifications = ExtractJsonStringArray(body, "removeControlModifications")?.ToList()
             };
 
             // Reject any formatted markup in declaration or methods

@@ -55,9 +55,9 @@ Decisions:
 | Baseline regression | 41/42 | #12 #16 case used `SalesTable.testcust` (gone from the user's run); now self-contained (`CustGroup.XvsProbe`) |
 | #39 (+ new #47) | Done | 57/57 pass. Harness has `--issue <regex>` for quick runs. Server built, not yet packaged/released |
 | #40 (+ new #48 composite entities) | Done | 72/72 pass. User asked (2026-10-22) for full AxCompositeDataEntityView create/update + staging checks |
-| #41 #42 | In progress | |
-| #38 | Todo | |
-| #37 | Todo | |
+| #41 #42 | Done | updateControls / removeControls / removeControlModifications; modifiable list from AxFormExtensionValidator |
+| #38 | Done | 87/87 pass |
+| #37 | In progress | |
 | #43 #44 | Todo | |
 | U6 U7 U8 U9 | Todo | |
 | #45 #46 XRef | Todo | |

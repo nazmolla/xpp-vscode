@@ -845,6 +845,13 @@ namespace XppVsCode.Server.MetaModel
             bool hasProject = activeProjectNode != null;
             result.InProject = hasProject && activeProjectNode.Contains(req.ObjectType, req.ObjectName);
 
+            // Only objects of the project's own model can be in the project; for others (standard, other packages)
+            // membership is not a requirement.
+            string projectModel = hasProject ? activeProjectNode.GetProjectsModelInfo()?.Name : null;
+            string objectModel = string.IsNullOrEmpty(readResult.ModelName) ? ModelOf(req.ObjectType, req.ObjectName) : readResult.ModelName;
+            bool membershipApplies = hasProject && (string.IsNullOrEmpty(projectModel) || string.IsNullOrEmpty(objectModel)
+                || string.Equals(projectModel, objectModel, StringComparison.OrdinalIgnoreCase));
+
             // 3. Compare expected vs actual properties
             var mismatches = new List<string>();
 
@@ -1089,10 +1096,13 @@ namespace XppVsCode.Server.MetaModel
             }
 
             result.Mismatches = mismatches;
-            result.Valid = (result.InProject || !hasProject) && mismatches.Count == 0;
-            string projectNote = hasProject
-                ? (result.InProject ? " Object is in project " + activeProjectNode.Caption + "." : "")
-                : " Project membership NOT checked: no active project (set one with xpp_select_project).";
+            result.Valid = (result.InProject || !membershipApplies) && mismatches.Count == 0;
+            string projectNote = !hasProject
+                ? " Project membership NOT checked: no active project (set one with xpp_select_project)."
+                : !membershipApplies
+                    ? " Project membership not checked: the object belongs to model " + objectModel + ", and project "
+                      + activeProjectNode.Caption + " holds objects of model " + projectModel + " only."
+                    : (result.InProject ? " Object is in project " + activeProjectNode.Caption + "." : "");
             if (result.Valid)
             {
                 result.Message = "Validation passed. All specified metadata is present." + projectNote;

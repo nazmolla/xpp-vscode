@@ -221,6 +221,10 @@ namespace XppVsCode.Server.MetaModel
         public List<MenuElementDto> MenuElements { get; set; }
         // Entry points, privileges, duties or data entity permissions to remove, by name.
         public List<string> RemoveSecurityItems { get; set; }
+        // AxFormExtension: change or remove controls the extension itself added; drop control modifications.
+        public List<FormControlDto> UpdateControls { get; set; }
+        public List<string> RemoveControls { get; set; }
+        public List<string> RemoveControlModifications { get; set; }
     }
 
     // ── Result DTOs ──
