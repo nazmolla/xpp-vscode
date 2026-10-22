@@ -464,6 +464,7 @@ namespace XppVsCode.Server.MetaModel
                 sb.Append("{\"objectType\":\"" + EscapeJson(m.ObjectType) + "\"");
                 sb.Append(",\"objectName\":\"" + EscapeJson(m.ObjectName) + "\"");
                 sb.Append(",\"modelName\":\"" + EscapeJson(m.ModelName ?? "") + "\"");
+                if (!string.IsNullOrEmpty(m.Label)) sb.Append(",\"label\":\"" + EscapeJson(m.Label) + "\"");
                 sb.Append(",\"isCustom\":" + (m.IsCustom ? "true" : "false") + "}");
             }
             sb.Append("]}");

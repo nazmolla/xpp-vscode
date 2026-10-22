@@ -286,6 +286,8 @@ namespace XppVsCode.Server.MetaModel
         public string PackageName { get; set; }
         public string FilePath { get; set; }
         public bool IsCustom { get; set; }
+        // Security roles, duties and privileges: label text (en-US), which requirements usually use.
+        public string Label { get; set; }
     }
 
     public sealed class ListObjectsResult

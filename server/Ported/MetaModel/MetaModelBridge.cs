@@ -1322,9 +1322,29 @@ namespace XppVsCode.Server.MetaModel
                     : "Search error in FindObject (searching for '" + objectName + "' in type '" + objectType + "'): " + svcContext + " - " + ex.Message;
             }
 
+            // Security objects are named by their label in requirements: match the label text too (#46).
+            if (!exactMatch && result.Success && !string.IsNullOrEmpty(objectType) && LabelSearchTypes.Contains(objectType)
+                && !string.IsNullOrWhiteSpace(objectName))
+            {
+                var index = SecurityLabelIndex(objectType);
+                foreach (var m in result.Matches)
+                    if (index.TryGetValue(m.ObjectName, out string own)) m.Label = own;
+                var hits = FindSecurityByLabel(objectType, objectName.Trim(), maxResults, out bool allWords);
+                if (hits.Count > 0 && !allWords && result.Matches.Count == 0)
+                    result.Message = "No " + objectType + " name or label contains all of '" + objectName.Trim()
+                        + "'; closest labels below. Requirements often use other wording: check the label and the duties/privileges before choosing.";
+                foreach (var hit in hits)
+                {
+                    if (result.Matches.Count >= maxResults) break;
+                    if (result.Matches.Any(m => string.Equals(m.ObjectName, hit.Key, StringComparison.OrdinalIgnoreCase))) continue;
+                    string modelName = GetObjectModelName(objectType, hit.Key);
+                    result.Matches.Add(new FoundObject { ObjectType = objectType, ObjectName = hit.Key, ModelName = modelName, IsCustom = IsCustomModel(modelName), Label = hit.Value });
+                }
+            }
+
             if (budgetExceeded)
                 result.Message = BudgetExceededMessage(result.Matches.Count);
-            else if (result.Matches.Count == 0 && result.Success)
+            else if (result.Matches.Count == 0 && result.Success && result.Message == null)
                 result.Message = "No objects found matching '" + objectName + "'."
                     + (string.IsNullOrEmpty(objectType) ? "" : " (type: " + objectType + ")");
 

@@ -132,7 +132,7 @@ namespace XppVsCode.Server.Tools
     },
     {
       ""name"": ""xpp_find_object"",
-      ""description"": ""Searches for D365FO metadata objects by name across ALL loaded models and packages using the MetaModel API. CRITICAL: Always use this instead of Get-ChildItem/dir/file searches on metadata folders. NEVER search the file system for X++ objects. Returns matching objects with type, model, and editability. Searches scan the loaded metadata and block other tool calls while they run: search for ONE specific object at a time, always pass objectType, and use exactMatch=true when you know the full name. Partial names must be at least 3 characters. Scans stop after a few seconds and return PARTIAL results with a message — if that happens, narrow the search instead of retrying the same query."",
+      ""description"": ""Security roles, duties and privileges (objectType AxSecurityRole/AxSecurityDuty/AxSecurityPrivilege, partial match) are also found by their label text, e.g. 'Sales manager' or 'Maintain fixed assets'; each match shows its label, and when no label has all the words the closest labels are listed. Searches for D365FO metadata objects by name across ALL loaded models and packages using the MetaModel API. CRITICAL: Always use this instead of Get-ChildItem/dir/file searches on metadata folders. NEVER search the file system for X++ objects. Returns matching objects with type, model, and editability. Searches scan the loaded metadata and block other tool calls while they run: search for ONE specific object at a time, always pass objectType, and use exactMatch=true when you know the full name. Partial names must be at least 3 characters. Scans stop after a few seconds and return PARTIAL results with a message — if that happens, narrow the search instead of retrying the same query."",
       ""inputSchema"": {
         ""type"": ""object"",
         ""properties"": {
@@ -479,7 +479,7 @@ namespace XppVsCode.Server.Tools
                 sb.AppendLine(layout);
 
             // Append matches/objects/items/labels if present
-            AppendArrayField(sb, bridgeResponse, "matches", "objectType", "objectName", "modelName", "isCustom");
+            AppendArrayField(sb, bridgeResponse, "matches", "objectType", "objectName", "modelName", "isCustom", "label");
             AppendArrayField(sb, bridgeResponse, "objects", "objectType", "objectName", "modelName", "isCustom");
             AppendArrayField(sb, bridgeResponse, "models", "name", "displayName", "isCustom");
             AppendArrayField(sb, bridgeResponse, "labels", "id", "text");
