@@ -16,7 +16,106 @@ namespace XppVsCode.Server.MetaModel
             public EntityFieldDto Field;
             public string Table;
             public AxTableField SourceField;
+            public string SourcePath;
             public bool AlreadyInExtension;
+        }
+
+        private sealed class SourceFieldResolution
+        {
+            public bool Found;
+            public string Kind;
+            public AxTableField TableField;   // null when the chain ends in a computed or unmapped field
+            public string Path;
+        }
+
+        /// <summary>
+        /// Resolves a data field on a data source that is a table, a view or another data entity (including their
+        /// extensions), following mapped fields down to the table field.
+        /// </summary>
+        private SourceFieldResolution ResolveSourceField(string source, string fieldName, int depth)
+        {
+            var r = new SourceFieldResolution { Path = source + "." + fieldName };
+            if (depth > 8 || string.IsNullOrEmpty(source) || string.IsNullOrEmpty(fieldName)) return r;
+
+            if (MetaService.GetTable(source) != null)
+            {
+                r.Kind = "table";
+                r.TableField = FindTableField(source, fieldName);
+                r.Found = r.TableField != null;
+                return r;
+            }
+
+            System.Collections.IEnumerable ownFields;
+            Dictionary<string, string> dataSources;
+            var extensionParts = new List<KeyValuePair<System.Collections.IEnumerable, System.Collections.IEnumerable>>();
+            var entity = MetaService.GetDataEntityView(source);
+            if (entity != null)
+            {
+                r.Kind = "entity";
+                ownFields = entity.Fields;
+                dataSources = CollectEntityDataSources(entity);
+                foreach (string key in MetadataProvider.DataEntityViewExtensions.GetPrimaryKeys()
+                             .Where(k => k.StartsWith(source + ".", StringComparison.OrdinalIgnoreCase)))
+                {
+                    var ext = MetadataProvider.DataEntityViewExtensions.Read(key);
+                    if (ext != null) extensionParts.Add(new KeyValuePair<System.Collections.IEnumerable, System.Collections.IEnumerable>(ext.Fields, ext.DataSources));
+                }
+            }
+            else
+            {
+                var view = MetaService.GetView(source);
+                if (view == null) return r;
+                r.Kind = "view";
+                ownFields = view.Fields;
+                dataSources = CollectDataSources(view.ViewMetadata?.DataSources);
+                foreach (object ext in ReadExtensionsOf("AxViewExtension", source))
+                    extensionParts.Add(new KeyValuePair<System.Collections.IEnumerable, System.Collections.IEnumerable>(
+                        ext.GetType().GetProperty("Fields")?.GetValue(ext) as System.Collections.IEnumerable,
+                        ext.GetType().GetProperty("DataSources")?.GetValue(ext) as System.Collections.IEnumerable));
+            }
+
+            object field = FindNamed(ownFields, fieldName);
+            foreach (var part in extensionParts)
+            {
+                foreach (var kv in CollectDataSources(part.Value)) dataSources[kv.Key] = kv.Value;
+                if (field == null) field = FindNamed(part.Key, fieldName);
+            }
+            if (field == null) return r;
+            r.Found = true;
+
+            string ds = field.GetType().GetProperty("DataSource")?.GetValue(field) as string;
+            string df = field.GetType().GetProperty("DataField")?.GetValue(field) as string;
+            if (!string.IsNullOrEmpty(ds) && !string.IsNullOrEmpty(df) && dataSources.TryGetValue(ds, out string inner))
+            {
+                var next = ResolveSourceField(inner, df, depth + 1);
+                r.TableField = next.TableField;
+                r.Path += " -> " + next.Path;
+            }
+            return r;
+        }
+
+        private static object FindNamed(System.Collections.IEnumerable items, string name)
+        {
+            if (items == null) return null;
+            foreach (object item in items)
+                if (string.Equals(item?.GetType().GetProperty("Name")?.GetValue(item) as string, name, StringComparison.OrdinalIgnoreCase))
+                    return item;
+            return null;
+        }
+
+        /// <summary>Extensions "Base.Suffix" of an object, read through the provider collection of the extension type.</summary>
+        private IEnumerable<object> ReadExtensionsOf(string extensionType, string baseName)
+        {
+            object sub = SubProvider(extensionType, out Type type);
+            if (sub == null) yield break;
+            var keys = FindProviderMethod(type, "GetPrimaryKeys")?.Invoke(sub, null) as IEnumerable<string>;
+            var read = FindProviderMethod(type, "Read", typeof(string));
+            if (keys == null || read == null) yield break;
+            foreach (string key in keys.Where(k => k.StartsWith(baseName + ".", StringComparison.OrdinalIgnoreCase)).ToList())
+            {
+                object ext = read.Invoke(sub, new object[] { key });
+                if (ext != null) yield return ext;
+            }
         }
 
         private MetaModelResult CreateDataEntityViewExtension(CreateObjectRequest req, ModelSaveInfo saveInfo)
@@ -118,7 +217,8 @@ namespace XppVsCode.Server.MetaModel
             var report = new StringBuilder("Updated AxDataEntityViewExtension '" + req.ObjectName + "'.");
             var added = plan.Where(p => !p.AlreadyInExtension).ToList();
             if (added.Count > 0)
-                report.Append("\nEntity fields added: " + string.Join(", ", added.Select(p => p.Field.Name + " (" + p.Field.DataSource + "." + p.Field.DataField + ")")));
+                report.Append("\nEntity fields added: " + string.Join(", ", added.Select(p => p.Field.Name + " (" + p.Field.DataSource + "." + p.Field.DataField
+                    + (p.SourcePath != null && p.SourcePath.Contains("->") ? ", resolved " + p.SourcePath : "") + ")")));
             var present = plan.Where(p => p.AlreadyInExtension).ToList();
             if (present.Count > 0)
                 report.Append(typedFields != null
@@ -183,16 +283,18 @@ namespace XppVsCode.Server.MetaModel
                         + ". Available: " + string.Join(", ", dataSources.Select(kv => kv.Key + " (" + kv.Value + ")")) + ".");
                     continue;
                 }
-                var source = FindTableField(table, dto.DataField);
-                if (source == null)
+                var resolved = ResolveSourceField(table, dto.DataField, 0);
+                if (!resolved.Found)
                 {
-                    errors.Add("Field '" + dto.Name + "': field '" + dto.DataField + "' not found on table " + table
-                        + " (data source " + dto.DataSource + ") or its extensions. Add it with an AxTableExtension first.");
+                    string kind = resolved.Kind ?? "table";
+                    string extType = kind == "entity" ? "AxDataEntityViewExtension" : kind == "view" ? "AxViewExtension" : "AxTableExtension";
+                    errors.Add("Field '" + dto.Name + "': field '" + dto.DataField + "' not found on " + kind + " " + table
+                        + " (data source " + dto.DataSource + ") or its extensions. Add it with an " + extType + " first.");
                     continue;
                 }
                 bool inExtension = currentExtension != null
                     && currentExtension.Fields.Any(f => string.Equals(f.Name, dto.Name, StringComparison.OrdinalIgnoreCase));
-                plan.Add(new EntityFieldPlan { Field = dto, Table = table, SourceField = source, AlreadyInExtension = inExtension });
+                plan.Add(new EntityFieldPlan { Field = dto, Table = table, SourceField = resolved.TableField, SourcePath = resolved.Path, AlreadyInExtension = inExtension });
             }
 
             if (errors.Count > 0)
@@ -229,11 +331,17 @@ namespace XppVsCode.Server.MetaModel
 
             var added = new List<string>();
             var skipped = new List<string>();
+            var manual = new List<string>();
             foreach (var p in plan)
             {
                 if (FindTableField(staging, p.Field.Name) != null)
                 {
                     skipped.Add(p.Field.Name);
+                    continue;
+                }
+                if (p.SourceField == null)
+                {
+                    manual.Add(p.Field.Name + " (" + p.SourcePath + " is not a table field)");
                     continue;
                 }
                 // Same field class, EDT/enum and size as the source field; staging rows are never mandatory.
@@ -250,6 +358,7 @@ namespace XppVsCode.Server.MetaModel
                 + " AxTableExtension '" + stagingExtName + "'");
             sb.Append(added.Count > 0 ? "; fields added: " + string.Join(", ", added) : "; no fields added");
             if (skipped.Count > 0) sb.Append("; already present: " + string.Join(", ", skipped));
+            if (manual.Count > 0) sb.Append("; add these to the staging table yourself, with a matching EDT/enum: " + string.Join(", ", manual));
             sb.Append(".");
             if (created)
             {

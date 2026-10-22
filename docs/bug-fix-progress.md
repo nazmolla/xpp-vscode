@@ -46,6 +46,7 @@ deleted by later cases), run `node scripts/tool-regression.js --project C:\Users
 mark Fixed in the test log. `testcust`/TestProj hold the user's current run (`HS*` objects): never change or delete those.
 
 Decisions:
+- #48: full composite entity support this round (user, 2026-10-22).
 - U7: after selecting or creating a project, switch automatically to a multi-root workspace with the project folder and the model folder (user, 2026-10-22).
 
 | Item | Status | Notes |
@@ -53,8 +54,8 @@ Decisions:
 | Log entries #37-#46, U6-U10 committed | Done | `b8e3104` |
 | Baseline regression | 41/42 | #12 #16 case used `SalesTable.testcust` (gone from the user's run); now self-contained (`CustGroup.XvsProbe`) |
 | #39 (+ new #47) | Done | 57/57 pass. Harness has `--issue <regex>` for quick runs. Server built, not yet packaged/released |
-| #40 | In progress | |
-| #41 #42 | Todo | |
+| #40 (+ new #48 composite entities) | Done | 72/72 pass. User asked (2026-10-22) for full AxCompositeDataEntityView create/update + staging checks |
+| #41 #42 | In progress | |
 | #38 | Todo | |
 | #37 | Todo | |
 | #43 #44 | Todo | |

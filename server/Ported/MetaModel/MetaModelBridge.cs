@@ -77,6 +77,7 @@ namespace XppVsCode.Server.MetaModel
                 case "AxSecurityDutyExtension":
                 case "AxSecurityRoleExtension":
                 case "AxDataEntityViewExtension":
+                case "AxCompositeDataEntityView":
                     return true;
                 default:
                     return false;
@@ -139,6 +140,7 @@ namespace XppVsCode.Server.MetaModel
                     case "AxDataEntityViewExtension": result = CreateDataEntityViewExtension(request, saveInfo); break;
                     case "AxLabelFile":      result = CreateLabelFile(request, saveInfo); break;
                     case "AxMenuExtension":  result = CreateMenuExtension(request, saveInfo); break;
+                    case "AxCompositeDataEntityView": result = CreateCompositeDataEntityView(request, saveInfo); break;
 
                     default:
                         result = Fail("Unsupported object type: " + request.ObjectType); break;
@@ -240,6 +242,8 @@ namespace XppVsCode.Server.MetaModel
                         result = UpdateDataEntityViewExtension(request); break;
                     case "AxMenuExtension":
                         result = UpdateMenuExtension(request); break;
+                    case "AxCompositeDataEntityView":
+                        result = UpdateCompositeDataEntityView(request); break;
                     default:
                         result = UpdateGenericByTypedApi(request); break;
                 }
@@ -2861,6 +2865,9 @@ namespace XppVsCode.Server.MetaModel
             if (!string.IsNullOrWhiteSpace(req.TypedMetadataJson))
             {
                 ApplyTypedMetadataGraph(target, req.ObjectType, req.TypedMetadataJson);
+                // properties given next to typedMetadata (or to rootDataEntities) still apply.
+                if (req.Properties != null && req.Properties.Count > 0 && !ApplyPropertyModifications(target, req.Properties))
+                    ApplyProperties(target, req.Properties);
                 return;
             }
 
@@ -2898,6 +2905,9 @@ namespace XppVsCode.Server.MetaModel
             if (!string.IsNullOrWhiteSpace(req.TypedMetadataJson))
             {
                 ApplyTypedMetadataGraph(target, req.ObjectType, req.TypedMetadataJson);
+                // properties given next to typedMetadata (or to rootDataEntities) still apply.
+                if (req.Properties != null && req.Properties.Count > 0 && !ApplyPropertyModifications(target, req.Properties))
+                    ApplyProperties(target, req.Properties);
                 return;
             }
 

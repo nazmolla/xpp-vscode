@@ -192,6 +192,7 @@ namespace XppVsCode.Server.MetaModel
 
             // Fallback: Copilot may stuff typed metadata into "metadata" as a JSON string
             error = NormalizeFromMetadata(body, req);
+            if (req.TypedMetadataJson == null) req.TypedMetadataJson = RootDataEntitiesAsTypedMetadata(body);
             if (error != null)
                 return SerializeResult(new MetaModelResult { Success = false, Message = error });
 
@@ -280,6 +281,7 @@ namespace XppVsCode.Server.MetaModel
 
             // Fallback: Copilot may stuff typed metadata into "metadata" as a JSON string
             error = NormalizeFromMetadata(body, req);
+            if (req.TypedMetadataJson == null) req.TypedMetadataJson = RootDataEntitiesAsTypedMetadata(body);
             if (error != null)
                 return SerializeResult(new MetaModelResult { Success = false, Message = error });
 
@@ -1255,6 +1257,24 @@ namespace XppVsCode.Server.MetaModel
             }
             if (bracketEnd < 0) return null;
             return json.Substring(bracketStart, bracketEnd - bracketStart + 1);
+        }
+
+        // rootDataEntities (AxCompositeDataEntityView) is the typed graph's RootDataEntities with camelCase keys.
+        private static string RootDataEntitiesAsTypedMetadata(string body)
+        {
+            string array = ExtractJsonArray(body, "rootDataEntities");
+            if (array == null) return null;
+            var serializer = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue, RecursionLimit = 64 };
+            object PascalCase(object node)
+            {
+                if (node is Dictionary<string, object> dict)
+                    return dict.ToDictionary(kv => kv.Key.Length > 0 && kv.Key[0] != '$' ? char.ToUpperInvariant(kv.Key[0]) + kv.Key.Substring(1) : kv.Key,
+                        kv => PascalCase(kv.Value));
+                if (node is object[] items) return items.Select(PascalCase).ToArray();
+                if (node is System.Collections.ArrayList list) return list.Cast<object>().Select(PascalCase).ToArray();
+                return node;
+            }
+            return serializer.Serialize(new Dictionary<string, object> { ["RootDataEntities"] = PascalCase(serializer.DeserializeObject(array)) });
         }
 
         private static string ExtractJsonObjectRaw(string json, string key)
