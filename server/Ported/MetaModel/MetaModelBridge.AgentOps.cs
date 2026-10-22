@@ -175,6 +175,7 @@ namespace XppVsCode.Server.MetaModel
                 return json.Serialize(Failure("Objects of type " + objectType + " cannot be deleted through the metadata API."));
             if (checkOnly)
                 return json.Serialize(new Dictionary<string, object> { ["success"] = true, ["message"] = "Can be deleted." });
+            RememberFieldsOfDeleted(objectType, objectName);
             delete.Invoke(sub, new object[] { objectName, saveInfo });
             if (labelContent != null && File.Exists(labelContent))
                 File.Delete(labelContent);

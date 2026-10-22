@@ -80,6 +80,9 @@ namespace XppVsCode.Server.MetaModel
 
             int count = 0;
             var root = ElementNode(element, objectName, element.GetType().Name, new List<string>(), "element", ref count);
+            string baseType = BaseTypeOfExtension(objectType);
+            if (baseType != null)
+                MergeBaseTree(root, baseType, objectName.Split('.')[0], ref count);
             return json.Serialize(new Dictionary<string, object>
             {
                 ["success"] = true,
@@ -88,6 +91,7 @@ namespace XppVsCode.Server.MetaModel
                 ["model"] = model,
                 ["editable"] = IsCustomModel(model),
                 ["root"] = root,
+                ["baseType"] = baseType,
                 ["truncated"] = count > MaxElementNodes,
             });
         }
@@ -163,6 +167,72 @@ namespace XppVsCode.Server.MetaModel
             _elementCacheModel = model;
             _elementCacheTime = DateTime.UtcNow;
             return element;
+        }
+
+        private static readonly Dictionary<string, string> ExtensionBaseTypes = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["AxTableExtension"] = "AxTable", ["AxFormExtension"] = "AxForm", ["AxEnumExtension"] = "AxEnum", ["AxEdtExtension"] = "AxEdt",
+            ["AxDataEntityViewExtension"] = "AxDataEntityView", ["AxViewExtension"] = "AxView", ["AxMapExtension"] = "AxMap",
+            ["AxMenuExtension"] = "AxMenu", ["AxQuerySimpleExtension"] = "AxQuery", ["AxSecurityDutyExtension"] = "AxSecurityDuty",
+            ["AxSecurityRoleExtension"] = "AxSecurityRole", ["AxMenuItemDisplayExtension"] = "AxMenuItemDisplay",
+            ["AxMenuItemActionExtension"] = "AxMenuItemAction", ["AxMenuItemOutputExtension"] = "AxMenuItemOutput",
+            ["AxTileExtension"] = "AxTile", ["AxWorkflowApprovalExtension"] = "AxWorkflowApproval", ["AxWorkflowTaskExtension"] = "AxWorkflowTask",
+        };
+
+        private static string BaseTypeOfExtension(string objectType) =>
+            objectType != null && ExtensionBaseTypes.TryGetValue(objectType, out string b) ? b : null;
+
+        /// <summary>
+        /// An extension's designer shows the base element's nodes (read-only, "inherited", with the base element as their
+        /// source) and the extension's own nodes merged into the same folders ("own"), like Visual Studio's extension designer.
+        /// </summary>
+        private void MergeBaseTree(Dictionary<string, object> extRoot, string baseType, string baseName, ref int count)
+        {
+            object baseElement = ReadElementCachedBase(baseType, baseName);
+            if (baseElement == null) return;
+            var baseRoot = ElementNode(baseElement, baseName, baseElement.GetType().Name, new List<string>(), "element", ref count);
+            var source = new Dictionary<string, object> { ["objectType"] = baseType, ["objectName"] = baseName };
+            MarkInherited(baseRoot, source);
+
+            var extChildren = (List<object>)extRoot["children"];
+            foreach (var child in extChildren.Cast<Dictionary<string, object>>()) MarkOwn(child);
+            var merged = new List<object>();
+            var used = new HashSet<Dictionary<string, object>>();
+            foreach (var baseChild in ((List<object>)baseRoot["children"]).Cast<Dictionary<string, object>>())
+            {
+                var same = extChildren.Cast<Dictionary<string, object>>().FirstOrDefault(e =>
+                    (string)e["kind"] == "folder" && (string)baseChild["kind"] == "folder" && Equals(e["type"], baseChild["type"]));
+                if (same != null)
+                {
+                    used.Add(same);
+                    var items = (List<object>)baseChild["children"];
+                    items.AddRange((List<object>)same["children"]);
+                    baseChild["own"] = false;
+                }
+                merged.Add(baseChild);
+            }
+            // Folders only extensions have (field modifications, property modifications, ...) keep their place at the end.
+            merged.AddRange(extChildren.Cast<Dictionary<string, object>>().Where(e => !used.Contains(e)));
+            extRoot["children"] = merged;
+        }
+
+        private object ReadElementCachedBase(string baseType, string baseName)
+        {
+            try { return ReadViaMetadataProvider(baseType, baseName, out _); }
+            catch { return null; }
+        }
+
+        private static void MarkInherited(Dictionary<string, object> node, Dictionary<string, object> source)
+        {
+            node["inherited"] = true;
+            node["source"] = source;
+            foreach (var child in ((List<object>)node["children"]).Cast<Dictionary<string, object>>()) MarkInherited(child, source);
+        }
+
+        private static void MarkOwn(Dictionary<string, object> node)
+        {
+            node["own"] = true;
+            foreach (var child in ((List<object>)node["children"]).Cast<Dictionary<string, object>>()) MarkOwn(child);
         }
 
         private Dictionary<string, object> ElementNode(object obj, string name, string type, List<string> path, string kind, ref int count)

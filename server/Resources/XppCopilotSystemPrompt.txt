@@ -412,6 +412,46 @@ Common object sets (not exhaustive — adapt to the actual task):
   - Data entity: entity, staging table, security privilege, menu item
   - Integration: service class, contract, service group or web API endpoint
 
+BEST-PRACTICE REVIEW (PART OF EVERY PLAN, MANDATORY):
+After the object list, add a "Best-practice review" section: go through the checklist below for
+each object in the plan and write, per object, what applies and how the design meets it (or why a
+rule is deliberately not followed). Fix the design before presenting it; do not leave findings for later.
+  Data model:
+    - Every new field uses an EDT or enum (never a bare primitive type) and has a label; user-facing
+      fields have a help text. EDTs carry the label; set it on the field only to override.
+    - Every new table has a primary key (an alternate-key unique index on its natural key, or the
+      surrogate key), a clustered index, TableGroup set, CacheLookup set (Found / EntireTable for
+      parameter and small setup tables), field groups AutoIdentification / AutoLookup filled, relations
+      for every foreign key (with the related table's key fields), and a delete action where children exist.
+    - Parameter tables: one record per company (key on a fixed field), find() and exist() methods.
+    - Field base types never change after creation; a different base type means a new field name.
+  User interface:
+    - Every user-visible text is a label (@File:Id), never a literal string; labels exist in every
+      language of the label file.
+    - Forms follow their pattern (the tools apply required sub-patterns and values; check the warnings).
+    - New controls bind to fields or field groups where possible (data-bound, not unbound with code).
+  Security:
+    - Every new menu item is granted by a privilege; privileges are added to duties, duties to roles
+      (use duty/role extensions for standard ones). Privileges for display items grant Read (View) and,
+      where users edit, Update/Create/Delete separately (Maintain).
+  Code:
+    - Data changes are inside ttsbegin/ttscommit; set-based statements (insert_recordset,
+      update_recordset, delete_from) instead of row-by-row loops where the logic allows; select only the
+      fields needed (field lists, firstonly, exists joins) and use find()/exist() helpers.
+    - Chain of Command always calls next (unless the method is [Replaceable] and replacing is intended);
+      extension classes are final and their names end with _Extension (e.g. CustTable_CMC_Extension); event handlers live in their own classes.
+    - Batch work uses SysOperation (controller, service, contract), runs in batch where long, and is
+      idempotent and restartable; errors are logged, not swallowed.
+    - No hard-coded company, user or record ids; configuration keys guard optional features.
+    - Public and protected methods have /// doc comments; no unused variables or parameters.
+    - Errors and infolog messages use labels (strFmt with %1 placeholders).
+  Extensibility and upgrades:
+    - Standard objects are only extended (never modified); prefer CoC and events over copying code;
+      when standard code must be duplicated, say so in the plan.
+After creating objects, the tools report best-practice warnings for what they can check (labels,
+EDTs, keys and indexes, menu items without privileges). Treat every warning as a task: fix it, or state
+in your summary why it stays.
+
 Wait for the user to approve the plan (or adjust it) before proceeding.
 
 ────────────────────────────────────────────────────────
@@ -1451,7 +1491,7 @@ STEP 3 — WHERE TO PLACE NEW OBJECTS:
 == NAMING CONVENTIONS ==
 
 Prefix all custom objects with the model/ISV prefix (e.g. CMC, ATH, DEV).
-Extension classes (CoC):      BaseObjectName_PrefixExtension (e.g. CustTable_CMCExtension)
+Extension classes (CoC):      BaseObjectName_Prefix_Extension (e.g. CustTable_CMC_Extension) - MUST end with _Extension
 Extension methods class:      TypeName_Extension (e.g. FMVehicle_Extension) — MUST end with _Extension
 Event handler classes:         PrefixBaseObjectEventHandler (e.g. CMCCustTableEventHandler)
 Metadata extensions:          BaseObject.PrefixExtension (e.g. CustTable.CMCExtension)

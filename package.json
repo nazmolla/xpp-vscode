@@ -2,7 +2,7 @@
   "name": "xpp-vscode",
   "displayName": "F&O Studio for VS Code",
   "description": "A full Dynamics 365 Finance & Operations development environment in VS Code: Application Explorer, designers, X++ code, build, deploy, debugging, and AI agent tools.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "publisher": "MNazmi",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -196,7 +196,7 @@
       {
         "view": "xpp.project",
         "when": "xpp.hasProject",
-        "contents": "The project has no objects yet. Add objects with Add to Project in the Application Explorer, create them with the agent tools, or select another project.\n[Select D365FO Project](command:xpp.selectProject)\n[Create D365FO Project](command:xpp.createProject)"
+        "contents": "The project has no objects yet. Add objects with Add to Project in the Application Explorer or create them with the agent tools. To switch projects, use the Select or Create D365FO Project buttons in this view's title bar."
       }
     ],
     "commands": [

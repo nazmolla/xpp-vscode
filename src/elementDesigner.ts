@@ -113,7 +113,7 @@ export class ElementDesigner {
             case 'refresh':
                 return this.loadTree();
             case 'select':
-                return this.loadProperties(message.path);
+                return this.loadProperties(message.path, message.source ?? undefined);
             case 'setProperty':
                 return this.setProperty(message.path, message.property, message.value);
             case 'openMethod':
@@ -261,10 +261,16 @@ export class ElementDesigner {
         await this.changed(path.slice(0, -1));
     }
 
-    private async loadProperties(path: string[]): Promise<void> {
-        const result = await this.server.bridge('get_element_properties', { objectType: this.objectType, objectName: this.objectName, path });
+    /** Properties of a node; base element nodes in an extension's designer are read from the base element, read-only. */
+    private async loadProperties(path: string[], source?: { objectType: string; objectName: string }): Promise<void> {
+        const result = await this.server.bridge('get_element_properties', {
+            objectType: source?.objectType ?? this.objectType, objectName: source?.objectName ?? this.objectName, path,
+        });
         if (!result.success) {
             throw new Error(result.message);
+        }
+        if (source) {
+            result.editable = false;
         }
         this.post({ type: 'properties', path, data: result });
     }

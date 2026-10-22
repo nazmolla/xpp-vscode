@@ -18,6 +18,9 @@ namespace XppVsCode.Server.MetaModel
         public string ExtendedDataType { get; set; }
         public string EnumType { get; set; }
         public string Label { get; set; }
+        public string HelpText { get; set; }
+        // updateFields: other field properties (Mandatory, AllowEdit, StringSize, ...).
+        public Dictionary<string, string> Properties { get; set; }
     }
 
     public sealed class IndexDto
@@ -26,6 +29,8 @@ namespace XppVsCode.Server.MetaModel
         public bool AllowDuplicates { get; set; }
         // False when the caller did not pass allowDuplicates; validation then skips the check.
         public bool AllowDuplicatesSpecified { get; set; }
+        // Unique index that is the table's natural key (AlternateKey = Yes).
+        public bool AlternateKey { get; set; }
         public List<string> Fields { get; set; } = new List<string>();
     }
 
@@ -227,6 +232,12 @@ namespace XppVsCode.Server.MetaModel
         public List<FormControlDto> UpdateControls { get; set; }
         public List<string> RemoveControls { get; set; }
         public List<string> RemoveControlModifications { get; set; }
+        // AxTable / AxTableExtension: change or remove what the object itself defines.
+        public List<FieldDto> UpdateFields { get; set; }
+        public List<string> RemoveFields { get; set; }
+        public List<string> RemoveIndexes { get; set; }
+        public List<string> RemoveFieldGroups { get; set; }
+        public List<string> RemoveRelations { get; set; }
     }
 
     // ── Result DTOs ──

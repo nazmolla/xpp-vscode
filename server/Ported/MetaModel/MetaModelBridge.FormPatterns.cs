@@ -23,11 +23,31 @@ namespace XppVsCode.Server.MetaModel
         /// Sets property values required by the form's patterns (Equals restrictions) on the controls this request adds.
         /// Works on the unsaved extension; returns one line per value set.
         /// </summary>
-        private List<string> ApplyPatternRequiredProperties(string baseForm, AxFormExtension ext, ICollection<string> newControls)
+        private List<string> ApplyPatternRequiredProperties(string baseForm, AxFormExtension ext, ICollection<string> newControls,
+            ICollection<string> updatedControls = null)
         {
             var applied = new List<string>();
-            if (newControls == null || newControls.Count == 0) return applied;
-            var wanted = new HashSet<string>(newControls, StringComparer.OrdinalIgnoreCase);
+            var added = new HashSet<string>(newControls ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+            var wanted = new HashSet<string>(added.Concat(updatedControls ?? new List<string>()), StringComparer.OrdinalIgnoreCase);
+            if (wanted.Count == 0) return applied;
+
+            // A pattern name with a missing or unknown version gets the pattern's latest version.
+            foreach (string name in wanted)
+            {
+                var own = FindOwnControl(ext, name);
+                if (!(own?.Control is IPatternable p) || string.IsNullOrEmpty(p.Pattern)
+                    || string.Equals(p.Pattern, "Custom", StringComparison.OrdinalIgnoreCase)) continue;
+                Pattern exact = null;
+                try { exact = string.IsNullOrEmpty(p.PatternVersion) ? null : Patterns.GetPatternByName(p.Pattern, p.PatternVersion, false); }
+                catch { }
+                if (exact != null) continue;
+                var latest = LatestPattern(p.Pattern);
+                if (latest == null) continue;
+                string before = p.PatternVersion;
+                p.PatternVersion = latest.Version;
+                applied.Add(name + ".PatternVersion = " + latest.Version + " (latest version of " + p.Pattern
+                    + (string.IsNullOrEmpty(before) ? "" : "; " + before + " does not exist") + ")");
+            }
             var settled = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             for (int pass = 0; pass < 3; pass++)
@@ -45,7 +65,7 @@ namespace XppVsCode.Server.MetaModel
                     PatternResult result;
                     try { result = new PatternAnalyzer().TestPattern(patterned, pattern, null); }
                     catch { continue; }
-                    CollectEqualsViolations(result, pattern, wanted, fixes, visited, 0);
+                    CollectEqualsViolations(result, pattern, wanted, added, fixes, visited, 0);
                 }
 
                 bool changed = false;
@@ -137,7 +157,7 @@ namespace XppVsCode.Server.MetaModel
                     yield return p;
         }
 
-        private static void CollectEqualsViolations(PatternResult result, Pattern pattern, HashSet<string> wanted,
+        private static void CollectEqualsViolations(PatternResult result, Pattern pattern, HashSet<string> wanted, HashSet<string> added,
             List<Tuple<string, string, string, string>> fixes, HashSet<object> visited, int depth)
         {
             if (result == null || depth > 30 || !visited.Add(result)) return;
@@ -145,25 +165,52 @@ namespace XppVsCode.Server.MetaModel
             if (name != null && wanted.Contains(name) && result.Violations != null)
                 foreach (var v in result.Violations.Where(v => v.Op == PropertyViolation.Operator.Equals))
                     fixes.Add(Tuple.Create(name, v.PropertyName, v.PatternValue ?? "", pattern.FriendlyName ?? pattern.Name));
+            // A container placed where the pattern expects a sub-pattern (e.g. a TabPage in a Details or Table of contents
+            // tab) gets the first one allowed there, as Visual Studio proposes; its required values follow in the next pass.
+            if (name != null && added.Contains(name) && result.Control is IPatternable patternable && string.IsNullOrEmpty(patternable.Pattern)
+                && depth > 0 && result.Node?.SubPatterns != null)
+            {
+                string sub = result.Node.SubPatterns.FirstOrDefault(p => !string.IsNullOrEmpty(p) && !string.Equals(p, "Custom", StringComparison.OrdinalIgnoreCase));
+                var latest = sub == null ? null : LatestPattern(sub);
+                if (latest != null)
+                {
+                    fixes.Add(Tuple.Create(name, "Pattern", latest.Name, pattern.FriendlyName ?? pattern.Name));
+                    fixes.Add(Tuple.Create(name, "PatternVersion", latest.Version, pattern.FriendlyName ?? pattern.Name));
+                }
+            }
             if (result.ChildResults == null) return;
             foreach (var list in result.ChildResults.Values)
                 foreach (var child in list)
-                    CollectEqualsViolations(child, pattern, wanted, fixes, visited, depth + 1);
+                    CollectEqualsViolations(child, pattern, wanted, added, fixes, visited, depth + 1);
+        }
+
+        private static Pattern LatestPattern(string name)
+        {
+            try
+            {
+                return Patterns.GetPatternsByName(name, false)?.Where(p => p != null && p.Active)
+                    .OrderByDescending(p => Version.TryParse(p.Version, out var v) ? v : new Version(0, 0)).FirstOrDefault();
+            }
+            catch { return null; }
         }
 
         /// <summary>The diagnostics the build would report for this form extension (compiler validators on saved metadata).
-        /// Pattern errors are attributed to any extension of the form, so the pattern check runs for all of them.</summary>
-        private List<DiagnosticItem> RunFormExtensionValidators(AxFormExtension ext)
+        /// The pattern validator reports a broken pattern under the extension that changed it (and again under every
+        /// extension of the form, each run rebuilding the merged form: about 1.5 s per extension, a minute on SalesTable),
+        /// so it runs on this extension and on the extensions whose controls this request modifies.</summary>
+        private List<DiagnosticItem> RunFormExtensionValidators(AxFormExtension ext, IEnumerable<string> alsoCheck = null)
         {
             var sink = new DiagnosticsHandler();
             string baseForm = ExtensionBaseName(ext.Name);
             var targets = new List<KeyValuePair<Validator<AxFormExtension>, AxFormExtension>>
             {
-                new KeyValuePair<Validator<AxFormExtension>, AxFormExtension>(new AxFormExtensionValidator(), ext)
+                new KeyValuePair<Validator<AxFormExtension>, AxFormExtension>(ScopedFormExtensionValidator(ext, baseForm), ext),
+                new KeyValuePair<Validator<AxFormExtension>, AxFormExtension>(new AxFormExtensionPatternValidator(), ext),
             };
-            foreach (string name in GetExtensionNames(MetadataProvider.FormExtensions.GetPrimaryKeys(), baseForm))
+            foreach (string name in (alsoCheck ?? Enumerable.Empty<string>()).Where(n => !string.IsNullOrEmpty(n))
+                         .Distinct(StringComparer.OrdinalIgnoreCase).Where(n => !string.Equals(n, ext.Name, StringComparison.OrdinalIgnoreCase)))
             {
-                var other = string.Equals(name, ext.Name, StringComparison.OrdinalIgnoreCase) ? ext : MetadataProvider.FormExtensions.Read(name);
+                var other = MetadataProvider.FormExtensions.Read(name);
                 if (other != null)
                     targets.Add(new KeyValuePair<Validator<AxFormExtension>, AxFormExtension>(new AxFormExtensionPatternValidator(), other));
             }
@@ -173,10 +220,13 @@ namespace XppVsCode.Server.MetaModel
                 var uri = new Uri("dynamics://Metadata/AxFormExtension/" + Uri.EscapeDataString(target.Value.Name));
                 try
                 {
-                    validator.Initialize(MetadataProvider);
+                    var watch = System.Diagnostics.Stopwatch.StartNew();
+                    if (!(validator is AxFormExtensionValidator)) validator.Initialize(MetadataProvider);   // scoped validators come initialized
+                    long init = watch.ElapsedMilliseconds;
                     int before = sink.Diagnostics().Count();
                     validator.Validate(ObjectCloner.MakeCopy(target.Value), uri, MetadataProvider, sink, null, ModelCustomizationLevel.Allow);
-                    BridgeLogStatic("form extension validator " + validator.GetType().Name + " on " + target.Value.Name + ": " + (sink.Diagnostics().Count() - before) + " diagnostic(s)");
+                    BridgeLogStatic("form extension validator " + validator.GetType().Name + " on " + target.Value.Name + ": " + (sink.Diagnostics().Count() - before)
+                        + " diagnostic(s), init " + init + " ms, validate " + (watch.ElapsedMilliseconds - init) + " ms");
                 }
                 catch (Exception ex)
                 {
@@ -184,6 +234,130 @@ namespace XppVsCode.Server.MetaModel
                 }
             }
             return sink.Diagnostics().Where(d => !d.Ignored).ToList();
+        }
+
+        // AxFormExtensionValidator builds the list of tables extended by other tables (all tables: about a minute) once per
+        // instance, so one instance is kept for the server's lifetime and that list is built in the background at start.
+        private static readonly object FormExtensionValidatorLock = new object();
+        private static AxFormExtensionValidator _formExtensionValidator;
+
+        private AxFormExtensionValidator SharedFormExtensionValidator()
+        {
+            lock (FormExtensionValidatorLock)
+            {
+                if (_formExtensionValidator == null)
+                {
+                    var validator = new AxFormExtensionValidator();
+                    validator.Initialize(MetadataProvider);
+                    _formExtensionValidator = validator;
+                }
+                return _formExtensionValidator;
+            }
+        }
+
+        /// <summary>
+        /// AxFormExtensionValidator validates and merges every other extension of the form before checking this one (about
+        /// 1.5 s each: a minute on SalesTable). Its extension loader is replaced by one that lists only this extension and the
+        /// extensions it builds on (their controls are its parents, previous siblings or modified controls, their data sources
+        /// its references), in the same precedence order. Errors in unrelated extensions are not this change's anyway.
+        /// </summary>
+        private AxFormExtensionValidator ScopedFormExtensionValidator(AxFormExtension ext, string baseForm)
+        {
+            var validator = new AxFormExtensionValidator();
+            validator.Initialize(MetadataProvider);
+            try
+            {
+                var flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+                var shared = SharedFormExtensionValidator();
+                var listField = typeof(AxFormExtensionValidator).GetField("tableExtendedByList", flags);
+                if (listField?.GetValue(shared) != null) listField.SetValue(validator, listField.GetValue(shared));
+
+                var keep = FormExtensionDependencies(ext, baseForm);
+                var loader = new FormExtensionLoader(MetadataProvider);
+                var lazyField = typeof(ExtensionLoader<AxFormExtension>).GetField("runTimeExtensionList", flags);
+                var all = (IDictionary<string, ExtensionList>)((Lazy<IDictionary<string, ExtensionList>>)lazyField.GetValue(loader)).Value;
+                if (all.TryGetValue(baseForm, out var full))
+                {
+                    var precedence = (System.Collections.IDictionary)typeof(ExtensionList).GetField("Precedence", flags).GetValue(full);
+                    var scoped = new ExtensionList();
+                    foreach (string name in full.GetSortedNames().Where(n => keep.Contains(n)))
+                        scoped.AddNameToList(name, (PrecedenceValue)precedence[name]);
+                    // A copy: the original dictionary can be the provider's shared extension list cache.
+                    var copy = new System.Collections.Concurrent.ConcurrentDictionary<string, ExtensionList>(all, StringComparer.OrdinalIgnoreCase);
+                    copy[baseForm] = scoped;
+                    lazyField.SetValue(loader, new Lazy<IDictionary<string, ExtensionList>>(() => copy));
+                    typeof(AxFormExtensionValidator).GetField("formExtensionLoader", flags).SetValue(validator, loader);
+                    BridgeLogStatic("form extension validator scoped to " + scoped.GetSortedNames().Count + " of " + full.GetSortedNames().Count + " extensions of " + baseForm);
+                }
+            }
+            catch (Exception ex)
+            {
+                BridgeLogStatic("form extension validator scoping failed, validating against all extensions: " + (ex.InnerException ?? ex).Message);
+            }
+            return validator;
+        }
+
+        /// <summary>This extension and, transitively, the extensions whose controls or data sources it builds on.</summary>
+        private HashSet<string> FormExtensionDependencies(AxFormExtension ext, string baseForm)
+        {
+            var keep = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ext.Name };
+            var effective = BuildEffectiveForm(baseForm, ObjectCloner.MakeCopy(ext));
+            if (effective == null) return keep;
+            var queue = new Queue<AxFormExtension>(new[] { ext });
+            while (queue.Count > 0)
+            {
+                var current = queue.Dequeue();
+                var names = new List<string>();
+                foreach (var c in current.Controls ?? Enumerable.Empty<AxFormExtensionControl>())
+                {
+                    names.Add(c.Parent);
+                    names.Add(c.PreviousSibling);
+                }
+                foreach (var m in current.ControlModifications ?? Enumerable.Empty<AxExtensionModification>()) names.Add(m.Name);
+                var owners = names.Where(n => !string.IsNullOrEmpty(n))
+                    .Select(n => effective.ByName.TryGetValue(n, out var node) ? node.AddedBy : null).ToList();
+                foreach (var r in current.DataSourceReferences ?? Enumerable.Empty<AxFormExtensionDataSourceReference>())
+                    if (!string.IsNullOrEmpty(r.Parent) && effective.DataSourceAddedBy != null && effective.DataSourceAddedBy.TryGetValue(r.Parent, out string dsOwner))
+                        owners.Add(dsOwner);
+                foreach (var ds in current.DataSources ?? Enumerable.Empty<AxFormDataSourceRoot>())
+                {
+                    string joinSource = GetStringProperty(ds, "JoinSource");
+                    if (!string.IsNullOrEmpty(joinSource) && effective.DataSourceAddedBy != null && effective.DataSourceAddedBy.TryGetValue(joinSource, out string joinOwner))
+                        owners.Add(joinOwner);
+                }
+                foreach (string owner in owners.Where(o => !string.IsNullOrEmpty(o)))
+                    if (keep.Add(owner))
+                    {
+                        var other = MetadataProvider.FormExtensions.Read(owner);
+                        if (other != null) queue.Enqueue(other);
+                    }
+            }
+            return keep;
+        }
+
+        /// <summary>Builds the validator's table inheritance list in the background, so the first form extension check is fast.</summary>
+        private static int _formExtensionValidatorWarming;
+
+        internal void WarmFormExtensionValidator()
+        {
+            if (System.Threading.Interlocked.Exchange(ref _formExtensionValidatorWarming, 1) == 1) return;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    var watch = System.Diagnostics.Stopwatch.StartNew();
+                    var provider = MetadataProvider;
+                    if (provider == null) return;
+                    var validator = SharedFormExtensionValidator();
+                    typeof(AxFormExtensionValidator).GetMethod("GetTableExtendedByList", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+                        ?.Invoke(validator, new object[] { provider });
+                    BridgeLogStatic("form extension validator warmed in " + watch.ElapsedMilliseconds + " ms");
+                }
+                catch (Exception ex)
+                {
+                    BridgeLogStatic("form extension validator warm-up failed: " + (ex.InnerException ?? ex).Message);
+                }
+            });
         }
 
         private static string FormatDiagnostic(DiagnosticItem d)

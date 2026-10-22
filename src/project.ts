@@ -87,7 +87,13 @@ export async function selectProject(): Promise<void> {
         }
         file = chosen[0].fsPath;
     }
-    await vscode.workspace.getConfiguration('xpp').update('project', file, vscode.ConfigurationTarget.Global);
+    const config = vscode.workspace.getConfiguration('xpp');
+    const unchanged = (config.get<string>('project') ?? '').toLowerCase() === file.toLowerCase();
+    await config.update('project', file, vscode.ConfigurationTarget.Global);
+    // Re-selecting the configured project changes no setting, so the workspace is not synced by the setting listener.
+    if (unchanged) {
+        await syncWorkspaceFolders();
+    }
 }
 
 const ProjectTypeGuid = 'fc65038c-1b2f-41e1-a629-bed71d161fff';

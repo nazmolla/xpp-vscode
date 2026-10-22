@@ -74,6 +74,8 @@ body.has-preview main {
 .icon.method { color: var(--vscode-symbolIcon-methodForeground, var(--vscode-charts-purple)); }
 .icon.event, .icon.codicon-zap { color: var(--vscode-charts-yellow); }
 .row.selected .icon { color: inherit; }
+/* Extension designer: the extension's own nodes in bold, the base element's nodes as they are (read-only). */
+.row.own .name { font-weight: 600; }
 
 .props-header { font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--vscode-panel-border); }
 table.props { border-collapse: collapse; width: 100%; }

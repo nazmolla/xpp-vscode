@@ -185,6 +185,7 @@ namespace XppVsCode.Server.MetaModel
 
         private EffectiveForm BuildEffectiveForm(string formName, AxFormExtension pending = null)
         {
+            WarmFormExtensionValidator();
             var baseForm = MetaService.GetForm(formName);
             if (baseForm == null) return null;
 
@@ -316,17 +317,25 @@ namespace XppVsCode.Server.MetaModel
             if (saveInfo == null) return Fail(error);
 
             string baseForm = req.ObjectName.Substring(0, req.ObjectName.IndexOf('.'));
+            var phase = System.Diagnostics.Stopwatch.StartNew();
+            void Phase(string what) { BridgeLogStatic("update form extension " + req.ObjectName + ": " + what + " " + phase.ElapsedMilliseconds + " ms"); phase.Restart(); }
             var before = BuildEffectiveForm(baseForm);
             if (before == null)
                 return Fail("Base form '" + baseForm + "' not found.");
+            Phase("effective form");
 
             var errors = ValidateFormExtensionRequest(before, req);
             ValidateOwnControlChanges(ext, before, req, errors);
             if (errors.Count > 0) return Fail(FormatPlacementErrors(errors));
+            Phase("request checks");
 
             var original = ObjectCloner.MakeCopy(ext);
+            // Other extensions whose controls this request changes (their pattern checks can break too).
+            var touched = (req.ControlModifications ?? new List<ControlModificationDto>())
+                .Select(m => before.ByName.TryGetValue(m.Name ?? "", out var n) ? n.AddedBy : null).Where(n => n != null).ToList();
             // Errors the build already reports for this form, so only errors this request introduces block it.
-            var errorsBefore = new HashSet<string>(RunFormExtensionValidators(ext).Where(IsErrorSeverity).Select(FormatDiagnostic));
+            var errorsBefore = new HashSet<string>(RunFormExtensionValidators(ext, touched).Where(IsErrorSeverity).Select(FormatDiagnostic));
+            Phase("validators before");
             ApplyTypedMetadata(ext, req);
             ApplyFormExtensionDataSources(ext, req.DataSources);
             var ownReport = ApplyOwnControlChanges(ext, before, req, out var moved);
@@ -339,14 +348,19 @@ namespace XppVsCode.Server.MetaModel
             // refused below with the build's own message, so a wrong guess is never saved).
             var newControlNames = new Dictionary<string, FormControlDto>(StringComparer.OrdinalIgnoreCase);
             FlattenControls(req.Controls ?? new List<FormControlDto>(), newControlNames);
-            var patternApplied = ApplyPatternRequiredProperties(baseForm, ext, newControlNames.Keys.ToList());
+            // Own controls changed by updateControls get the values their (possibly new) pattern requires too.
+            var patternApplied = ApplyPatternRequiredProperties(baseForm, ext, newControlNames.Keys.ToList(),
+                (req.UpdateControls ?? new List<FormControlDto>()).Select(u => u.Name).Where(n => !string.IsNullOrEmpty(n)).ToList());
+            Phase("pattern values");
 
             MetadataProvider.FormExtensions.Update(ext, saveInfo);
+            Phase("save");
 
             // The compiler's form extension checks read the saved metadata; errors this request introduces (directly or by
             // changing a container's contents) restore the previous version, so the build is never left broken.
-            var diagnostics = RunFormExtensionValidators(MetadataProvider.FormExtensions.Read(req.ObjectName) ?? ext);
+            var diagnostics = RunFormExtensionValidators(MetadataProvider.FormExtensions.Read(req.ObjectName) ?? ext, touched);
             var blocking = diagnostics.Where(d => IsErrorSeverity(d) && !errorsBefore.Contains(FormatDiagnostic(d))).ToList();
+            Phase("validators after");
             if (blocking.Count > 0)
             {
                 MetadataProvider.FormExtensions.Update(original, saveInfo);
@@ -359,6 +373,7 @@ namespace XppVsCode.Server.MetaModel
             var toVerify = new List<FormControlDto>(req.Controls ?? new List<FormControlDto>());
             toVerify.AddRange(moved);
             var placement = VerifyFormPlacement(baseForm, toVerify, before);
+            Phase("placement");
             if (req.RemoveControls != null && req.RemoveControls.Count > 0)
             {
                 var after = BuildEffectiveForm(baseForm);

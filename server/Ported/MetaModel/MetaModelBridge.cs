@@ -52,6 +52,9 @@ namespace XppVsCode.Server.MetaModel
 
         private IMetadataProvider MetadataProvider => _host.Provider;
 
+        // What ApplyTableChanges did in the current update (reported after a successful save).
+        private List<string> _tableChangeReport;
+
         // ── Object CRUD ──
 
         private static bool HasTypedUpdateSupport(string objectType)
@@ -107,6 +110,8 @@ namespace XppVsCode.Server.MetaModel
                     string tableName = request.ObjectType == "AxTable" ? request.ObjectName : request.ObjectName.Split('.')[0];
                     string relationError = ValidateRelations(tableName, request.Fields, request.Relations);
                     if (relationError != null) return Fail(relationError);
+                    string fieldError = ValidateTableChanges(request.ObjectType, request.ObjectName, request.Fields, null);
+                    if (fieldError != null) return Fail(fieldError);
                 }
 
                 MetaModelResult result;
@@ -197,7 +202,10 @@ namespace XppVsCode.Server.MetaModel
                     string tableName = request.ObjectType == "AxTable" ? request.ObjectName : request.ObjectName.Split('.')[0];
                     string relationError = ValidateRelations(tableName, request.Fields, request.Relations);
                     if (relationError != null) return Fail(relationError);
+                    string fieldError = ValidateTableChanges(request.ObjectType, request.ObjectName, request.Fields, request);
+                    if (fieldError != null) return Fail(fieldError);
                 }
+                _tableChangeReport = null;
 
                 MetaModelResult result;
                 switch (request.ObjectType)
@@ -254,13 +262,18 @@ namespace XppVsCode.Server.MetaModel
                 {
                     _host.Reset();
                     InvalidateCaches();
+                    if (_tableChangeReport != null && _tableChangeReport.Count > 0)
+                        result.Message += "\n" + string.Join("\n", _tableChangeReport);
                 }
 
                 return result;
             }
             catch (Exception ex)
             {
-                return Fail("Update failed: " + ex.Message);
+                // Reflection wraps the real error ("Exception has been thrown by the target of an invocation").
+                var inner = ex;
+                while (inner is System.Reflection.TargetInvocationException && inner.InnerException != null) inner = inner.InnerException;
+                return Fail("Update failed: " + inner.Message);
             }
         }
 
@@ -2937,6 +2950,7 @@ namespace XppVsCode.Server.MetaModel
             {
                 if (string.IsNullOrEmpty(idx.Name)) continue;
                 var axIdx = new AxTableIndex { Name = idx.Name, AllowDuplicates = idx.AllowDuplicates ? NoYes.Yes : NoYes.No };
+                if (idx.AlternateKey && !idx.AllowDuplicates) axIdx.AlternateKey = NoYes.Yes;
                 if (idx.Fields != null)
                     foreach (string fieldName in idx.Fields)
                         axIdx.Fields.Add(new AxTableIndexField { Name = fieldName, DataField = fieldName });
@@ -3070,6 +3084,7 @@ namespace XppVsCode.Server.MetaModel
                 ApplyEnumValues(enumExt.EnumValues, req.EnumValues);
             if (target is AxTable axTable)
             {
+                _tableChangeReport = ApplyTableChanges(axTable, axTable.Name, req);
                 ApplyFields(axTable.Fields, req.Fields);
                 ApplyIndexes(axTable.Indexes, req.Indexes);
                 ApplyFieldGroups(axTable.FieldGroups, req.FieldGroups);
@@ -3077,6 +3092,7 @@ namespace XppVsCode.Server.MetaModel
             }
             if (target is AxTableExtension tableExt)
             {
+                _tableChangeReport = ApplyTableChanges(tableExt, tableExt.Name.Split('.')[0], req);
                 ApplyFields(tableExt.Fields, req.Fields);
                 ApplyIndexes(tableExt.Indexes, req.Indexes);
                 ApplyFieldGroups(tableExt.FieldGroups, req.FieldGroups);
@@ -3817,13 +3833,27 @@ namespace XppVsCode.Server.MetaModel
             if (addMethod == null || addMethod.GetParameters().Length != 1) return;
             Type rangeType = addMethod.GetParameters()[0].ParameterType;
 
+            // Range names are the collection's key: unnamed ranges are named after their field, like Visual Studio
+            // (SalesStatus, SalesStatus1, ... when a field has several ranges).
+            var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (object existing in (System.Collections.IEnumerable)rangesCollection)
+            {
+                string existingName = existing?.GetType().GetProperty("Name")?.GetValue(existing) as string;
+                if (!string.IsNullOrEmpty(existingName)) usedNames.Add(existingName);
+            }
+
             foreach (var dto in ranges)
             {
                 if (string.IsNullOrWhiteSpace(dto?.Field) && string.IsNullOrWhiteSpace(dto?.Name))
                     continue;
 
+                string name = string.IsNullOrWhiteSpace(dto.Name) ? dto.Field.Trim() : dto.Name.Trim();
+                if (string.IsNullOrWhiteSpace(dto.Name))
+                    for (int n = 1; usedNames.Contains(name); n++) name = dto.Field.Trim() + n;
+                usedNames.Add(name);
+
                 object range = Activator.CreateInstance(rangeType);
-                TrySetPropertyValue(range, dto.Name, "Name");
+                TrySetPropertyValue(range, name, "Name");
                 TrySetPropertyValue(range, dto.Field, "Field", "DataField", "Column");
                 TrySetPropertyValue(range, dto.Value, "Value", "Range", "Expression");
                 addMethod.Invoke(rangesCollection, new object[] { range });

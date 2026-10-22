@@ -188,7 +188,8 @@
         return JSON.stringify({
             webviewSection: 'xppNode',
             xppKind: node.kind,
-            xppEditable: editable,
+            // Base element nodes in an extension's designer are read-only (change them through the extension's modifications).
+            xppEditable: editable && !node.inherited,
             xppCanAdd: canAdd,
             xppHasMethods: hasMethods,
             xppIsMethod: node.kind === 'method',
@@ -210,6 +211,8 @@
         row.className = 'row';
         row.dataset.path = pathKey(node.path);
         row.dataset.kind = node.kind;
+        if (node.own) row.classList.add('own');
+        if (node.inherited) row.classList.add('inherited');
         row.dataset.vscodeContext = contextFor(node, parent);
         row.style.paddingLeft = `${depth * 14 + 4}px`;
         row.tabIndex = -1;
@@ -323,7 +326,7 @@
             info.textContent = 'Double-click to open the method in the code editor.';
             propsEl.appendChild(info);
         } else {
-            send('select', { path: node.path });
+            send('select', { path: node.path, source: node.source || null });
         }
     }
 

@@ -237,6 +237,7 @@ namespace XppVsCode.Server.MetaModel
             createValidateReq.Controls = req.Controls;
             var validation = _bridge.ValidateObject(createValidateReq);
 
+            result.Message += _bridge.BestPracticeReport(req.ObjectType, req.ObjectName);
             return SerializeResultWithValidation(result, validation);
         }
 
@@ -287,7 +288,12 @@ namespace XppVsCode.Server.MetaModel
                 RemoveSecurityItems = ExtractJsonStringArray(body, "removeSecurityItems")?.ToList(),
                 UpdateControls = ParseFormControls(body, "updateControls"),
                 RemoveControls = ExtractJsonStringArray(body, "removeControls")?.ToList(),
-                RemoveControlModifications = ExtractJsonStringArray(body, "removeControlModifications")?.ToList()
+                RemoveControlModifications = ExtractJsonStringArray(body, "removeControlModifications")?.ToList(),
+                UpdateFields = ParseFields(body, defaultFieldType: false, key: "updateFields"),
+                RemoveFields = ExtractJsonStringArray(body, "removeFields")?.ToList(),
+                RemoveIndexes = ExtractJsonStringArray(body, "removeIndexes")?.ToList(),
+                RemoveFieldGroups = ExtractJsonStringArray(body, "removeFieldGroups")?.ToList(),
+                RemoveRelations = ExtractJsonStringArray(body, "removeRelations")?.ToList()
             };
 
             // Reject any formatted markup in declaration or methods
@@ -320,6 +326,7 @@ namespace XppVsCode.Server.MetaModel
             updateValidateReq.Controls = req.Controls;
             var validation = _bridge.ValidateObject(updateValidateReq);
 
+            result.Message += _bridge.BestPracticeReport(req.ObjectType, req.ObjectName);
             return SerializeResultWithValidation(result, validation);
         }
 
@@ -1450,9 +1457,9 @@ namespace XppVsCode.Server.MetaModel
             return result.Count > 0 ? result : null;
         }
 
-        private System.Collections.Generic.List<FieldDto> ParseFields(string body, bool defaultFieldType = true)
+        private System.Collections.Generic.List<FieldDto> ParseFields(string body, bool defaultFieldType = true, string key = "fields")
         {
-            string arrayJson = ExtractJsonArray(body, "fields");
+            string arrayJson = ExtractJsonArray(body, key);
             if (arrayJson == null) {
                 BridgeLog("ParseFields: fields array not found in body");
                 return null;
@@ -1473,7 +1480,9 @@ namespace XppVsCode.Server.MetaModel
                     FieldType = fieldType,
                     ExtendedDataType = ExtractJsonString(obj, "extendedDataType"),
                     EnumType = enumType,
-                    Label = ExtractJsonString(obj, "label")
+                    Label = ExtractJsonString(obj, "label"),
+                    HelpText = ExtractJsonString(obj, "helpText"),
+                    Properties = ExtractJsonObject(obj, "properties")
                 });
             }
             if (skipped > 0) BridgeLog("ParseFields: skipped " + skipped + " items with missing name");
@@ -1498,6 +1507,7 @@ namespace XppVsCode.Server.MetaModel
                 string dup = ExtractJsonString(obj, "allowDuplicates");
                 dto.AllowDuplicates = "true".Equals(dup, StringComparison.OrdinalIgnoreCase);
                 dto.AllowDuplicatesSpecified = dup != null;
+                dto.AlternateKey = "true".Equals(ExtractJsonString(obj, "alternateKey"), StringComparison.OrdinalIgnoreCase);
                 string[] fields = ExtractJsonStringArray(obj, "fields");
                 if (fields != null) dto.Fields.AddRange(fields);
                 result.Add(dto);

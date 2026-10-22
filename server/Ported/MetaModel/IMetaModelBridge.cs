@@ -64,6 +64,7 @@ namespace XppVsCode.Server.MetaModel
         string SelectProjectJson(string projectFile);
         string DeleteObjectJson(string objectType, string objectName, bool checkOnly = false);
         string TypeMembersJson(string objectType, string objectName);
+        string BestPracticeReport(string objectType, string objectName);
         string TableErdJson(string[] tableNames);
         string IncomingRelationsJson(string tableName, bool force);
         string LabelFileEntriesJson(string labelFile, string search, List<string> otherLanguages, int limit);

@@ -24,6 +24,7 @@ It works against a unified developer environment (UDE) and uses the same metadat
 - **Entity relationship diagram** (ERD) of a table and its related tables: choose the levels, outgoing/incoming relations and the fields shown; double-click a table to centre on it; export SVG or Mermaid.
 - **Right-click actions:** New (any node type a folder accepts, such as fields, field groups, indexes, relations, data sources and controls), New Method, Override Method, Delete.
 - **Forms:** a preview rendered like the web client, with Table of Contents and FastTab patterns, column layout, field labels from EDTs and toggles for Yes/No fields.
+- **Extensions** show the base element's nodes with the extension's own nodes in bold; the base nodes are read-only.
 - **Read-only for others' elements:** elements outside your models can be viewed but not changed; extend them instead.
 - **Label editor:** label ID, text and comment, with search and the label file's other languages side by side; New label, Edit, Delete (every language) and Copy @reference for your own label files. Properties opens the property grid.
 
@@ -59,9 +60,11 @@ Each feature can be turned on or off under **Code intelligence** in the Dynamics
 ### AI agent tools (MCP)
 Copilot can:
 - read, create, update and validate metadata. Every create is all-or-nothing, an existing name is never overwritten, and any request that is not fully applied returns an error (`typedMetadata` items take `"$type"` for subtypes, as `xpp_read_object` writes them). Large objects are read as a summary first; ask for parts with `sections`;
+- change existing table fields (EDT, label, help text, properties), and remove fields, indexes, field groups and relations. A field's base type never changes (as in Visual Studio: the database sync cannot convert a column), so a different type needs a new field name, and a removed field name never comes back with another type;
+- report best-practice warnings after every create and update (missing labels or EDTs, literal texts, missing keys, indexes and caching on tables, menu items no privilege grants, Chain of Command class naming); the agent's plan includes a best-practice review of the design;
 - find elements and their references; security roles, duties and privileges are also found by their label text;
 - create label files, and many labels with translations in one call, and add elements to the project;
-- form extensions: controls are placed and checked against the form's patterns (required values are set; anything the build would reject is refused), properties of base controls are changed only where D365FO allows it, and the extension's own controls can be updated, moved and removed;
+- form extensions: controls are placed and checked against the form's patterns (a new tab page gets the pattern its place expects, required values are set, unknown pattern versions become the latest; anything the build would reject is refused, and the check takes seconds even on SalesTable), properties of base controls are changed only where D365FO allows it, and the extension's own controls can be updated, moved and removed;
 - create menu extensions, and work with security privileges, duties and roles;
 - create data entity extensions, including their staging tables, also on entities built on other entities or views; create composite data entities;
 - delete elements of your own models (refused while other elements reference them; their cross-reference entries are removed) or exclude them from the project;
