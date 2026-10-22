@@ -35,6 +35,13 @@ export class XppServerClient implements vscode.Disposable {
         return result as T;
     }
 
+    /** Calls a language-service action (xpp/lang) and returns its JSON result. */
+    async lang<T = any>(action: string, body: object = {}): Promise<T> {
+        await this.ensureStarted();
+        const raw = await this.request('xpp/lang', { action, body });
+        return (typeof raw === 'string' ? JSON.parse(raw) : raw) as T;
+    }
+
     /** Calls an MCP tool and returns its text output. */
     async tool(name: string, args: object): Promise<{ text: string; isError: boolean }> {
         await this.ensureStarted();

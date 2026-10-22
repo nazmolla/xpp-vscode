@@ -14,6 +14,7 @@ namespace XppVsCode.Server
         private readonly BridgeClient _bridge;
         private readonly string _version;
         private readonly string _instructions;
+        private CodeIntel _codeIntel;
 
         public McpStdioServer(ToolRouter router, BridgeClient bridge, string version)
         {
@@ -79,6 +80,12 @@ namespace XppVsCode.Server
                     if (action == "tag_references")
                         return JsonHelpers.BuildResult(idToken, _router.TagReferencesJson(body));
                     return JsonHelpers.BuildResult(idToken, _bridge.Call(action, body));
+                case "xpp/lang":
+                    // Language features of the VS Code extension (its own server process): raw JSON results.
+                    string langParams = JsonHelpers.ExtractNestedObject(json, "params") ?? "{}";
+                    _codeIntel = _codeIntel ?? new CodeIntel(_router.XRef, _bridge);
+                    return JsonHelpers.BuildResult(idToken, _codeIntel.Handle(JsonHelpers.ExtractJsonString(langParams, "action"),
+                        JsonHelpers.ExtractNestedObject(langParams, "body") ?? "{}"));
                 default:
                     return JsonHelpers.BuildError(idToken, -32601, "Method not found: " + method);
             }

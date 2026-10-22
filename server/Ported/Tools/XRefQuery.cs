@@ -48,6 +48,25 @@ namespace XppVsCode.Server.Tools
         private readonly object _lock = new object();
         private Health _health;
 
+        /// <summary>An open connection to the cross-reference database, or null with the reason (for the language service).</summary>
+        internal SqlConnection TryOpen(out string problem)
+        {
+            var health = GetHealth();
+            problem = health.Usable ? null : health.Problem;
+            if (!health.Usable) return null;
+            try { return Open(health.Server, health.Database); }
+            catch (Exception ex) { problem = ex.Message; return null; }
+        }
+
+        /// <summary>Database name, for cache file names.</summary>
+        internal string DatabaseName => GetHealth().Database;
+
+        internal static string FolderOf(string objectType) =>
+            objectType != null && TypeToFolder.TryGetValue(objectType, out string folder) ? folder : null;
+
+        internal static string TypeOfFolder(string folder) =>
+            TypeToFolder.FirstOrDefault(kv => kv.Value.Equals(folder ?? "", StringComparison.OrdinalIgnoreCase)).Key;
+
         /// <summary>Returns a tool result, or null when the database is unusable and the caller should fall back to the in-VS provider.</summary>
         public string TryHandle(string idToken, string json, out string unusableReason)
         {

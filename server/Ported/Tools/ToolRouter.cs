@@ -14,6 +14,7 @@ namespace XppVsCode.Server.Tools
         private readonly DocSearchHandler _docSearch;
         private readonly ModelObjectLister _modelLister = new ModelObjectLister();
         private readonly XRefQuery _xref = new XRefQuery();
+        internal XRefQuery XRef => _xref;
 
         /// <summary>Structured where-used for the extension's references list.</summary>
         public string WhereUsedJson(string body)

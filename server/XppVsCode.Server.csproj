@@ -49,6 +49,10 @@
       <HintPath>$(D365BinPath)\Microsoft.Dynamics.AX.Metadata.Validation.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="Microsoft.Dynamics.AX.Framework.Xlnt.XppParser">
+      <HintPath>$(D365BinPath)\Microsoft.Dynamics.AX.Framework.Xlnt.XppParser.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="Microsoft.Dynamics.AX.Framework.Xlnt.XppCore">
       <HintPath>$(D365BinPath)\Microsoft.Dynamics.AX.Framework.Xlnt.XppCore.dll</HintPath>
       <Private>false</Private>

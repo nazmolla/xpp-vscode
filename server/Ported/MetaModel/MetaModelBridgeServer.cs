@@ -89,6 +89,8 @@ namespace XppVsCode.Server.MetaModel
                 case "delete_object":
                     return _bridge.DeleteObjectJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
                         "true".Equals(ExtractJsonString(body, "checkOnly"), StringComparison.OrdinalIgnoreCase));
+                case "type_members":
+                    return _bridge.TypeMembersJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
                 case "label_file_entries":
                     return _bridge.LabelFileEntriesJson(ExtractJsonString(body, "labelFile"), ExtractJsonString(body, "search"),
                         ExtractJsonStringArray(body, "languages")?.ToList(), int.TryParse(ExtractJsonString(body, "limit"), out int labelLimit) ? labelLimit : 500);

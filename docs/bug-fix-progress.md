@@ -71,3 +71,24 @@ Round 2 is complete. Still to check by hand:
   controllers, security label search resolves labels through them.
 - Version note: the VS extension went 0.5.2 -> 0.5.6 because auto-version bumps on every build attempt.
 - Next work, if wanted: the U10 backlog (docs/u10-code-intelligence-spike.md), P1 items first.
+
+## Round 3 (2026-10-22): code intelligence (U10 backlog)
+
+User decisions (2026-10-22):
+- Build the U10 backlog. Slow features get an on/off setting with UI in the Dynamics 365 view (bottom-left tools tree).
+- CoC: Visual Studio's ExtensionOf lookup is unreliable and hangs VS for "which CoC extends this method"; build a better one.
+- Visual Studio's X++ language service may be used (developers have VS / its components); also look for open-source alternatives.
+
+| Item | Status | Notes |
+|---|---|---|
+| CoC / extension index investigation | Done | XRef: ExtensionOf attribute + TypeReference on same line = extended element; wrapper = MethodCall to same-named method. Pre/Post/SubscribesTo same way. Form/data event handlers not in XRef: class-file scan (cached). Server: `ExtensionIndex.cs`, `CodeIntel.cs` (xpp/lang), `MetaModelBridge.Members.cs` (type_members). Compiler parser Pass1 works standalone (syntax). VS SourceCodeFormatter needs a running VS -> own formatter. No open-source X++ parser exists. |
+| Settings UI (Code intelligence node, toggles) | Todo | |
+| Outline / document symbols | Todo | |
+| Implementations (overrides, CoC, handlers) + code lens | Todo | |
+| Call hierarchy, type hierarchy | Todo | |
+| Completion, signature help, label completion | Todo | |
+| Hover (labels, EDT, enum) | Todo | |
+| Workspace symbols | Todo | |
+| Diagnostics on save | Todo | |
+| Live syntax diagnostics, formatting, semantic highlighting | Todo | |
+| Release + VS port (tools only) | Todo | |

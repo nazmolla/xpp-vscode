@@ -63,6 +63,7 @@ namespace XppVsCode.Server.MetaModel
         string ListProjectsJson(string searchFolder);
         string SelectProjectJson(string projectFile);
         string DeleteObjectJson(string objectType, string objectName, bool checkOnly = false);
+        string TypeMembersJson(string objectType, string objectName);
         string LabelFileEntriesJson(string labelFile, string search, List<string> otherLanguages, int limit);
         string SaveLabelJson(string labelFile, string labelId, Dictionary<string, string> texts, string comment);
         string DeleteLabelJson(string labelFile, string labelId);
