@@ -2,7 +2,7 @@
   "name": "xpp-vscode",
   "displayName": "F&O Studio for VS Code",
   "description": "A full Dynamics 365 Finance & Operations development environment in VS Code: Application Explorer, designers, X++ code, build, deploy, debugging, and AI agent tools.",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "publisher": "MNazmi",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -181,7 +181,8 @@
         },
         {
           "id": "xpp.security",
-          "name": "Security"
+          "name": "Security",
+          "visibility": "collapsed"
         },
         {
           "id": "xpp.tools",

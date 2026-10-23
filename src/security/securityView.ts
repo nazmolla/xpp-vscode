@@ -107,12 +107,16 @@ export class SecurityTreeProvider implements vscode.TreeDataProvider<SecurityNod
         switch (node.kind) {
             case 'group': {
                 const mine = node.group === 'mine';
+                // Nothing loads until a group is expanded: the first load reads all security metadata (up to a minute).
+                // Only a filter the user just typed opens All roles by itself.
                 const item = new vscode.TreeItem(mine ? 'Your roles' : 'All roles',
-                    mine || this.filter ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
+                    !mine && this.filter ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
                 // A new id when the filter changes makes the filtered list open by itself.
                 item.id = mine ? 'mine' : `all|${this.filter}`;
                 item.iconPath = new vscode.ThemeIcon(mine ? 'account' : 'organization');
-                item.description = mine ? 'roles of your models, with license' : this.filter ? `matching '${this.filter}'` : undefined;
+                item.description = mine ? 'roles of your models, with license (expand to load)'
+                    : this.filter ? `matching '${this.filter}'` : 'expand to load';
+                item.tooltip = 'Expanding reads the security metadata of all packages; the first time takes up to a minute.';
                 item.contextValue = 'xppSecGroup';
                 return item;
             }
@@ -174,8 +178,10 @@ export class SecurityTreeProvider implements vscode.TreeDataProvider<SecurityNod
     private async load(node: SecurityNode): Promise<SecurityNode[]> {
         if (node.kind === 'group') {
             const mine = node.group === 'mine';
-            const result = await security<{ roles: RoleInfo[] }>(this.ctx, 'roles',
-                mine ? { customOnly: true, withLicense: true } : { filter: this.filter || undefined });
+            const result = await vscode.window.withProgress(
+                { location: { viewId: 'xpp.security' }, title: 'Reading security roles…' },
+                () => security<{ roles: RoleInfo[] }>(this.ctx, 'roles',
+                    mine ? { customOnly: true, withLicense: true } : { filter: this.filter || undefined }));
             const roles = result.roles ?? [];
             if (roles.length === 0) {
                 return [{
