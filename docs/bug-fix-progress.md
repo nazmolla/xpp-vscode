@@ -169,4 +169,4 @@ Chat dump: c:\Users\Mohamed the session chat history; stats in the session's fil
 Security (R8, user request): server SecurityAnalysis.cs + xpp_analyze_security (license, access, gaps, sod, report, roles,
 children, refresh) done and spot-tested; system prompt security-design rules added; VS Code Security view/panel/commands
 built (src/security/*), host smoke test test/securitySmoke.js passes. R7 + R8 regression cases added: 175/175 pass.
-Released 0.9.0. Next: VS companion port (security tool, parallel reads, R7 fixes), DevExt docs.
+Released 0.9.0 (commit d27e06c; Marketplace publish pending: token revoked). VS companion 0.5.20 ported, deployed, DevExt docs updated (2e72bd2). Round 7 and security complete.
