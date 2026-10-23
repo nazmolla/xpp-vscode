@@ -76,6 +76,7 @@ namespace XppVsCode.Server.MetaModel
                         break;
                     case AxClass cls:
                         CheckExtensionClass(cls, warnings);
+                        CheckClassDesign(cls, warnings);
                         break;
                 }
             }
@@ -169,6 +170,51 @@ namespace XppVsCode.Server.MetaModel
         }
 
         private static readonly Regex ExtensionOfPattern = new Regex(@"\[\s*ExtensionOf\s*\(", RegexOptions.IgnoreCase);
+
+        private const int MaxWorkingMethods = 15;
+
+        // Boilerplate that says nothing about a class's responsibilities.
+        private static readonly Regex BoilerplateMethod = new Regex(
+            @"^(classDeclaration|new|construct\w*|main|parm\w*|pack|unpack|description|caption|canGoBatch|canRunInNewSession|isRetryable|defaultCaption|newFrom\w*|init)$",
+            RegexOptions.IgnoreCase);
+
+        // Standard engines that each do one kind of posting or document update.
+        private static readonly Regex PostingEngine = new Regex(
+            @"\b(\w+FormLetter|LedgerJournalCheckPost|AssetProposal|AssetJournal|InventMovement|InventUpd_\w+|\w+MassTermination|\w+Posting\w*|\w+CheckPost)\b");
+
+        /// <summary>
+        /// A class that does several jobs (validation, several posting steps, lookups) cannot be reused by other processes and
+        /// changes for unrelated reasons. Extension (CoC) classes, data contracts and tests are not checked.
+        /// </summary>
+        private static void CheckClassDesign(AxClass cls, List<string> warnings)
+        {
+            string declaration = cls.Declaration ?? "";
+            if (ExtensionOfPattern.IsMatch(declaration) || declaration.Contains("[DataContract")
+                || Regex.IsMatch(declaration, @"\bextends\s+(SysTestCase|BusinessEventsContract)\b")) return;
+
+            var working = cls.Methods.Where(m => !BoilerplateMethod.IsMatch(m.Name ?? "")).ToList();
+            var validation = working.Where(m => Regex.IsMatch(m.Name ?? "", @"^(validate|check)", RegexOptions.IgnoreCase)).Select(m => m.Name).ToList();
+            var engines = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var m in working)
+                foreach (Match hit in PostingEngine.Matches(m.Source ?? ""))
+                    engines.Add(hit.Groups[1].Value);
+            var finders = working.Where(m => Regex.IsMatch(m.Source ?? "", @"^\s*(///.*\n\s*)*public\s+static\s+\w+\s+(find|exist|is|count|active)\w*\s*\(", RegexOptions.IgnoreCase | RegexOptions.Multiline))
+                .Select(m => m.Name).ToList();
+
+            var jobs = new List<string>();
+            if (validation.Count > 0) jobs.Add("validation (" + string.Join(", ", validation.Take(3)) + ")");
+            if (engines.Count > 0) jobs.Add("posting with " + string.Join(", ", engines));
+            if (finders.Count >= 3) jobs.Add("lookups (" + string.Join(", ", finders.Take(3)) + (finders.Count > 3 ? ", ..." : "") + ")");
+            bool mixed = (validation.Count > 0 && engines.Count > 0) || engines.Count >= 3;
+
+            if (working.Count <= MaxWorkingMethods && !mixed) return;
+            warnings.Add("Class " + cls.Name + " has " + working.Count + " methods"
+                + (jobs.Count > 0 ? " and does several jobs: " + string.Join("; ", jobs) : "")
+                + ". Split it by responsibility so each part can be reused by other processes and tested alone: a validator class, "
+                + "one service class per posting step (its own parameters, no dependency on this process), shared lookups on the table "
+                + "or a helper, and an orchestrator that only sequences them and handles status and errors. Follow how standard code "
+                + "splits the same work (xpp_find_examples).");
+        }
 
         private static void CheckExtensionClass(AxClass cls, List<string> warnings)
         {

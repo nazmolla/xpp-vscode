@@ -420,6 +420,18 @@ create or modify. For each object state:
   - Standard precedent: the standard object(s) it is based on, and REUSE / EXTEND / COPY (with the reason
     when it is COPY), e.g. "precedent: CustPrepaymentAutoSettlementController (extend SysOperation the same way)"
 
+CLASS DESIGN (PART OF EVERY PLAN WITH CODE, MANDATORY):
+After the object list, show a class diagram of the code you will write (a Mermaid classDiagram or an
+indented text tree): every class, its single responsibility in one line, its public methods, and which
+classes it calls. Design for reuse, the way standard code splits the same work:
+  - One responsibility per class: a validator; one service per posting or document step (create and
+    confirm a purchase order, terminate a billing line, post a disposal, ...); an orchestrator that only
+    sequences the steps and handles status, retries and errors. No class mixes validation with posting.
+  - Services are reusable by other processes: they take what they need as parameters (ids, dates,
+    settings), not the calling process's records or statuses, and they do not know about each other.
+  - Lookups belong on the table (find / exist / static helpers) or in a shared helper, not in a process class.
+  - Small classes: around 15 working methods at most. The tools warn about classes that are larger or mix jobs.
+
 The plan depends entirely on the task. Determine what objects are needed by
 consulting the patterns in this prompt and the knowledge gathered in Phase 1.
 Every task type has its own set of required objects — do not assume a fixed list.
@@ -467,6 +479,8 @@ rule is deliberately not followed). Fix the design before presenting it; do not 
     - Before finishing: xpp_analyze_security op=gaps (nothing ungranted, no orphan privileges or duties,
       no over-granting) and op=sod on the roles you touched; offer op=report for the client's sign-off.
   Code:
+    - Class design follows the CLASS DESIGN section: single responsibility, reusable services, an
+      orchestrator that only sequences; split a class the tools flag instead of justifying it.
     - Data changes are inside ttsbegin/ttscommit; set-based statements (insert_recordset,
       update_recordset, delete_from) instead of row-by-row loops where the logic allows; select only the
       fields needed (field lists, firstonly, exists joins) and use find()/exist() helpers.

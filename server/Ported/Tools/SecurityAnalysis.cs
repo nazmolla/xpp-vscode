@@ -53,6 +53,7 @@ namespace XppVsCode.Server.Tools
             public Dictionary<string, string> AddedBy = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             // Models of the role extensions.
             public HashSet<string> ExtensionModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            public Dictionary<string, string> ExtensionModelOf = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
 
         internal sealed class MenuItem { public string Name, Type, Object, ObjectType, Label, Model, ViewLicense, MaintainLicense, ConfigurationKey; }
@@ -169,6 +170,7 @@ namespace XppVsCode.Server.Tools
                 string name = Child(d.Item3, "Name") ?? "";
                 if (!index.Roles.TryGetValue(name.Split('.')[0], out var role)) continue;
                 role.ExtensionModels.Add(d.Item2);
+                role.ExtensionModelOf[name] = d.Item2;
                 foreach (var x in Items(d.Item3, "Duties")) { string n = Child(x, "Name"); if (role.Duties.Add(n)) role.AddedBy[n] = name; }
                 foreach (var x in Items(d.Item3, "Privileges")) { string n = Child(x, "Name"); if (role.Privileges.Add(n)) role.AddedBy[n] = name; }
                 foreach (var x in Items(d.Item3, "SubRoles")) { string n = Child(x, "Name"); if (role.SubRoles.Add(n)) role.AddedBy[n] = name; }
@@ -526,7 +528,7 @@ namespace XppVsCode.Server.Tools
             }
             foreach (var r in index.Roles.Values)
                 foreach (string d in r.Duties.Where(d => !index.Duties.ContainsKey(d)))
-                    if (Mine(r.Model) || r.AddedBy.ContainsKey(d))
+                    if (Mine(r.Model) || (r.AddedBy.TryGetValue(d, out string ext) && r.ExtensionModelOf.TryGetValue(ext, out string extModel) && Mine(extModel)))
                         Finding("Error", "MissingDuty", "AxSecurityRole", r.Name, "Duty " + d + " does not exist" + (r.AddedBy.TryGetValue(d, out string by) ? " (added by " + by + ")" : "") + ".");
             var entityPermitted = new HashSet<string>(index.Privileges.Values.SelectMany(p => p.Entities).Select(e => e.Name), StringComparer.OrdinalIgnoreCase);
             foreach (var e in index.EntityModels.Where(e => Mine(e.Value)))
