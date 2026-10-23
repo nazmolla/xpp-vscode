@@ -128,3 +128,21 @@ Published to the VS Code Marketplace as `MNazmi.xpp-vscode` (0.5.0, then 0.5.1 w
 0.7.0 published to the Marketplace (VS Code repo 8cce940).
 
 0.7.1: README screenshots of standard objects only (docs/images, captured with scripts/screenshots.ps1 + test/screenshots.js in a throw-away profile without a project); fixes: View References separator showed '?' (PowerShell pipe mangled the middle dot), form preview rendered an action pane's buttons twice when it has no tabs.
+
+## Round 6 (2026-10-23): find and reuse standard code, developer productivity
+
+User request: tools developers use in other languages; above all "find a similar standard implementation and reuse or copy it" as tooling and as agent instructions. Chosen: 1 examples, 2 code search, 3 usage in context, 4 precedent step, 5 snippets, 6 quick fixes, 8 obsolete warnings, 9 SysTest generation, 10 run snippet; VS companion gets the agent-tool parts. Not chosen: rename.
+
+| Item | Status | Notes |
+|---|---|---|
+| xpp_find_examples / xpp/lang find_examples | Done | Server/Ported/Tools/CodeExamples.cs. By task: ~25 framework recipes (SysOperation, data contract, number sequence, business event, report DP, service, lookup, workflow, CoC, handlers, tests, ...), smallest focused examples first; forms by Design pattern (cached scan %LOCALAPPDATA%\XppVsCode\cache\form-patterns.json); fallback by class name. By object: XRef objects of the same kind sharing the most distinctive references (IDF-weighted), reason lists the shared targets. Excludes the user's custom models and Microsoft test packages (unless tests are asked for). |
+| xpp_search_code / xpp/lang search_code | Done | Server/Ported/Tools/CodeSearch.cs: parallel scan of method sources and declarations (classes, tables, forms, views, entities, queries, maps) in all metadata folders; literal or regex; objectTypes/model filters; first search reads from disk, then OS cache (SysOperationServiceController in classes: ~50 ms with early stop). Nested form methods get short paths (DataSources/ds/Fields/f/Methods/m, Controls/c/Methods/m). |
+| Short element paths | Done | WalkElementPath normalizes DataFields -> Fields and Controls/<name> -> full Design path, so XRef and search paths open in the code view. |
+| xpp_find_references includeCode | Done | Shows the calling code lines per reference (method source read from the metadata file, token match). |
+| Obsolete index / xpp/lang obsolete | Done | XRef [SysObsolete] attribute users + message/isError parsed from the source; cached per XRef state (obsolete-<db>.json); 3,645 items here. |
+| Precedent step in agent instructions | Done | System prompt: "STANDARD PRECEDENT FIRST" in PHASE 1 (find with xpp_find_examples / xpp_search_code / includeCode, read, reuse > extend > copy), plan lists the precedent per object, tool-first rule 4b. |
+| VS Code UI (search, examples, obsolete diagnostics, snippets, quick fixes, SysTest, run snippet) | Done | src/productivity/, snippets/xpp.json. Smoke (test/productivitySmoke.js via test/runInDownloadedCode.js, a downloaded VS Code): commands registered, obsolete warning shown, Extract to label and Implement interface methods offered, 40 snippets. Not run end to end (need input): Generate find/exist, CoC wrapper, Add to Privilege, Generate SysTest, Run Snippet. |
+| Regression | Done | 149/149 (R6: 10 cases). |
+| VS companion port | Done | 0.5.14: mcp-server CodeSearch.cs, CodeExamples.cs (cache folder XppCopilotCompanion), XRefQuery helpers, ToolRouter tools + includeCode, prompt. |
+
+0.8.0 released (round 6).

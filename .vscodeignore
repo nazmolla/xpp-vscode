@@ -12,3 +12,4 @@ scripts/**
 experimental/**
 test/**
 docs/**
+.vscode-test/**

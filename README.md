@@ -55,10 +55,18 @@ Each feature can be turned on or off under **Code intelligence** in the Dynamics
 - **Hover** shows label text, EDT details and enum values.
 - **Syntax errors** while typing (X++ compiler parser), **compile on save** (*slow*, off by default), **formatting** (Format Document / Selection) and **semantic highlighting** (*slow*, off by default).
 - **Event handler index** (*slow*): scans class files for form and data event handlers, which the cross-reference database doesn't contain.
+- **Obsolete API warnings:** calls to methods and uses of classes and tables marked `[SysObsolete]` show in Problems.
 
 ![Peek Implementations on SalesFormLetter.run: the Chain of Command extensions and handlers](docs/images/implementations.png)
 
 ![Completion on a CustTable buffer](docs/images/completion.png)
+
+### Productivity
+- **Search Code in All Packages** (`Ctrl+Shift+Alt+F`): text or regex search over the X++ code of every package; a result opens the method at the matching line.
+- **Find Similar Standard Implementations:** standard elements like the selected one, or matching a description such as "batch job with contract".
+- **Quick fixes** (`Ctrl+.`): Extract to label, Generate find() and exist() on your tables, Implement missing interface methods, Create Chain of Command wrapper on methods of standard objects.
+- **Add to Privilege** for menu items, **Generate SysTest Class** for classes, and **Run Snippet in Environment** (runs a `main` method from an untitled X++ editor through a scratch class in your model).
+- **Snippets** for Chain of Command, event handlers, SysOperation, RunBaseBatch, find/exist, parm methods, transactions with retry and SysTest.
 
 ### Build, deploy and debug
 - **Build Model** with the X++ compiler (`Ctrl+Shift+B`), and **Build Project**, which reports only the problems in the project's objects. Errors appear in the Problems panel at the right line. A compiler crash (Fatal) or a missing output assembly fails the build.
@@ -70,7 +78,7 @@ Each feature can be turned on or off under **Code intelligence** in the Dynamics
 ### Dynamics 365 tools
 - **Model management:** Create Model, Update Model Parameters, View Model Dependencies.
 - **Projects:** Select Project, **Create D365FO Project** (for one of your models; writes the `.rnrproj` and `.slnx` like Visual Studio), Export Project and Import Project (`.axpp`, compatible with Visual Studio). The project view follows the `.rnrproj`, so elements added by agents or other editors appear by themselves. Selecting or creating a project makes the window a multi-root workspace with the project folder and the model folder. In the project view, **Exclude from Project** keeps an element in the model; **Delete** removes it from the model (your own models only).
-- **Search:** Find Labels, Find Tag References, Metadata Search, Find References.
+- **Search:** Find Labels, Find Tag References, Metadata Search, Find References, Search Code, Find Similar Standard Implementations.
 - **Environment:** Connect to Environment (downloads metadata, restores the cross-reference database, configures the machine), Check Connection, Sign in.
 
 ### AI agent tools (MCP)
@@ -79,6 +87,7 @@ Copilot can:
 - change existing table fields (EDT, label, help text, properties), and remove fields, indexes, field groups and relations. A field's base type never changes (as in Visual Studio: the database sync cannot convert a column), so a different type needs a new field name, and a removed field name never comes back with another type;
 - report best-practice warnings after every create and update (missing labels or EDTs, literal texts, missing keys, indexes and caching on tables, menu items no privilege grants, Chain of Command class naming); the agent's plan includes a best-practice review of the design;
 - find elements and their references; security roles, duties and privileges are also found by their label text;
+- find how standard code does it, which is how X++ is developed: `xpp_find_examples` (standard implementations for a task such as "batch job with a contract" or "number sequence", forms with a pattern, or objects similar to a given one), `xpp_search_code` (text or regex over the code of every package), and `xpp_find_references` with `includeCode` (the calling code lines). The agent's plan names the standard precedent of every object and reuses it, extends it, or copies it only when it cannot be reused;
 - create label files, and many labels with translations in one call, and add elements to the project;
 - form extensions: controls are placed and checked against the form's patterns (a new tab page gets the pattern its place expects, required values are set, unknown pattern versions become the latest; anything the build would reject is refused, and the check takes seconds even on SalesTable), properties of base controls are changed only where D365FO allows it, and the extension's own controls can be updated, moved and removed;
 - create menu extensions, and work with security privileges, duties and roles;

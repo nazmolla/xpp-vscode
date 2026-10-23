@@ -1,0 +1,401 @@
+{
+    "Chain of Command class (class)": {
+        "prefix": ["coc", "cocclass", "extensionof"],
+        "description": "Chain of Command extension of a class",
+        "body": [
+            "[ExtensionOf(classStr(${1:BaseClass}))]",
+            "final class ${1}_${2:Model}_Extension",
+            "{",
+            "    $0",
+            "}"
+        ]
+    },
+    "Chain of Command class (table)": {
+        "prefix": ["coctable", "extensionoftable"],
+        "description": "Chain of Command extension of a table",
+        "body": [
+            "[ExtensionOf(tableStr(${1:TableName}))]",
+            "final class ${1}_${2:Model}_Extension",
+            "{",
+            "    $0",
+            "}"
+        ]
+    },
+    "Chain of Command class (form)": {
+        "prefix": ["cocform", "extensionofform"],
+        "description": "Chain of Command extension of a form",
+        "body": [
+            "[ExtensionOf(formStr(${1:FormName}))]",
+            "final class ${1}_${2:Model}_Extension",
+            "{",
+            "    $0",
+            "}"
+        ]
+    },
+    "Chain of Command class (form data source)": {
+        "prefix": ["cocformds", "extensionofformdatasource"],
+        "description": "Chain of Command extension of a form data source",
+        "body": [
+            "[ExtensionOf(formDataSourceStr(${1:FormName}, ${2:DataSourceName}))]",
+            "final class ${1}${2}DS_${3:Model}_Extension",
+            "{",
+            "    $0",
+            "}"
+        ]
+    },
+    "Chain of Command method wrapper": {
+        "prefix": ["cocmethod", "nextwrapper"],
+        "description": "Wrapper method that calls next",
+        "body": [
+            "public void ${1:methodName}(${2})",
+            "{",
+            "    next ${1}(${3});",
+            "    $0",
+            "}"
+        ]
+    },
+    "Chain of Command method wrapper with return value": {
+        "prefix": ["cocmethodret", "nextwrapperret"],
+        "description": "Wrapper method that calls next and returns its value",
+        "body": [
+            "public ${1:boolean} ${2:methodName}(${3})",
+            "{",
+            "    ${1} ret = next ${2}(${4});",
+            "",
+            "    $0",
+            "    return ret;",
+            "}"
+        ]
+    },
+    "Data event handler": {
+        "prefix": ["dataeventhandler", "deh"],
+        "description": "Table data event handler",
+        "body": [
+            "[DataEventHandler(tableStr(${1:TableName}), DataEventType::${2|Inserted,Inserting,Updated,Updating,Deleted,Deleting,ValidatedWrite,ValidatingWrite,ValidatedDelete,ValidatingDelete,InitializedRecord,ValidatedField,ModifiedField|})]",
+            "public static void ${1}_on${2}(Common _sender, DataEventArgs _e)",
+            "{",
+            "    ${1} ${3:record} = _sender as ${1};",
+            "    $0",
+            "}"
+        ]
+    },
+    "Form event handler": {
+        "prefix": ["formeventhandler", "feh"],
+        "description": "Form event handler",
+        "body": [
+            "[FormEventHandler(formStr(${1:FormName}), FormEventType::${2|Initialized,Initializing,PostRun,Activated,Closing,PreRun|})]",
+            "public static void ${1}_On${2}(xFormRun _sender, FormEventArgs _e)",
+            "{",
+            "    FormRun formRun = _sender as FormRun;",
+            "    $0",
+            "}"
+        ]
+    },
+    "Form control event handler": {
+        "prefix": ["formcontroleventhandler", "fceh"],
+        "description": "Form control event handler",
+        "body": [
+            "[FormControlEventHandler(formControlStr(${1:FormName}, ${2:ControlName}), FormControlEventType::${3|Clicked,Modified,GotFocus,LostFocus,Lookup,Validating,Validated|})]",
+            "public static void ${2}_On${3}(FormControl _sender, FormControlEventArgs _e)",
+            "{",
+            "    FormRun formRun = _sender.formRun();",
+            "    $0",
+            "}"
+        ]
+    },
+    "Pre-event handler": {
+        "prefix": ["prehandler"],
+        "description": "Pre-event handler for a method",
+        "body": [
+            "[PreHandlerFor(classStr(${1:ClassName}), methodStr(${1}, ${2:methodName}))]",
+            "public static void ${1}_Pre_${2}(XppPrePostArgs _args)",
+            "{",
+            "    ${1} instance = _args.getThis();",
+            "    $0",
+            "}"
+        ]
+    },
+    "Post-event handler": {
+        "prefix": ["posthandler"],
+        "description": "Post-event handler for a method",
+        "body": [
+            "[PostHandlerFor(classStr(${1:ClassName}), methodStr(${1}, ${2:methodName}))]",
+            "public static void ${1}_Post_${2}(XppPrePostArgs _args)",
+            "{",
+            "    ${1} instance = _args.getThis();",
+            "    $0",
+            "}"
+        ]
+    },
+    "SysOperation controller": {
+        "prefix": ["sysopcontroller", "sysoperationcontroller"],
+        "description": "SysOperation controller",
+        "body": [
+            "public final class ${1:My}Controller extends SysOperationServiceController",
+            "{",
+            "    public static ${1}Controller construct(SysOperationExecutionMode _executionMode = SysOperationExecutionMode::Synchronous)",
+            "    {",
+            "        ${1}Controller controller = new ${1}Controller(classStr(${1}Service), methodStr(${1}Service, ${2:process}), _executionMode);",
+            "        controller.parmDialogCaption(\"${3:Caption}\");",
+            "",
+            "        return controller;",
+            "    }",
+            "",
+            "    public static void main(Args _args)",
+            "    {",
+            "        ${1}Controller controller = ${1}Controller::construct();",
+            "        controller.parmArgs(_args);",
+            "        controller.startOperation();",
+            "    }",
+            "",
+            "}"
+        ]
+    },
+    "SysOperation service": {
+        "prefix": ["sysopservice", "sysoperationservice"],
+        "description": "SysOperation service",
+        "body": [
+            "public final class ${1:My}Service extends SysOperationServiceBase",
+            "{",
+            "    public void ${2:process}(${1}Contract _contract)",
+            "    {",
+            "        $0",
+            "    }",
+            "",
+            "}"
+        ]
+    },
+    "SysOperation data contract": {
+        "prefix": ["sysopcontract", "datacontract"],
+        "description": "SysOperation data contract with one parameter",
+        "body": [
+            "[DataContractAttribute]",
+            "public final class ${1:My}Contract",
+            "{",
+            "    ${2:CustAccount} ${3:custAccount};",
+            "",
+            "    [DataMemberAttribute]",
+            "    public ${2} parm${3/(.*)/${1:/capitalize}/}(${2} _${3} = ${3})",
+            "    {",
+            "        ${3} = _${3};",
+            "",
+            "        return ${3};",
+            "    }",
+            "",
+            "}"
+        ]
+    },
+    "RunBase / RunBaseBatch class": {
+        "prefix": ["runbase", "runbasebatch"],
+        "description": "RunBase or RunBaseBatch class with pack/unpack, run and main",
+        "body": [
+            "class ${1:My}Batch extends ${2|RunBaseBatch,RunBase|}",
+            "{",
+            "    ${3:CustAccount} ${4:custAccount};",
+            "",
+            "    #define.CurrentVersion(1)",
+            "    #localmacro.CurrentList",
+            "        ${4}",
+            "    #endmacro",
+            "",
+            "    public container pack()",
+            "    {",
+            "        return [#CurrentVersion, #CurrentList];",
+            "    }",
+            "",
+            "    public boolean unpack(container _packedClass)",
+            "    {",
+            "        Version version = RunBase::getVersion(_packedClass);",
+            "",
+            "        switch (version)",
+            "        {",
+            "            case #CurrentVersion:",
+            "                [version, #CurrentList] = _packedClass;",
+            "                break;",
+            "",
+            "            default:",
+            "                return false;",
+            "        }",
+            "",
+            "        return true;",
+            "    }",
+            "",
+            "    public void run()",
+            "    {",
+            "        $0",
+            "    }",
+            "",
+            "    public static ClassDescription description()",
+            "    {",
+            "        return \"${5:Description}\";",
+            "    }",
+            "",
+            "    public static void main(Args _args)",
+            "    {",
+            "        ${1}Batch batch = new ${1}Batch();",
+            "",
+            "        if (batch.prompt())",
+            "        {",
+            "            batch.runOperation();",
+            "        }",
+            "    }",
+            "",
+            "}"
+        ]
+    },
+    "Table find method": {
+        "prefix": ["tablefind"],
+        "description": "Static find() of a table",
+        "body": [
+            "public static ${1:TableName} find(${2:KeyType} _${3:key}, boolean _forUpdate = false)",
+            "{",
+            "    ${1} ${4:record};",
+            "",
+            "    if (_${3})",
+            "    {",
+            "        ${4}.selectForUpdate(_forUpdate);",
+            "",
+            "        select firstonly ${4}",
+            "            where ${4}.${5:KeyField} == _${3};",
+            "    }",
+            "",
+            "    return ${4};",
+            "}"
+        ]
+    },
+    "Table exist method": {
+        "prefix": ["tableexist"],
+        "description": "Static exist() of a table",
+        "body": [
+            "public static boolean exist(${2:KeyType} _${3:key})",
+            "{",
+            "    return _${3}",
+            "        && (select firstonly RecId from ${1:TableName}",
+            "            where ${1}.${4:KeyField} == _${3}).RecId != 0;",
+            "}"
+        ]
+    },
+    "Data contract parm method": {
+        "prefix": ["parm", "parmmethod"],
+        "description": "parm method of a data contract",
+        "body": [
+            "[DataMemberAttribute]",
+            "public ${1:CustAccount} parm${2/(.*)/${1:/capitalize}/}(${1} _${2:custAccount} = ${2})",
+            "{",
+            "    ${2} = _${2};",
+            "",
+            "    return ${2};",
+            "}"
+        ]
+    },
+    "ttsbegin / ttscommit": {
+        "prefix": ["tts", "ttsbegin"],
+        "description": "Transaction block",
+        "body": [
+            "ttsbegin;",
+            "$0",
+            "ttscommit;"
+        ]
+    },
+    "while select": {
+        "prefix": ["whileselect"],
+        "description": "Loop over records",
+        "body": [
+            "while select ${1:custTable}",
+            "    where ${1}.${2:AccountNum} == ${3:accountNum}",
+            "{",
+            "    $0",
+            "}"
+        ]
+    },
+    "select firstonly forupdate": {
+        "prefix": ["selectforupdate", "selectfirstonly"],
+        "description": "Select one record for update",
+        "body": [
+            "select firstonly forupdate ${1:custTable}",
+            "    where ${1}.${2:AccountNum} == ${3:accountNum};"
+        ]
+    },
+    "try / catch with retry": {
+        "prefix": ["trycatchretry", "tryretry"],
+        "description": "Transaction with retry on deadlock and update conflict",
+        "body": [
+            "#OCCRetryCount",
+            "",
+            "try",
+            "{",
+            "    ttsbegin;",
+            "    $0",
+            "    ttscommit;",
+            "}",
+            "catch (Exception::Deadlock)",
+            "{",
+            "    if (appl.ttsLevel() == 0 && xSession::currentRetryCount() < #RetryNum)",
+            "    {",
+            "        retry;",
+            "    }",
+            "    throw Exception::Deadlock;",
+            "}",
+            "catch (Exception::UpdateConflict)",
+            "{",
+            "    if (appl.ttsLevel() == 0)",
+            "    {",
+            "        if (xSession::currentRetryCount() >= #RetryNum)",
+            "        {",
+            "            throw Exception::UpdateConflictNotRecovered;",
+            "        }",
+            "        retry;",
+            "    }",
+            "    throw Exception::UpdateConflict;",
+            "}"
+        ]
+    },
+    "SysTest test class": {
+        "prefix": ["systestclass", "testclass"],
+        "description": "SysTest test class",
+        "body": [
+            "[SysTestTarget(classStr(${1:ClassName}), UtilElementType::Class)]",
+            "public final class ${1}Test extends SysTestCase",
+            "{",
+            "    [SysTestMethod]",
+            "    public void test${2:Method}()",
+            "    {",
+            "        // Arrange",
+            "        ${1} target = new ${1}();",
+            "",
+            "        // Act",
+            "        $0",
+            "",
+            "        // Assert",
+            "        this.assertTrue(${3:true});",
+            "    }",
+            "",
+            "}"
+        ]
+    },
+    "SysTest test method": {
+        "prefix": ["systestmethod", "testmethod"],
+        "description": "SysTest test method",
+        "body": [
+            "[SysTestMethod]",
+            "public void test${1:Method}()",
+            "{",
+            "    // Arrange",
+            "    ${2}",
+            "",
+            "    // Act",
+            "    $0",
+            "",
+            "    // Assert",
+            "    this.assertEquals(${3:expected}, ${4:actual});",
+            "}"
+        ]
+    },
+    "info / warning / error with label": {
+        "prefix": ["infolabel", "warninglabel", "errorlabel", "strfmtlabel"],
+        "description": "Infolog message with strFmt and a label",
+        "body": [
+            "${1|info,warning,error|}(strFmt(\"${2:@LabelFile:LabelId}\", ${3:value}));"
+        ]
+    }
+}

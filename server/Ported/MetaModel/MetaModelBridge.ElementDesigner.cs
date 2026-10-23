@@ -347,9 +347,40 @@ namespace XppVsCode.Server.MetaModel
             return result;
         }
 
+        /// <summary>
+        /// Accepts the short paths of the cross-reference database and code search too: DataFields for a form data
+        /// source's Fields, and Controls/&lt;name&gt; for a form control anywhere in the design.
+        /// </summary>
+        private static string[] NormalizeElementPath(object element, string[] path)
+        {
+            if (path == null || path.Length == 0) return path;
+            var list = path.Select(p => p == "DataFields" ? "Fields" : p).ToList();
+            if (element is AxForm form && list[0] == "Controls" && list.Count >= 2 && form.Design != null)
+            {
+                var trail = FindControlTrail(form.Design, list[1]);
+                if (trail != null)
+                    list = new[] { "Design" }.Concat(trail.SelectMany(n => new[] { "Controls", n })).Concat(list.Skip(2)).ToList();
+            }
+            return list.ToArray();
+        }
+
+        private static List<string> FindControlTrail(object container, string name)
+        {
+            if (!(container?.GetType().GetProperty("Controls")?.GetValue(container) is IEnumerable controls)) return null;
+            foreach (object c in controls)
+            {
+                string n = ItemName(c);
+                if (string.Equals(n, name, StringComparison.OrdinalIgnoreCase)) return new List<string> { n };
+                var below = FindControlTrail(c, name);
+                if (below != null) { below.Insert(0, n); return below; }
+            }
+            return null;
+        }
+
         private static object WalkElementPath(object element, string[] path, out string error)
         {
             error = null;
+            path = NormalizeElementPath(element, path);
             object current = element;
             int i = 0;
             while (path != null && i < path.Length)

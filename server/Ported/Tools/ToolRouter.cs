@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
@@ -15,6 +16,9 @@ namespace XppVsCode.Server.Tools
         private readonly ModelObjectLister _modelLister = new ModelObjectLister();
         private readonly XRefQuery _xref = new XRefQuery();
         internal XRefQuery XRef => _xref;
+        private readonly CodeSearch _codeSearch = new CodeSearch();
+        private CodeExamples _examples;
+        private CodeExamples Examples => _examples ?? (_examples = new CodeExamples(_xref));
 
         /// <summary>Structured where-used for the extension's references list.</summary>
         public string WhereUsedJson(string body)
@@ -189,9 +193,39 @@ namespace XppVsCode.Server.Tools
           ""objectName"": { ""type"": ""string"", ""description"": ""Required. Exact name of the target object."" },
           ""memberName"": { ""type"": ""string"", ""description"": ""Optional. A method or field of the target, e.g. 'runProcess' — finds only who calls/uses that member."" },
           ""referenceKind"": { ""type"": ""string"", ""description"": ""Optional filter: Any (default), MethodCall, TypeReference, InterfaceImplementation, ClassExtended, TestCall, Property, Attribute, TestHelperCall, Tag, MethodOverride."" },
-          ""maxResults"": { ""type"": ""integer"", ""description"": ""Max results. Default 25. Max 100."" }
+          ""maxResults"": { ""type"": ""integer"", ""description"": ""Max results. Default 25. Max 100."" },
+          ""includeCode"": { ""type"": ""boolean"", ""description"": ""Also show the code lines where each reference is used (how existing code calls the API). Max 25 references."" }
         },
         ""required"": [""objectType"", ""objectName""]
+      }
+    },
+    {
+      ""name"": ""xpp_find_examples"",
+      ""description"": ""Finds standard (Microsoft) implementations to learn from, reuse or copy - the first step of every X++ design. Give a task in words (query: 'batch job with a data contract', 'number sequence for a new table', 'custom lookup', 'business event', 'report data provider', 'service operation', 'workflow', 'form with the SimpleList pattern', 'details master form', ...) and/or an object to resemble (objectType + objectName: objects that share its base class, interfaces, attributes, called APIs and tables). Returns ranked examples with the reason (small, focused examples first for framework patterns). Then read the best ones with xpp_read_object and follow their structure; call or extend them where possible, copy only when they cannot be reused."",
+      ""inputSchema"": {
+        ""type"": ""object"",
+        ""properties"": {
+          ""query"": { ""type"": ""string"", ""description"": ""What you need to implement, in words."" },
+          ""objectType"": { ""type"": ""string"", ""description"": ""With objectName: find objects similar to this one (AxClass, AxTable, AxForm, ...)."" },
+          ""objectName"": { ""type"": ""string"" },
+          ""maxResults"": { ""type"": ""integer"", ""description"": ""Default 15, max 50."" }
+        }
+      }
+    },
+    {
+      ""name"": ""xpp_search_code"",
+      ""description"": ""Searches the X++ source of every package (standard and custom): method code and declarations of classes, tables, forms, views, data entities, queries and maps. Use it to find how standard code does something (an API call, a pattern, a string, a label ID), where a field or method name appears in code, or precedents to copy. Literal text by default (case-insensitive); regex=true for a .NET regular expression. Results: object, method, line and the matching line. Narrow big searches with objectTypes or model. The first search reads the metadata from disk (up to a minute); later searches are fast."",
+      ""inputSchema"": {
+        ""type"": ""object"",
+        ""properties"": {
+          ""pattern"": { ""type"": ""string"", ""description"": ""Text (or regex) to find, at least 3 characters, e.g. 'NumberSeq::newGetNum(' or 'SysOperationServiceController'."" },
+          ""regex"": { ""type"": ""boolean"" },
+          ""caseSensitive"": { ""type"": ""boolean"" },
+          ""objectTypes"": { ""type"": ""array"", ""items"": { ""type"": ""string"" }, ""description"": ""Limit to these types, e.g. [\""AxClass\""]. Default: all code types."" },
+          ""model"": { ""type"": ""string"", ""description"": ""Limit to one model."" },
+          ""maxResults"": { ""type"": ""integer"", ""description"": ""Default 50, max 200."" }
+        },
+        ""required"": [""pattern""]
       }
     },
     {
@@ -404,6 +438,8 @@ namespace XppVsCode.Server.Tools
                 case "xpp_find_object": return HandleFindObject(idToken, json);
                 case "xpp_list_objects": return HandleListObjects(idToken, json);
                 case "xpp_find_references": return HandleFindReferences(idToken, json);
+                case "xpp_find_examples": return HandleFindExamples(idToken, json);
+                case "xpp_search_code": return HandleSearchCode(idToken, json);
                 case "xpp_get_model_info": return HandleGetModelInfo(idToken, json);
                 case "xpp_list_models": return DelegateToBridge(idToken, json, "list_models");
                 case "xpp_read_label": return HandleReadLabel(idToken, json);
@@ -880,6 +916,12 @@ namespace XppVsCode.Server.Tools
                 return JsonHelpers.BuildToolResult(idToken,
                     "Parameter 'objectName' is required.", isError: true);
 
+            if (ArgFlag(argsJson, "includeCode"))
+            {
+                string withCode = ReferencesWithCode(argsJson, objectType, objectName);
+                if (withCode != null) return JsonHelpers.BuildToolResult(idToken, withCode);
+            }
+
             string direct = _xref.TryHandle(idToken, json, out string unusableReason);
             if (direct != null) return direct;
 
@@ -892,6 +934,88 @@ namespace XppVsCode.Server.Tools
                 + "\n- No other cross-reference source is available."
                 + "\nTell the user exactly this. Do NOT search metadata XML files or use the terminal as a substitute.",
                 isError: true);
+        }
+
+        /// <summary>Where-used with the code lines that use the target (how existing code calls the API).</summary>
+        private string ReferencesWithCode(string argsJson, string objectType, string objectName)
+        {
+            string member = JsonHelpers.ExtractArgString(argsJson, "memberName");
+            int max = int.TryParse(JsonHelpers.ExtractArgString(argsJson, "maxResults"), out int m) ? Math.Max(1, Math.Min(m, 25)) : 15;
+            var parsed = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue }
+                .DeserializeObject(_xref.QueryJson(objectType, objectName, member, max * 4, JsonHelpers.ExtractArgString(argsJson, "referenceKind"))) as Dictionary<string, object>;
+            if (parsed == null || !parsed.TryGetValue("success", out object ok) || !(ok is bool okFlag) || !okFlag) return null;
+            var refs = (parsed["references"] as object[] ?? new object[0]).Cast<Dictionary<string, object>>().ToList();
+            string token = string.IsNullOrEmpty(member) ? objectName : member;
+            var tokenRx = new System.Text.RegularExpressions.Regex(@"\b" + System.Text.RegularExpressions.Regex.Escape(token) + @"\b",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var sb = new StringBuilder();
+            sb.AppendLine("Code using " + objectName + (string.IsNullOrEmpty(member) ? "" : "." + member) + " (" + refs.Count + (parsed.ContainsKey("more") && parsed["more"] is bool more && more ? "+" : "") + " references; showing up to " + max + " places):");
+            var sourceCache = new Dictionary<string, List<KeyValuePair<string[], string>>>(StringComparer.OrdinalIgnoreCase);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int shown = 0;
+            foreach (var r in refs)
+            {
+                string type = r.TryGetValue("objectType", out object t) ? t as string : null;
+                string name = r.TryGetValue("objectName", out object n) ? n as string : null;
+                var path = (r.TryGetValue("memberPath", out object mp) ? mp as object[] : null)?.Select(x => x as string == "DataFields" ? "Fields" : x as string).ToArray() ?? new string[0];
+                if (type == null || name == null || !seen.Add(type + "/" + name + "/" + string.Join("/", path))) continue;
+                if (!sourceCache.TryGetValue(type + "/" + name, out var sources)) sourceCache[type + "/" + name] = sources = CodeSearch.SourcesOf(type, name);
+                var source = sources?.FirstOrDefault(sx => path.Length >= 2 && sx.Key.Length >= 2
+                    && string.Equals(sx.Key[sx.Key.Length - 1], path[path.Length - 1], StringComparison.OrdinalIgnoreCase)
+                    && (path.Length == 2 || sx.Key.Length < 3 || string.Equals(sx.Key[sx.Key.Length - 3], path[path.Length - 3], StringComparison.OrdinalIgnoreCase)));
+                var lines = source?.Value.Replace("\r\n", "\n").Split('\n');
+                var hits = lines == null ? new List<int>() : Enumerable.Range(0, lines.Length).Where(i => tokenRx.IsMatch(lines[i])).Take(2).ToList();
+                sb.AppendLine("- " + type + " " + name + (path.Length > 0 ? " / " + string.Join("/", path) : "") + " [" + (r.TryGetValue("kind", out object k) ? k : "") + "]");
+                foreach (int i in hits)
+                    sb.AppendLine("    line " + (i + 1) + ": " + lines[i].Trim());
+                if (++shown >= max) break;
+            }
+            sb.AppendLine("Read a whole method with xpp_read_object (methodNames) when you want to copy or adapt it.");
+            return sb.ToString();
+        }
+
+        // Booleans arrive as JSON tokens (true) or, from some clients, as strings ("true").
+        private static bool ArgFlag(string argsJson, string key) =>
+            "true".Equals(JsonHelpers.ExtractJsonValueToken(argsJson, key) ?? JsonHelpers.ExtractArgString(argsJson, key), StringComparison.OrdinalIgnoreCase);
+
+        private string HandleFindExamples(string idToken, string json)
+        {
+            string argsJson = JsonHelpers.ExtractToolArgumentsObject(json);
+            string query = JsonHelpers.ExtractArgString(argsJson, "query");
+            string objectType = JsonHelpers.ExtractArgString(argsJson, "objectType");
+            string objectName = JsonHelpers.ExtractArgString(argsJson, "objectName");
+            if (string.IsNullOrWhiteSpace(query) && string.IsNullOrWhiteSpace(objectName))
+                return JsonHelpers.BuildToolResult(idToken, "Give a query (what you need to implement) and/or objectType + objectName (an object to resemble).", isError: true);
+            int max = int.TryParse(JsonHelpers.ExtractArgString(argsJson, "maxResults"), out int m) ? m : 15;
+            var result = Examples.Find(query, objectType, objectName, max);
+            if (!(result["success"] is bool ok && ok)) return JsonHelpers.BuildToolResult(idToken, result["message"] as string ?? "Search failed.", isError: true);
+            var items = (List<Dictionary<string, object>>)result["items"];
+            var sb = new StringBuilder();
+            sb.AppendLine("Standard examples: " + result["interpretation"]);
+            if (items.Count == 0) sb.AppendLine("(none found; rephrase the query with framework words, or give an object to resemble)");
+            foreach (var i in items)
+                sb.AppendLine("- " + i["objectType"] + " " + i["objectName"] + (i["model"] != null ? " [" + i["model"] + "]" : "") + " - " + i["reason"]);
+            sb.AppendLine("Next: xpp_read_object the closest one or two, then reuse (call), extend (CoC / events) or, if neither is possible, copy and adapt; name the precedent in your plan.");
+            return JsonHelpers.BuildToolResult(idToken, sb.ToString());
+        }
+
+        private string HandleSearchCode(string idToken, string json)
+        {
+            string argsJson = JsonHelpers.ExtractToolArgumentsObject(json);
+            string pattern = JsonHelpers.ExtractArgString(argsJson, "pattern");
+            bool regex = ArgFlag(argsJson, "regex");
+            bool caseSensitive = ArgFlag(argsJson, "caseSensitive");
+            int max = int.TryParse(JsonHelpers.ExtractArgString(argsJson, "maxResults"), out int m) ? Math.Max(1, Math.Min(m, 200)) : 50;
+            var types = JsonHelpers.ExtractJsonStringArray(argsJson, "objectTypes");
+            var result = _codeSearch.Search(pattern, regex, caseSensitive, types, JsonHelpers.ExtractArgString(argsJson, "model"), max);
+            if (result.Error != null && result.Hits.Count == 0) return JsonHelpers.BuildToolResult(idToken, result.Error, isError: true);
+            var sb = new StringBuilder();
+            sb.AppendLine(result.Hits.Count + (result.Truncated ? "+" : "") + " match(es) for '" + pattern + "' (" + result.Scanned + " files, " + result.Ms + " ms)"
+                + (result.Truncated ? "; more exist: narrow with objectTypes, model or a more specific pattern" : "") + ":");
+            foreach (var h in result.Hits)
+                sb.AppendLine("- " + h.ObjectType + " " + h.ObjectName + " [" + h.Model + "] " + string.Join("/", h.MemberPath) + " line " + h.Line + ": " + h.Text);
+            if (result.Error != null) sb.AppendLine(result.Error);
+            return JsonHelpers.BuildToolResult(idToken, sb.ToString());
         }
 
         private string HandleGetModelInfo(string idToken, string json)

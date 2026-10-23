@@ -53,6 +53,9 @@ export class CodeIntelligence implements vscode.Disposable, ToolsContribution {
     private readonly disposables: vscode.Disposable[] = [];
     private readonly changed = new vscode.EventEmitter<void>();
     readonly onDidChange = this.changed.event;
+    private readonly indexRebuilt = new vscode.EventEmitter<void>();
+    /** Fires when the user rebuilds the extension index (caches built from the index should be reloaded). */
+    readonly onDidRebuildIndex = this.indexRebuilt.event;
     private readonly lensChanged = new vscode.EventEmitter<void>();
     private readonly tokensChanged = new vscode.EventEmitter<void>();
     private readonly syntax = vscode.languages.createDiagnosticCollection('xpp-syntax');
@@ -123,7 +126,10 @@ export class CodeIntelligence implements vscode.Disposable, ToolsContribution {
         }
 
         command('xpp.codeIntel.toggle', (key: string) => setEnabled(key, !enabled(key)));
-        command('xpp.codeIntel.rebuildIndex', () => this.ensureIndex(true));
+        command('xpp.codeIntel.rebuildIndex', () => {
+            this.indexRebuilt.fire();
+            return this.ensureIndex(true);
+        });
         command('xpp.codeIntel.showExtensions', (arg?: { objectType?: string; objectName?: string; entry?: { name: string }; item?: { objectType: string; objectName: string } }) =>
             this.showExtensions(arg));
         command('xpp.codeIntel.peek', (uri: vscode.Uri, line: number, character: number, kinds: string[]) => this.peek(uri, line, character, kinds));
@@ -983,7 +989,7 @@ export class CodeIntelligence implements vscode.Disposable, ToolsContribution {
 }
 
 /** Splits a parameter list on top-level commas. */
-function splitParameters(params: string): string[] {
+export function splitParameters(params: string): string[] {
     const parts: string[] = [];
     let depth = 0;
     let current = '';
@@ -1004,7 +1010,7 @@ function splitParameters(params: string): string[] {
 }
 
 /** A line with strings and comments replaced by spaces (positions kept). */
-function blankStringsAndComments(line: string, inComment: boolean): { text: string; inComment: boolean } {
+export function blankStringsAndComments(line: string, inComment: boolean): { text: string; inComment: boolean } {
     let out = '';
     let quote = '';
     for (let i = 0; i < line.length; i++) {

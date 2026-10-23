@@ -2,7 +2,7 @@
   "name": "xpp-vscode",
   "displayName": "F&O Studio for VS Code",
   "description": "A full Dynamics 365 Finance & Operations development environment in VS Code: Application Explorer, designers, X++ code, build, deploy, debugging, and AI agent tools.",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "publisher": "MNazmi",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -152,6 +152,12 @@
         "language": "xpp",
         "scopeName": "source.xpp",
         "path": "./syntaxes/xpp.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "xpp",
+        "path": "./snippets/xpp.json"
       }
     ],
     "viewsContainers": {
@@ -502,6 +508,34 @@
         "command": "xpp.codeIntel.toggle",
         "title": "Toggle Code Intelligence Feature",
         "category": "X++"
+      },
+      {
+        "command": "xpp.searchCode",
+        "title": "Search Code in All Packages",
+        "category": "X++",
+        "icon": "$(search-fuzzy)"
+      },
+      {
+        "command": "xpp.findExamples",
+        "title": "Find Similar Standard Implementations",
+        "category": "X++",
+        "icon": "$(lightbulb)"
+      },
+      {
+        "command": "xpp.addToPrivilege",
+        "title": "Add to Privilege…",
+        "category": "X++"
+      },
+      {
+        "command": "xpp.generateTests",
+        "title": "Generate SysTest Class",
+        "category": "X++"
+      },
+      {
+        "command": "xpp.runSnippet",
+        "title": "Run Snippet in Environment",
+        "category": "X++",
+        "icon": "$(play)"
       }
     ],
     "menus": {
@@ -538,6 +572,11 @@
         },
         {
           "command": "xpp.openObject",
+          "when": "view == xpp.aot",
+          "group": "navigation@2"
+        },
+        {
+          "command": "xpp.searchCode",
           "when": "view == xpp.aot",
           "group": "navigation@2"
         },
@@ -692,6 +731,21 @@
           "command": "xpp.tools.modelDependencies",
           "when": "view == xpp.aot && viewItem =~ /xppModel/",
           "group": "1_model@2"
+        },
+        {
+          "command": "xpp.findExamples",
+          "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /xppElement/",
+          "group": "4_refs@5"
+        },
+        {
+          "command": "xpp.addToPrivilege",
+          "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\bmenuitem\\b/",
+          "group": "3_extend@3"
+        },
+        {
+          "command": "xpp.generateTests",
+          "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\bclass\\b/",
+          "group": "5_run@4"
         }
       ],
       "webview/context": [
@@ -804,6 +858,21 @@
           "command": "xpp.viewErd",
           "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\btable\\b/",
           "group": "0_4_refs@4"
+        },
+        {
+          "command": "xpp.findExamples",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot",
+          "group": "0_4_refs@5"
+        },
+        {
+          "command": "xpp.addToPrivilege",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\bmenuitem\\b/",
+          "group": "0_3_extend@3"
+        },
+        {
+          "command": "xpp.generateTests",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\bclass\\b/",
+          "group": "0_5_run@4"
         }
       ],
       "commandPalette": [
@@ -855,6 +924,13 @@
           "command": "xpp.designer.findEventHandlers",
           "when": "false"
         }
+      ],
+      "editor/title": [
+        {
+          "command": "xpp.runSnippet",
+          "when": "editorLangId == xpp && resourceScheme == untitled",
+          "group": "navigation"
+        }
       ]
     },
     "keybindings": [
@@ -866,6 +942,11 @@
         "command": "xpp.build",
         "key": "ctrl+shift+b",
         "when": "resourceScheme == xpp || resourceExtname == .rnrproj"
+      },
+      {
+        "command": "xpp.searchCode",
+        "key": "ctrl+shift+alt+f",
+        "when": "editorLangId == xpp || focusedView == xpp.aot || focusedView == xpp.project || focusedView == xpp.tools || focusedView == xpp.infolog"
       }
     ],
     "configuration": {
@@ -946,6 +1027,11 @@
           "default": true,
           "markdownDescription": "Live syntax check with the X++ compiler parser. Also switchable in the Dynamics 365 view under Code Intelligence."
         },
+        "xpp.codeIntelligence.obsoleteWarnings": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Obsolete API warnings: calls to methods and uses of classes and tables marked `[SysObsolete]` are reported in Problems (as errors when the attribute says so). Also switchable in the Dynamics 365 view under Code Intelligence."
+        },
         "xpp.codeIntelligence.formatting": {
           "type": "boolean",
           "default": true,
@@ -1015,6 +1101,7 @@
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.101.0",
     "@vscode/codicons": "^0.0.46-24",
+    "@vscode/test-electron": "^3.1.0",
     "typescript": "^5.6.0"
   },
   "preview": true

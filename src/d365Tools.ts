@@ -11,7 +11,7 @@ import { XppServerClient } from './serverClient';
 import { compilerLineToDocumentLine } from './xppSource';
 
 /** An Application Explorer element, a project item, or a model node passed by a tree context menu. */
-type TreeArg = {
+export type TreeArg = {
     objectType?: string;
     entry?: { name: string };
     item?: { objectType: string; objectName: string };
@@ -75,6 +75,8 @@ const ToolsMenu: ToolNode[] = [
     { label: 'Find Tag References…', icon: 'tag', command: 'xpp.tools.findTagReferences' },
     { label: 'Metadata Search…', icon: 'search', command: 'xpp.openObject' },
     { label: 'Find References…', icon: 'references', command: 'xpp.findReferences' },
+    { label: 'Search Code…', icon: 'search-fuzzy', command: 'xpp.searchCode', description: 'all packages' },
+    { label: 'Find Similar Standard Implementations…', icon: 'lightbulb', command: 'xpp.findExamples' },
     {
         label: 'View', icon: 'type-hierarchy', children: [
             { label: 'View Hierarchy…', icon: 'type-hierarchy-sub', command: 'xpp.viewHierarchy' },
@@ -192,7 +194,7 @@ export function registerTools(
     context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(MetadataScheme, new MetadataDocuments(server)));
 }
 
-function elementOf(arg: TreeArg | undefined): { objectType: string; objectName: string } | undefined {
+export function elementOf(arg: TreeArg | undefined): { objectType: string; objectName: string } | undefined {
     if (arg?.item) {
         return { objectType: arg.item.objectType, objectName: arg.item.objectName };
     }
@@ -203,7 +205,7 @@ function elementOf(arg: TreeArg | undefined): { objectType: string; objectName: 
 }
 
 /** Asks for an element when a command runs from the palette or the tools view rather than a tree node. */
-async function pickElement(server: XppServerClient, title: string, types?: string[]): Promise<{ objectType: string; objectName: string } | undefined> {
+export async function pickElement(server: XppServerClient, title: string, types?: string[]): Promise<{ objectType: string; objectName: string } | undefined> {
     const name = await vscode.window.showInputBox({ title, prompt: 'Element name (or part of it)', ignoreFocusOut: true });
     if (!name || name.trim().length < 3) {
         return undefined;
@@ -225,7 +227,7 @@ async function customModels(): Promise<ModelLocation[]> {
 }
 
 /** The model new objects go to: the project's model, else one the user picks. */
-async function targetModel(title: string): Promise<string | undefined> {
+export async function targetModel(title: string): Promise<string | undefined> {
     const project = await readProject().catch(() => undefined);
     if (project?.model) {
         return project.model;
@@ -234,10 +236,30 @@ async function targetModel(title: string): Promise<string | undefined> {
     return picked?.label;
 }
 
-async function addCreatedToProject(server: XppServerClient, objectType: string, objectName: string): Promise<void> {
+export async function addCreatedToProject(server: XppServerClient, objectType: string, objectName: string): Promise<void> {
     if (await findActiveProject()) {
         await server.bridge('add_to_project', { objectType, objectName });
     }
+}
+
+/** Label file IDs with their languages, read from the models' AxLabelFile folders. */
+export async function listLabelFiles(customOnly = false): Promise<Map<string, Set<string>>> {
+    const files = new Map<string, Set<string>>();
+    for (const model of await listModels()) {
+        if (customOnly && !model.isCustom) {
+            continue;
+        }
+        const names = await fs.readdir(path.join(model.folder, 'AxLabelFile')).catch(() => [] as string[]);
+        for (const file of names.filter(n => n.toLowerCase().endsWith('.xml'))) {
+            const match = /^(.+)_([a-z]{2}(-[A-Za-z]+)?)\.xml$/i.exec(file);
+            if (match) {
+                const languages = files.get(match[1]) ?? new Set<string>();
+                languages.add(match[2]);
+                files.set(match[1], languages);
+            }
+        }
+    }
+    return files;
 }
 
 // ── Model management ──
@@ -378,18 +400,7 @@ async function createDeploymentPackage(): Promise<void> {
 // ── Labels ──
 
 async function findLabels(server: XppServerClient): Promise<void> {
-    const files = new Map<string, Set<string>>();
-    for (const model of await listModels()) {
-        const names = await fs.readdir(path.join(model.folder, 'AxLabelFile')).catch(() => [] as string[]);
-        for (const file of names.filter(n => n.toLowerCase().endsWith('.xml'))) {
-            const match = /^(.+)_([a-z]{2}(-[A-Za-z]+)?)\.xml$/i.exec(file);
-            if (match) {
-                const languages = files.get(match[1]) ?? new Set<string>();
-                languages.add(match[2]);
-                files.set(match[1], languages);
-            }
-        }
-    }
+    const files = await listLabelFiles();
     const fileId = await vscode.window.showQuickPick([...files.keys()].sort((a, b) => a.localeCompare(b)), { title: 'Find labels: label file' });
     if (!fileId) {
         return;
@@ -563,7 +574,7 @@ async function findReferences(server: XppServerClient, arg?: TreeArg): Promise<v
     }
 }
 
-async function openReference(ref: { objectType?: string; objectName: string; memberPath: string[]; line: number }): Promise<void> {
+export async function openReference(ref: { objectType?: string; objectName: string; memberPath: string[]; line: number }): Promise<void> {
     if (!ref.objectType) {
         return;
     }
@@ -584,7 +595,7 @@ async function openReference(ref: { objectType?: string; objectName: string; mem
 }
 
 /** The web client URL for an element: menu items, class runner and table browser, like Visual Studio's startup object. */
-async function openInBrowser(arg: TreeArg | undefined, tableBrowser: boolean, server: XppServerClient): Promise<void> {
+export async function openInBrowser(arg: TreeArg | undefined, tableBrowser: boolean, server: XppServerClient): Promise<void> {
     let element = elementOf(arg) ?? (tableBrowser
         ? await pickTable()
         : undefined);

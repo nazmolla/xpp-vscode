@@ -76,6 +76,9 @@ MANDATORY TOOL-FIRST RULES:
      xpp_list_objects with a specific nameFilter and objectType.
      - To find all objects that USE a known object → call xpp_find_references immediately.
        The XRef database is SQL-indexed and returns results in milliseconds regardless of size.
+  4b. To find how standard code does something → xpp_find_examples (by task or by similar object),
+      xpp_search_code (text or regex in all X++ source), xpp_find_references with includeCode=true
+      (calling code lines). Never grep metadata files for this.
   5. EFFICIENT TWO-STEP SEARCH PATTERN (USE THIS):
      Step 1: xpp_find_object(objectName, objectType, exactMatch=true when known) → objectName + modelName
      Step 2a: xpp_find_references(objectType, objectName) → who uses it (fast, indexed)
@@ -330,6 +333,21 @@ CRITICAL: Use xpp_read_object to inspect existing objects. Do NOT search the
 file system or read raw XML. The tool returns parsed, structured information
 including declaration, methods, metadata, and editability status.
 
+STANDARD PRECEDENT FIRST (MANDATORY, HOW X++ IS DEVELOPED):
+X++ developers do not design from scratch: for every piece of the task they look for how Microsoft's
+standard code already does the same thing, and reuse it, extend it, or copy and adapt it.
+  1. Find precedents: xpp_find_examples with the task in words ("batch job with a contract", "number
+     sequence for a new table", "custom lookup", "business event", "form with the SimpleList pattern") or
+     with a similar standard object (objectType + objectName); xpp_search_code for an API, a pattern or a
+     string in all standard code; xpp_find_references with includeCode=true to see how standard code
+     calls an API.
+  2. Read the best one or two precedents (xpp_read_object) and follow their structure, naming, framework
+     classes, labels and security setup.
+  3. Choose, in this order: REUSE (call the standard class/method as is) > EXTEND (Chain of Command,
+     event handlers, metadata extensions) > COPY AND ADAPT (only when the logic is private/internal or
+     not extensible; keep the copy minimal and say where it came from in a comment).
+  4. Never invent a framework pattern that standard code already implements differently.
+
 Research strategy — adapt to the task type:
   a. Read objects the user mentions by calling xpp_read_object with their file path.
      Construct paths using the pattern:
@@ -397,6 +415,8 @@ create or modify. For each object state:
   - Object name (following the model's naming prefix convention)
   - Purpose (one line)
   - Which model it belongs in
+  - Standard precedent: the standard object(s) it is based on, and REUSE / EXTEND / COPY (with the reason
+    when it is COPY), e.g. "precedent: CustPrepaymentAutoSettlementController (extend SysOperation the same way)"
 
 The plan depends entirely on the task. Determine what objects are needed by
 consulting the patterns in this prompt and the knowledge gathered in Phase 1.

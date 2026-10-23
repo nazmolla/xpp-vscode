@@ -43,7 +43,11 @@ namespace XppVsCode.Server.Tools
             _xref = xref;
             _bridge = bridge;
             _index = new ExtensionIndex(xref);
+            _examples = new CodeExamples(xref);
         }
+
+        private readonly CodeExamples _examples;
+        private readonly CodeSearch _search = new CodeSearch();
 
         public string Handle(string action, string body)
         {
@@ -63,6 +67,9 @@ namespace XppVsCode.Server.Tools
                     case "syntax": return Syntax(body);
                     case "labels": return Labels(body);
                     case "event_handlers": return EventHandlers(body);
+                    case "search_code": return SearchCode(body);
+                    case "find_examples": return _json.Serialize(_examples.Find(Str(body, "query"), Str(body, "objectType"), Str(body, "objectName"), Int(body, "maxResults", 15)));
+                    case "obsolete": return _json.Serialize(_examples.Obsolete());
                     default: return Fail("Unknown language action '" + action + "'.");
                 }
             }
@@ -71,6 +78,25 @@ namespace XppVsCode.Server.Tools
                 McpLogger.Log("xpp/lang " + action + " failed: " + ex);
                 return Fail(ex.Message);
             }
+        }
+
+        private static int Int(string body, string key, int fallback) =>
+            int.TryParse(JsonHelpers.ExtractJsonValueToken(body, key) ?? Str(body, key), out int v) ? v : fallback;
+
+        private string SearchCode(string body)
+        {
+            var result = _search.Search(Str(body, "pattern"), Flag(body, "regex"), Flag(body, "caseSensitive"),
+                JsonHelpers.ExtractJsonStringArray(body, "objectTypes"), Str(body, "model"), Int(body, "maxResults", 200));
+            if (result.Error != null && result.Hits.Count == 0) return Fail(result.Error);
+            return Ok(new Dictionary<string, object>
+            {
+                ["items"] = result.Hits.Select(h => new Dictionary<string, object>
+                {
+                    ["objectType"] = h.ObjectType, ["objectName"] = h.ObjectName, ["model"] = h.Model, ["memberPath"] = h.MemberPath,
+                    ["member"] = h.Member, ["line"] = h.Line, ["column"] = h.Column, ["text"] = h.Text,
+                }).ToList(),
+                ["truncated"] = result.Truncated, ["scanned"] = result.Scanned, ["ms"] = result.Ms, ["message"] = result.Error,
+            });
         }
 
         private string Ok(Dictionary<string, object> data)

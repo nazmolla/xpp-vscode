@@ -18,6 +18,7 @@ export const Features: FeatureSetting[] = [
     { key: 'hover', label: 'Hover details', description: 'Label texts, EDT and enum details and method signatures on hover.', slow: false, default: true },
     { key: 'codeLens', label: 'Code lens', description: 'Reference, override, Chain of Command and handler counts above methods; what a CoC or handler method wraps.', slow: false, default: true },
     { key: 'syntaxCheck', label: 'Live syntax check', description: 'Syntax errors while you type, with the X++ compiler\'s own parser.', slow: false, default: true },
+    { key: 'obsoleteWarnings', label: 'Obsolete API warnings', description: 'Warnings (or errors) where code calls methods or uses classes and tables marked [SysObsolete].', slow: false, default: true },
     { key: 'formatting', label: 'Format document', description: '4-space Allman layout for X++ code (Format Document / Format Selection).', slow: false, default: true },
     { key: 'eventHandlerIndex', label: 'Form and data event handlers', description: 'Include [FormControlEventHandler], [DataEventHandler] and similar handlers, which the cross-reference database does not record. The first scan of all packages takes about a minute; it is cached afterwards.', slow: true, default: true },
     { key: 'semanticHighlighting', label: 'Semantic highlighting', description: 'Colour classes, tables, enums, EDTs, methods and fields by what they are. Looks up every identifier of the open document.', slow: true, default: false },

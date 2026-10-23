@@ -5,3 +5,4 @@ server/bin/
 server/obj/
 .vs/
 *.user
+.vscode-test/

@@ -99,6 +99,7 @@ export function elementContextValue(objectType: string, isCustom = false): strin
         ExtensionTypes[objectType] ? 'extensible' : '', CodeExtensionFunctions[objectType] ? 'coc' : '',
         BrowserTypes.has(objectType) ? 'browser' : '', objectType === 'AxTable' ? 'table' : '', WhereUsedTypes.has(objectType) ? 'refs' : '',
         objectType === 'AxClass' || objectType === 'AxTable' ? 'hier' : '', objectType === 'AxClass' ? 'class' : '',
+        objectType.startsWith('AxMenuItem') ? 'menuitem' : '',
         isCustom ? 'custom' : '',
     ].filter(Boolean).join(' ');
 }

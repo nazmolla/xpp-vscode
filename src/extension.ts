@@ -20,6 +20,7 @@ import { connectEnvironment } from './setup';
 import { registerTests } from './tests';
 import { checkEnvironmentConnection } from './ude';
 import { CodeIntelligence } from './codeIntel/providers';
+import { registerProductivity } from './productivity';
 
 export function activate(context: vscode.ExtensionContext): void {
     const log = vscode.window.createOutputChannel('X++');
@@ -64,7 +65,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const command = (id: string, handler: (...args: any[]) => unknown) =>
         context.subscriptions.push(vscode.commands.registerCommand(id, async (...args: any[]) => {
             try {
-                await handler(...args);
+                return await handler(...args);
             } catch (err) {
                 vscode.window.showErrorMessage((err as Error).message);
             }
@@ -127,6 +128,14 @@ export function activate(context: vscode.ExtensionContext): void {
         aotTree.refresh();
         projectTree.refresh();
     }, command, [codeIntel]);
+    registerProductivity(context, command, {
+        server, languageServer, log, codeIntel,
+        refreshCode: uri => codeFs.refresh(uri),
+        refreshTrees: () => {
+            aotTree.refresh();
+            projectTree.refresh();
+        },
+    });
     command('xpp.designer.new', (node: DesignerNodeContext) => ElementDesigner.runAction('new', node));
     command('xpp.designer.newMethod', (node: DesignerNodeContext) => ElementDesigner.runAction('newMethod', node));
     command('xpp.designer.override', (node: DesignerNodeContext) => ElementDesigner.runAction('override', node));
@@ -152,11 +161,12 @@ export function activate(context: vscode.ExtensionContext): void {
         if (!project?.model) {
             throw new Error('Select a D365FO project first.');
         }
-        await vscode.window.withProgress(
+        return vscode.window.withProgress(
             { location: vscode.ProgressLocation.Notification, title: `Building project ${project.name}…`, cancellable: true },
             async (_progress, token) => {
                 const ok = await builder.build(project.model, token, project.items);
                 vscode.window.setStatusBarMessage(ok ? '$(check) X++ project build succeeded' : '$(error) X++ project build failed', 10000);
+                return ok;
             });
     });
     registerTests(context, server);
