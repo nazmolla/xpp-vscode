@@ -76,6 +76,7 @@ const ToolsMenu: ToolNode[] = [
     { label: 'Metadata Search…', icon: 'search', command: 'xpp.openObject' },
     { label: 'Find References…', icon: 'references', command: 'xpp.findReferences' },
     { label: 'Search Code…', icon: 'search-fuzzy', command: 'xpp.searchCode', description: 'all packages' },
+    { label: 'Find Message Source…', icon: 'search', command: 'xpp.findMessageSource', description: 'error text to code' },
     { label: 'Find Similar Standard Implementations…', icon: 'lightbulb', command: 'xpp.findExamples' },
     {
         label: 'Security', icon: 'shield', children: [

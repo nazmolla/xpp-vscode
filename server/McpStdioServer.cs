@@ -49,6 +49,7 @@ namespace XppVsCode.Server
             "xpp_search_code", "xpp_find_examples", "xpp_find_references", "xpp_search_docs", "xpp_read_object", "xpp_find_object",
             "xpp_list_objects", "xpp_list_model_objects", "xpp_get_form_layout", "xpp_read_label", "xpp_get_model_info",
             "xpp_list_models", "xpp_get_environment", "xpp_get_object_type_schema", "xpp_list_project_items", "xpp_validate_object", "xpp_analyze_security",
+            "xpp_find_message_source", "xpp_get_guide",
         };
 
         private static bool IsParallelRead(string json) =>

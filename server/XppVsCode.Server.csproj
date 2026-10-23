@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\XppCopilotSystemPrompt.txt" LogicalName="XppVsCode.Server.SystemPrompt.txt" />
+    <EmbeddedResource Include="Resources\XppCopilotGuide.txt" LogicalName="XppVsCode.Server.Guide.txt" />
   </ItemGroup>
 
   <ItemGroup>

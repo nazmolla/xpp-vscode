@@ -44,7 +44,10 @@ namespace XppVsCode.Server.Tools
             _bridge = bridge;
             _index = new ExtensionIndex(xref);
             _examples = new CodeExamples(xref);
+            _messages = new MessageTrace(xref);
         }
+
+        private readonly MessageTrace _messages;
 
         private readonly CodeExamples _examples;
         private readonly CodeSearch _search = new CodeSearch();
@@ -73,6 +76,8 @@ namespace XppVsCode.Server.Tools
                     case "obsolete": return _json.Serialize(_examples.Obsolete());
                     case "security": return _json.Serialize(_security.Handle(Str(body, "op"), k => Str(body, k),
                         k => JsonHelpers.ExtractJsonStringArray(body, k), k => Flag(body, k)));
+                    case "message_source": return _json.Serialize(_messages.Trace(Str(body, "message"), Str(body, "language"),
+                        Int(body, "maxLabels", 5), Int(body, "maxResults", 30)));
                     default: return Fail("Unknown language action '" + action + "'.");
                 }
             }

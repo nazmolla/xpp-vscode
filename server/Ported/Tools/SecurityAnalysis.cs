@@ -113,8 +113,10 @@ namespace XppVsCode.Server.Tools
             {
                 string custom = DynamicsConfigurationReader.ReadActiveConfiguration().CustomMetadataFolder;
                 if (!string.IsNullOrEmpty(custom) && Directory.Exists(custom))
-                    foreach (string package in Directory.GetDirectories(custom))
-                        foreach (string model in Directory.GetDirectories(package)) index.CustomModels.Add(Path.GetFileName(model));
+                    // Packages only (a Descriptor folder): XppSource and other build folders hold copies named after standard models.
+                    foreach (string package in Directory.GetDirectories(custom).Where(p => Directory.Exists(Path.Combine(p, "Descriptor"))))
+                        foreach (string model in Directory.GetDirectories(package).Where(m => !string.Equals(Path.GetFileName(m), "Descriptor", StringComparison.OrdinalIgnoreCase)))
+                            index.CustomModels.Add(Path.GetFileName(model));
             }
             catch { }
 
@@ -522,7 +524,7 @@ namespace XppVsCode.Server.Tools
             foreach (var d in index.Duties.Values.Where(d => Mine(d.Model)))
             {
                 if (!index.DutyRoles.ContainsKey(d.Name))
-                    Finding("Warning", "OrphanDuty", "AxSecurityDuty", d.Name, "The duty is in no role.");
+                    Finding("Warning", "OrphanDuty", "AxSecurityDuty", d.Name, "The duty is in no role. Find the standard roles that do this job with op=placement duty=" + d.Name + " and add it with a role extension.");
                 foreach (string p in d.Privileges.Where(p => !index.Privileges.ContainsKey(p)))
                     Finding("Error", "MissingPrivilege", "AxSecurityDuty", d.Name, "Privilege " + p + " does not exist.");
             }
@@ -668,7 +670,8 @@ namespace XppVsCode.Server.Tools
         {
             var index = Get();
             var list = index.Roles.Values
-                .Where(r => string.IsNullOrEmpty(filter) || r.Name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0)
+                .Where(r => string.IsNullOrEmpty(filter) || r.Name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0
+                    || (LabelText(r.Label) ?? "").IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0)
                 .Where(r => !customOnly || index.CustomModels.Contains(r.Model) || r.ExtensionModels.Overlaps(index.CustomModels))
                 .OrderBy(r => r.Name).Take(customOnly ? 500 : 2000).ToList();
             return new Dictionary<string, object>
@@ -676,10 +679,151 @@ namespace XppVsCode.Server.Tools
                 ["success"] = true,
                 ["roles"] = list.Select(r => new Dictionary<string, object>
                 {
-                    ["name"] = r.Name, ["label"] = r.Label, ["model"] = r.Model, ["custom"] = index.CustomModels.Contains(r.Model),
+                    ["name"] = r.Name, ["label"] = LabelText(r.Label) ?? r.Label, ["model"] = r.Model, ["custom"] = index.CustomModels.Contains(r.Model),
                     ["extended"] = r.ExtensionModels.Overlaps(index.CustomModels), ["license"] = withLicense ? License("Role", r.Name)["license"] : null,
                 }).ToList(),
             };
+        }
+
+        // ── Role placement ──
+
+        private static readonly HashSet<string> PlacementStopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { "a", "an", "the", "of", "and", "or", "for", "to", "in", "on", "with", "role", "user", "team" };
+
+        /// <summary>
+        /// Standard roles to give a new duty: the roles that already reach the standard objects of the same job (the forms the
+        /// duty's menu items open, plus the objects given), and how close their label is to the requirement's wording.
+        /// Requirements name roles by job title ("Sales administrator", "Fixed asset accountant") that often has no standard
+        /// role of that exact name; the role that does the work is the right one to extend.
+        /// </summary>
+        public Dictionary<string, object> Placement(string dutyName, string roleWording, string[] objects)
+        {
+            var index = Get();
+            var related = new List<Tuple<string, string>>();   // objectType, name
+            foreach (string o in objects ?? new string[0])
+            {
+                var parts = (o ?? "").Split(new[] { ':', '/' }, 2);
+                if (parts.Length == 2 && parts[1].Trim().Length > 0) related.Add(Tuple.Create(parts[0].Trim(), parts[1].Trim()));
+            }
+            if (!string.IsNullOrEmpty(dutyName))
+            {
+                if (!index.Duties.TryGetValue(dutyName, out var duty)) return Fail("Duty '" + dutyName + "' not found.");
+                foreach (string p in duty.Privileges)
+                    if (index.Privileges.TryGetValue(p, out var priv))
+                        foreach (var ep in priv.EntryPoints)
+                        {
+                            string type = MenuItemTypeOf(ep.ObjectType);
+                            if (type == null || !index.MenuItems.TryGetValue(type + "/" + (ep.ObjectName ?? ep.Name), out var mi)) continue;
+                            // The standard form a custom menu item opens (e.g. a filtered list page) is reached by the roles of that job.
+                            if (mi.ObjectType == "Form" && !string.IsNullOrEmpty(mi.Object)) related.Add(Tuple.Create("AxForm", mi.Object));
+                        }
+            }
+            related = related.Distinct().ToList();
+            if (related.Count == 0 && string.IsNullOrWhiteSpace(roleWording))
+                return Fail("Give duty (a duty of your model), role (the requirement's wording) and/or objects (standard objects of the same job, e.g. [\"AxForm:AssetTable\", \"AxMenuItemDisplay:SalesTableListPage\"]).");
+
+            var score = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            var reasons = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            void Add(string role, double points, string reason)
+            {
+                if (!index.Roles.TryGetValue(role, out var r) || index.CustomModels.Contains(r.Model) || role.StartsWith("-")) return;
+                score[role] = (score.TryGetValue(role, out double s) ? s : 0) + points;
+                if (!reasons.TryGetValue(role, out var list)) reasons[role] = list = new List<string>();
+                if (!list.Contains(reason)) list.Add(reason);
+            }
+            foreach (var o in related)
+            {
+                var access = WhoCanAccess(o.Item1, o.Item2);
+                // Roles reaching an object only through sub-roles or broad roles count less than roles granting it directly.
+                var direct = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var row in (List<Dictionary<string, object>>)access["privileges"])
+                    foreach (string role in (List<string>)row["roles"])
+                    {
+                        bool maintain = ((string)row["grant"]).IndexOf("Read", StringComparison.OrdinalIgnoreCase) < 0 || ((string)row["grant"]).Contains(",");
+                        if (direct.Add(role)) Add(role, maintain ? 3 : 2, "reaches " + o.Item2 + (maintain ? " (maintain)" : " (view)"));
+                    }
+            }
+            var stems = (roleWording ?? "").Split(new[] { ' ', '\t', '-', '/' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(w => !PlacementStopWords.Contains(w)).Select(w => w.Length > 6 ? w.Substring(0, Math.Max(5, w.Length - 3)) : w).ToList();
+            if (stems.Count > 0)
+                foreach (var r in index.Roles.Values)
+                {
+                    string label = LabelText(r.Label) ?? r.Name;
+                    int hits = stems.Count(w => label.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0 || r.Name.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0);
+                    if (hits > 0) Add(r.Name, 4.0 * hits / stems.Count, "label '" + label + "' matches " + hits + " of " + stems.Count + " word(s) of '" + roleWording + "'");
+                }
+            // Broad roles reach almost everything; they rarely are the right home for a job-specific duty.
+            var top = score.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key).Take(8).ToList();
+            return new Dictionary<string, object>
+            {
+                ["success"] = true,
+                ["related"] = related.Select(o => o.Item1 + " " + o.Item2).ToList(),
+                ["roles"] = top.Select(kv => new Dictionary<string, object>
+                {
+                    ["name"] = kv.Key, ["label"] = LabelText(index.Roles[kv.Key].Label) ?? index.Roles[kv.Key].Label, ["model"] = index.Roles[kv.Key].Model,
+                    ["score"] = Math.Round(kv.Value, 1), ["license"] = License("Role", kv.Key)["license"], ["reasons"] = reasons[kv.Key],
+                }).ToList(),
+            };
+        }
+
+        // ── Label texts (en-US) ──
+
+        private static readonly ConcurrentDictionary<string, Dictionary<string, string>> LabelFiles =
+            new ConcurrentDictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        private static Dictionary<string, string> _labelFilePaths;
+
+        /// <summary>Text of "@File:Id" or legacy "@SYS1234" in en-US; plain text as is; null when not found.</summary>
+        internal static string LabelText(string label)
+        {
+            if (string.IsNullOrWhiteSpace(label)) return null;
+            if (!label.StartsWith("@")) return label;
+            int colon = label.IndexOf(':');
+            string file, id;
+            if (colon > 1) { file = label.Substring(1, colon - 1); id = label.Substring(colon + 1); }
+            else
+            {
+                int digits = 1;
+                while (digits < label.Length && !char.IsDigit(label[digits])) digits++;
+                file = label.Substring(1, digits - 1);
+                id = label;
+            }
+            var texts = LabelFiles.GetOrAdd(file, ReadLabelFile);
+            return texts.TryGetValue(id, out string text) ? text : null;
+        }
+
+        private static Dictionary<string, string> ReadLabelFile(string file)
+        {
+            var texts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                if (_labelFilePaths == null)
+                {
+                    var paths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var folder in CodeSearch.Folders(new[] { "AxLabelFile" }, null))
+                    {
+                        string dir = Path.Combine(folder.Key, "LabelResources", "en-US");
+                        if (!Directory.Exists(dir)) continue;
+                        foreach (string f in Directory.EnumerateFiles(dir, "*.label.txt"))
+                        {
+                            string name = Path.GetFileName(f);
+                            const string suffix = ".en-US.label.txt";
+                            if (!name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) continue;
+                            name = name.Substring(0, name.Length - suffix.Length);
+                            if (!paths.ContainsKey(name)) paths[name] = f;
+                        }
+                    }
+                    _labelFilePaths = paths;
+                }
+                if (!_labelFilePaths.TryGetValue(file, out string path)) return texts;
+                foreach (string line in File.ReadLines(path))
+                {
+                    if (line.StartsWith(" ;") || line.StartsWith(";")) continue;
+                    int eq = line.IndexOf('=');
+                    if (eq > 0 && !texts.ContainsKey(line.Substring(0, eq))) texts[line.Substring(0, eq)] = line.Substring(eq + 1);
+                }
+            }
+            catch { }
+            return texts;
         }
 
         /// <summary>One level of the hierarchy for the Security view.</summary>
@@ -733,8 +877,9 @@ namespace XppVsCode.Server.Tools
                 case "report": return Report(arr("roles")?.ToList(), str("model"), str("format"));
                 case "roles": return Roles(str("filter"), flag("customOnly"), flag("withLicense"));
                 case "children": return Children(str("kind"), str("name"));
+                case "placement": return Placement(str("duty"), str("role"), arr("objects"));
                 case "refresh": Get(force: true); return new Dictionary<string, object> { ["success"] = true };
-                default: return Fail("Unknown security action '" + action + "'. Use license, access, gaps, sod, report.");
+                default: return Fail("Unknown security action '" + action + "'. Use license, access, placement, gaps, sod, report.");
             }
         }
 

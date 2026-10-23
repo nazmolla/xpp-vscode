@@ -23,7 +23,7 @@ async function run() {
 
     await check('commands registered', async () => {
         const all = await vscode.commands.getCommands(true);
-        return ['xpp.searchCode', 'xpp.findExamples', 'xpp.addToPrivilege', 'xpp.generateTests', 'xpp.runSnippet']
+        return ['xpp.searchCode', 'xpp.findExamples', 'xpp.addToPrivilege', 'xpp.generateTests', 'xpp.runSnippet', 'xpp.findMessageSource']
             .map(c => c + ':' + all.includes(c));
     });
 

@@ -20,6 +20,8 @@ namespace XppVsCode.Server.Tools
         private CodeExamples _examples;
         private CodeExamples Examples => _examples ?? (_examples = new CodeExamples(_xref));
         private readonly SecurityAnalysis _security = new SecurityAnalysis();
+        private MessageTrace _messageTrace;
+        private MessageTrace Messages => _messageTrace ?? (_messageTrace = new MessageTrace(_xref));
 
         /// <summary>Structured where-used for the extension's references list.</summary>
         public string WhereUsedJson(string body)
@@ -215,21 +217,47 @@ namespace XppVsCode.Server.Tools
     },
     {
       ""name"": ""xpp_analyze_security"",
-      ""description"": ""Security and license analysis of the metadata (all packages, no environment needed). op=license: the user license a role, duty or privilege requires (Team Members / Activity / Operations), the menu items and grants that drive it, and which grants Read-only would lower. op=access: who reaches a menu item, form, table or data entity (privileges, duties, roles with grants). op=gaps: security gaps in your models (menu items no privilege grants, privileges in no duty, duties in no role, over-granting, missing objects, data entities without permissions). op=sod: segregation-of-duties conflicts in your roles (or one role) against standard rules or rulesJson. op=report: a Markdown or CSV security report for roles or a model, for client sign-off. Use it when designing security: least privilege (separate View and Maintain privileges, Read on display items when users only look), know the license impact of every grant, and run op=gaps and op=sod before finishing."",
+      ""description"": ""Security and license analysis of the metadata (all packages, no environment needed). op=license: the user license a role, duty or privilege requires (Team Members / Activity / Operations), the menu items and grants that drive it, and which grants Read-only would lower. op=access: who reaches a menu item, form, table or data entity (privileges, duties, roles with grants). op=placement: the standard roles to give a new duty, ranked by whether they already reach the same standard objects (the forms the duty's menu items open, plus objects you give) and by label similarity to the requirement's role name (requirements use job titles that often have no standard role of that name). op=gaps: security gaps in your models (menu items no privilege grants, privileges in no duty, duties in no role, over-granting, missing objects, data entities without permissions). op=sod: segregation-of-duties conflicts in your roles (or one role) against standard rules or rulesJson. op=report: a Markdown or CSV security report for roles or a model, for client sign-off. Use it when designing security: least privilege (separate View and Maintain privileges, Read on display items when users only look), know the license impact of every grant, and run op=gaps and op=sod before finishing."",
       ""inputSchema"": {
         ""type"": ""object"",
         ""properties"": {
-          ""op"": { ""type"": ""string"", ""enum"": [""license"", ""access"", ""gaps"", ""sod"", ""report""] },
+          ""op"": { ""type"": ""string"", ""enum"": [""license"", ""access"", ""placement"", ""gaps"", ""sod"", ""report""] },
           ""objectType"": { ""type"": ""string"", ""description"": ""license: AxSecurityRole, AxSecurityDuty or AxSecurityPrivilege. access: AxMenuItemDisplay / AxMenuItemOutput / AxMenuItemAction, AxForm, AxTable or AxDataEntityView."" },
           ""objectName"": { ""type"": ""string"" },
+          ""duty"": { ""type"": ""string"", ""description"": ""placement: your new duty."" },
+          ""objects"": { ""type"": ""array"", ""items"": { ""type"": ""string"" }, ""description"": ""placement: standard objects of the same job as Type:Name, e.g. [\""AxForm:AssetTable\"", \""AxMenuItemDisplay:SalesTableListPage\""]."" },
           ""models"": { ""type"": ""array"", ""items"": { ""type"": ""string"" }, ""description"": ""gaps: models to check (default: your custom models)."" },
-          ""role"": { ""type"": ""string"", ""description"": ""sod: one role (default: roles of your models and roles your models extend)."" },
+          ""role"": { ""type"": ""string"", ""description"": ""sod: one role (default: roles of your models and roles your models extend). placement: the requirement's role wording, e.g. 'Fixed asset accountant'."" },
           ""rulesJson"": { ""type"": ""string"", ""description"": ""sod: optional rules [{\""Name\"":...,\""First\"":duty,\""Second\"":duty,\""Severity\"":\""High\"",\""Reason\"":...}]."" },
           ""roles"": { ""type"": ""array"", ""items"": { ""type"": ""string"" }, ""description"": ""report: roles to report."" },
           ""model"": { ""type"": ""string"", ""description"": ""report: all roles of this model and roles it extends."" },
           ""format"": { ""type"": ""string"", ""enum"": [""markdown"", ""csv""] }
         },
         ""required"": [""op""]
+      }
+    },
+    {
+      ""name"": ""xpp_get_guide"",
+      ""description"": ""The full F&O Studio development guide (the short instructions you have are its summary): rules with examples and code templates, SSRS report patterns, Chain of Command per object type, event handlers, the X++ language reference, object types and properties, display and edit methods, naming conventions, best practices. Without topic: the list of topics. Read the topic before writing code of a kind you have not written in this session."",
+      ""inputSchema"": {
+        ""type"": ""object"",
+        ""properties"": {
+          ""topic"": { ""type"": ""string"", ""description"": ""Words of a topic title, e.g. 'ssrs', 'chain of command', 'event handlers', 'display methods', 'language reference'."" }
+        }
+      }
+    },
+    {
+      ""name"": ""xpp_find_message_source"",
+      ""description"": ""Finds the X++ code that raises a message (error, warning or info text). Paste the message as shown, values included: it is matched against every label text (placeholders %1..%9 match any value), and the labels' usages come from the cross-reference database with the code line (raising code first, tests last). Messages written as literal strings are found by a code search. Use it to debug an error a user reports, or to find the standard check you must satisfy or extend."",
+      ""inputSchema"": {
+        ""type"": ""object"",
+        ""properties"": {
+          ""message"": { ""type"": ""string"", ""description"": ""The message text as the user saw it, e.g. 'Customer 1001 is on hold. Cannot post the order.'"" },
+          ""language"": { ""type"": ""string"", ""description"": ""Language of the message (default en-US), e.g. fr-CA."" },
+          ""maxLabels"": { ""type"": ""integer"", ""description"": ""Default 5."" },
+          ""maxResults"": { ""type"": ""integer"", ""description"": ""Usages per label, default 15."" }
+        },
+        ""required"": [""message""]
       }
     },
     {
@@ -461,6 +489,9 @@ namespace XppVsCode.Server.Tools
                 case "xpp_find_examples": return HandleFindExamples(idToken, json);
                 case "xpp_search_code": return HandleSearchCode(idToken, json);
                 case "xpp_analyze_security": return HandleAnalyzeSecurity(idToken, json);
+                case "xpp_find_message_source": return HandleFindMessageSource(idToken, json);
+                case "xpp_get_guide": return JsonHelpers.BuildToolResult(idToken,
+                    AgentGuide.Get("XppVsCode.Server.Guide.txt", JsonHelpers.ExtractArgString(JsonHelpers.ExtractToolArgumentsObject(json), "topic")));
                 case "xpp_get_model_info": return HandleGetModelInfo(idToken, json);
                 case "xpp_list_models": return DelegateToBridge(idToken, json, "list_models");
                 case "xpp_read_label": return HandleReadLabel(idToken, json);
@@ -994,7 +1025,7 @@ namespace XppVsCode.Server.Tools
                 var source = sources?.FirstOrDefault(sx => path.Length >= 2 && sx.Key.Length >= 2
                     && string.Equals(sx.Key[sx.Key.Length - 1], path[path.Length - 1], StringComparison.OrdinalIgnoreCase)
                     && (path.Length == 2 || sx.Key.Length < 3 || string.Equals(sx.Key[sx.Key.Length - 3], path[path.Length - 3], StringComparison.OrdinalIgnoreCase)));
-                var lines = source?.Value.Replace("\r\n", "\n").Split('\n');
+                var lines = source?.Value?.Replace("\r\n", "\n").Split('\n');
                 var hits = lines == null ? new List<int>() : Enumerable.Range(0, lines.Length).Where(i => strictRx.IsMatch(lines[i])).Take(2).ToList();
                 if (hits.Count == 0 && lines != null)
                     hits = Enumerable.Range(0, lines.Length).Where(i => tokenRx.IsMatch(lines[i])).Take(2).ToList();
@@ -1029,6 +1060,39 @@ namespace XppVsCode.Server.Tools
             foreach (var i in items)
                 sb.AppendLine("- " + i["objectType"] + " " + i["objectName"] + (i["model"] != null ? " [" + i["model"] + "]" : "") + " - " + i["reason"]);
             sb.AppendLine("Next: xpp_read_object the closest one or two, then reuse (call), extend (CoC / events) or, if neither is possible, copy and adapt; name the precedent in your plan.");
+            return JsonHelpers.BuildToolResult(idToken, sb.ToString());
+        }
+
+        private string HandleFindMessageSource(string idToken, string json)
+        {
+            string argsJson = JsonHelpers.ExtractToolArgumentsObject(json);
+            int Num(string key, int fallback) => int.TryParse(JsonHelpers.ExtractArgString(argsJson, key), out int v) ? v : fallback;
+            var r = Messages.Trace(JsonHelpers.ExtractArgString(argsJson, "message", "text"), JsonHelpers.ExtractArgString(argsJson, "language"),
+                Num("maxLabels", 5), Num("maxResults", 15));
+            if (!(r["success"] is bool ok && ok)) return JsonHelpers.BuildToolResult(idToken, r["message"] as string, isError: true);
+            var sb = new StringBuilder();
+            var labels = (List<Dictionary<string, object>>)r["labels"];
+            var literal = (List<Dictionary<string, object>>)r["literal"];
+            string Where(Dictionary<string, object> u) => u["objectType"] == null ? "metadata " + u["objectName"]
+                : u["objectType"] + " " + u["objectName"] + (((string[])u["memberPath"]).Length > 0 ? " / " + string.Join("/", (string[])u["memberPath"]) : "")
+                  + " line " + u["line"] + (u["text"] is string t && t.Length > 0 ? ": " + t : "");
+            if (labels.Count == 0) sb.AppendLine("No " + r["language"] + " label text matches this message.");
+            foreach (var l in labels)
+            {
+                var usages = (List<Dictionary<string, object>>)l["usages"];
+                var ids = (List<string>)l["labels"];
+                sb.AppendLine(string.Join(", ", ids.Take(6)) + (ids.Count > 6 ? " (+" + (ids.Count - 6) + " more with the same text)" : "")
+                    + " \"" + l["text"] + "\"" + ((bool)l["whole"] ? " (the whole message)" : " (part of the message)") + ":");
+                if ((int)l["usageCount"] < 0) sb.AppendLine("  (where-used unavailable: " + r["xrefProblem"] + ")");
+                else if (usages.Count == 0) sb.AppendLine("  not used in X++ or metadata of the indexed packages: the platform (kernel) raises it, or its package was not built with cross-reference data.");
+                foreach (var u in usages) sb.AppendLine("  - " + Where(u));
+            }
+            if (literal.Count > 0)
+            {
+                sb.AppendLine("Code with the message as literal text:");
+                foreach (var u in literal) sb.AppendLine("  - " + Where(u));
+            }
+            sb.AppendLine("Read the raising method with xpp_read_object (methodNames) to see the condition; the caller chain is in xpp_find_references.");
             return JsonHelpers.BuildToolResult(idToken, sb.ToString());
         }
 
@@ -1077,6 +1141,14 @@ namespace XppVsCode.Server.Tools
                     foreach (var p in rows.Take(80))
                         sb.AppendLine("- " + p["privilege"] + " [" + p["model"] + "] " + p["grant"] + "; duties: " + string.Join(", ", (List<string>)p["duties"])
                             + "; roles: " + string.Join(", ", ((List<string>)p["roles"]).Take(15)) + (((List<string>)p["roles"]).Count > 15 ? ", ..." : ""));
+                    break;
+                case "placement":
+                    sb.AppendLine("Standard roles for this duty (related objects: " + string.Join(", ", (List<string>)r["related"]) + "):");
+                    foreach (var role in (List<Dictionary<string, object>>)r["roles"])
+                        sb.AppendLine("- " + role["name"] + " '" + role["label"] + "' [" + role["model"] + ", license " + role["license"] + ", score " + role["score"] + "]: "
+                            + string.Join("; ", ((List<string>)role["reasons"]).Take(4)));
+                    sb.AppendLine("Extend the role(s) that do the job with a role extension (Role.YourSuffix) that adds the duty; if the requirement's role "
+                        + "name has no standard role, state the mapping as an assumption in your summary. Check the license with op=license afterwards.");
                     break;
                 case "gaps":
                     var findings = (List<Dictionary<string, object>>)r["findings"];

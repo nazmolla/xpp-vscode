@@ -2,7 +2,7 @@
   "name": "xpp-vscode",
   "displayName": "F&O Studio for VS Code",
   "description": "A full Dynamics 365 Finance & Operations development environment in VS Code: Application Explorer, designers, X++ code, build, deploy, debugging, and AI agent tools.",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "publisher": "MNazmi",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -521,6 +521,12 @@
         "icon": "$(search-fuzzy)"
       },
       {
+        "command": "xpp.findMessageSource",
+        "title": "Find Message Source",
+        "category": "X++",
+        "icon": "$(search)"
+      },
+      {
         "command": "xpp.findExamples",
         "title": "Find Similar Standard Implementations",
         "category": "X++",
@@ -721,6 +727,16 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "xpp.findMessageSource",
+          "when": "view == xpp.infolog && viewItem == xppInfologEntry",
+          "group": "inline"
+        },
+        {
+          "command": "xpp.findMessageSource",
+          "when": "view == xpp.infolog && viewItem == xppInfologEntry",
+          "group": "navigation"
+        },
         {
           "command": "xpp.openDesigner",
           "when": "(view == xpp.project || view == xpp.aot) && viewItem =~ /xppElement/",

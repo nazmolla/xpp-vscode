@@ -64,6 +64,7 @@ Each feature can be turned on or off under **Code intelligence** in the Dynamics
 ### Productivity
 - **Search Code in All Packages** (`Ctrl+Shift+Alt+F`): text or regex search over the X++ code of every package; a result opens the method at the matching line.
 - **Find Similar Standard Implementations:** standard elements like the selected one, or matching a description such as "batch job with contract".
+- **Find Message Source:** paste an error, warning or info message as the user saw it, values included. It finds the labels whose text matches (placeholders match any value) and the code that raises them, from the cross-reference database; a result opens the line. Also on every message in the Infolog view.
 - **Quick fixes** (`Ctrl+.`): Extract to label, Generate find() and exist() on your tables, Implement missing interface methods, Create Chain of Command wrapper on methods of standard objects.
 - **Add to Privilege** for menu items, **Generate SysTest Class** for classes, and **Run Snippet in Environment** (runs a `main` method from an untitled X++ editor through a scratch class in your model).
 - **Snippets** for Chain of Command, event handlers, SysOperation, RunBaseBatch, find/exist, parm methods, transactions with retry and SysTest.
@@ -82,12 +83,12 @@ Each feature can be turned on or off under **Code intelligence** in the Dynamics
 - **Run Tests:** runs SysTest test classes on the environment the way Visual Studio's Test Explorer does, and shows each test's result. Tests run against the deployed code, so build and deploy first.
 - **Create Deployment Package** (the same script Visual Studio runs), Deploy Models and Synchronize Database (with `pac`).
 - **Launch Debugger:** attaches to the environment through the FinOps tools' debugger proxy, as Visual Studio does. Breakpoints can be set in the code view.
-- **Infolog:** messages raised by the code being debugged.
+- **Infolog:** messages raised by the code being debugged; **Find Message Source** on a message opens the code that raised it.
 
 ### Dynamics 365 tools
 - **Model management:** Create Model, Update Model Parameters, View Model Dependencies.
 - **Projects:** Select Project, **Create D365FO Project** (for one of your models; writes the `.rnrproj` and `.slnx` like Visual Studio), Export Project and Import Project (`.axpp`, compatible with Visual Studio). The project view follows the `.rnrproj`, so elements added by agents or other editors appear by themselves. Selecting or creating a project makes the window a multi-root workspace with the project folder and the model folder. In the project view, **Exclude from Project** keeps an element in the model; **Delete** removes it from the model (your own models only).
-- **Search:** Find Labels, Find Tag References, Metadata Search, Find References, Search Code, Find Similar Standard Implementations.
+- **Search:** Find Labels, Find Tag References, Metadata Search, Find References, Search Code, Find Similar Standard Implementations, Find Message Source.
 - **Environment:** Connect to Environment (downloads metadata, restores the cross-reference database, configures the machine), Check Connection, Sign in.
 
 ### AI agent tools (MCP)
@@ -100,12 +101,15 @@ Copilot can:
 - create label files, and many labels with translations in one call, and add elements to the project;
 - form extensions: controls are placed and checked against the form's patterns (a new tab page gets the pattern its place expects, required values are set, unknown pattern versions become the latest; anything the build would reject is refused, and the check takes seconds even on SalesTable), properties of base controls are changed only where D365FO allows it, and the extension's own controls can be updated, moved and removed;
 - create and update menu items, create menu extensions, and work with security privileges, duties and roles;
-- analyze security with `xpp_analyze_security`: the license of a role, duty or privilege and what drives it, who can access an object, security gaps, segregation of duties conflicts and the sign-off report;
+- analyze security with `xpp_analyze_security`: the license of a role, duty or privilege and what drives it, who can access an object, the standard roles to give a new duty (requirements name roles by job title: it ranks the roles that already reach the same objects), security gaps, segregation of duties conflicts and the sign-off report;
+- trace a message to the code that raises it with `xpp_find_message_source` (label text with values, then where the label is used);
 - create data entity extensions, including their staging tables, also on entities built on other entities or views; create composite data entities;
 - delete elements of your own models (refused while other elements reference them; their cross-reference entries are removed) or exclude them from the project;
 - select the active project, build the model and read every compiler error;
 - run X++ unit tests on the environment (`xpp_run_tests`);
 - search the Microsoft Learn documentation.
+
+The agent's instructions are a compact rule set; the full guide with examples (SSRS reports, Chain of Command per object type, event handlers, the X++ language reference, object properties) is read on demand with `xpp_get_guide`, so it does not fill the context of every session.
 
 The tools are registered automatically. `node scripts/tool-regression.js --project <your .rnrproj>` checks them against the active environment.
 

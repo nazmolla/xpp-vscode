@@ -245,6 +245,7 @@ export class InfologProvider implements vscode.TreeDataProvider<InfologEntry> {
         item.description = entry.time.toLocaleTimeString();
         item.tooltip = `${entry.kind}: ${entry.message}`;
         item.iconPath = new vscode.ThemeIcon(entry.kind === 'Error' ? 'error' : entry.kind === 'Warning' ? 'warning' : 'info');
+        item.contextValue = 'xppInfologEntry';
         return item;
     }
 

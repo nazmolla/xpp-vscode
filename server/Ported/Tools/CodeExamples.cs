@@ -206,10 +206,10 @@ ORDER BY (SELECT COUNT(*) FROM [References] r3 WHERE r3.TargetId = t.Id)",
             {
                 string custom = DynamicsConfigurationReader.ReadActiveConfiguration().CustomMetadataFolder;
                 if (!string.IsNullOrEmpty(custom) && Directory.Exists(custom))
-                    foreach (string package in Directory.GetDirectories(custom))
+                    foreach (string package in Directory.GetDirectories(custom).Where(p => Directory.Exists(Path.Combine(p, "Descriptor"))))
                     {
                         set.Add(Path.GetFileName(package));
-                        foreach (string model in Directory.GetDirectories(package))
+                        foreach (string model in Directory.GetDirectories(package).Where(m => !string.Equals(Path.GetFileName(m), "Descriptor", StringComparison.OrdinalIgnoreCase)))
                             set.Add(Path.GetFileName(model));
                     }
             }
