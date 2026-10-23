@@ -19,6 +19,7 @@ namespace XppVsCode.Server.Tools
         private readonly CodeSearch _codeSearch = new CodeSearch();
         private CodeExamples _examples;
         private CodeExamples Examples => _examples ?? (_examples = new CodeExamples(_xref));
+        private readonly SecurityAnalysis _security = new SecurityAnalysis();
 
         /// <summary>Structured where-used for the extension's references list.</summary>
         public string WhereUsedJson(string body)
@@ -213,8 +214,27 @@ namespace XppVsCode.Server.Tools
       }
     },
     {
+      ""name"": ""xpp_analyze_security"",
+      ""description"": ""Security and license analysis of the metadata (all packages, no environment needed). op=license: the user license a role, duty or privilege requires (Team Members / Activity / Operations), the menu items and grants that drive it, and which grants Read-only would lower. op=access: who reaches a menu item, form, table or data entity (privileges, duties, roles with grants). op=gaps: security gaps in your models (menu items no privilege grants, privileges in no duty, duties in no role, over-granting, missing objects, data entities without permissions). op=sod: segregation-of-duties conflicts in your roles (or one role) against standard rules or rulesJson. op=report: a Markdown or CSV security report for roles or a model, for client sign-off. Use it when designing security: least privilege (separate View and Maintain privileges, Read on display items when users only look), know the license impact of every grant, and run op=gaps and op=sod before finishing."",
+      ""inputSchema"": {
+        ""type"": ""object"",
+        ""properties"": {
+          ""op"": { ""type"": ""string"", ""enum"": [""license"", ""access"", ""gaps"", ""sod"", ""report""] },
+          ""objectType"": { ""type"": ""string"", ""description"": ""license: AxSecurityRole, AxSecurityDuty or AxSecurityPrivilege. access: AxMenuItemDisplay / AxMenuItemOutput / AxMenuItemAction, AxForm, AxTable or AxDataEntityView."" },
+          ""objectName"": { ""type"": ""string"" },
+          ""models"": { ""type"": ""array"", ""items"": { ""type"": ""string"" }, ""description"": ""gaps: models to check (default: your custom models)."" },
+          ""role"": { ""type"": ""string"", ""description"": ""sod: one role (default: roles of your models and roles your models extend)."" },
+          ""rulesJson"": { ""type"": ""string"", ""description"": ""sod: optional rules [{\""Name\"":...,\""First\"":duty,\""Second\"":duty,\""Severity\"":\""High\"",\""Reason\"":...}]."" },
+          ""roles"": { ""type"": ""array"", ""items"": { ""type"": ""string"" }, ""description"": ""report: roles to report."" },
+          ""model"": { ""type"": ""string"", ""description"": ""report: all roles of this model and roles it extends."" },
+          ""format"": { ""type"": ""string"", ""enum"": [""markdown"", ""csv""] }
+        },
+        ""required"": [""op""]
+      }
+    },
+    {
       ""name"": ""xpp_search_code"",
-      ""description"": ""Searches the X++ source of every package (standard and custom): method code and declarations of classes, tables, forms, views, data entities, queries and maps. Use it to find how standard code does something (an API call, a pattern, a string, a label ID), where a field or method name appears in code, or precedents to copy. Literal text by default (case-insensitive); regex=true for a .NET regular expression. Results: object, method, line and the matching line. Narrow big searches with objectTypes or model. The first search reads the metadata from disk (up to a minute); later searches are fast."",
+      ""description"": ""Searches the X++ source of every package (standard and custom): method code and declarations of classes, tables, forms, views, data entities, queries and maps. Use it to find how standard code does something (an API call, a pattern, a string, a label ID), where a field or method name appears in code, or precedents to copy. Literal text by default (case-insensitive); regex=true for a .NET regular expression. Results: object, method, line and the matching line. Narrow big searches with objectTypes or model. Until the files are in the disk cache, a search over everything reads them from disk (30-60 s); objectTypes=[\""AxClass\""] or a model/package makes it much faster."",
       ""inputSchema"": {
         ""type"": ""object"",
         ""properties"": {
@@ -222,7 +242,7 @@ namespace XppVsCode.Server.Tools
           ""regex"": { ""type"": ""boolean"" },
           ""caseSensitive"": { ""type"": ""boolean"" },
           ""objectTypes"": { ""type"": ""array"", ""items"": { ""type"": ""string"" }, ""description"": ""Limit to these types, e.g. [\""AxClass\""]. Default: all code types."" },
-          ""model"": { ""type"": ""string"", ""description"": ""Limit to one model."" },
+          ""model"": { ""type"": ""string"", ""description"": ""Limit to one model or package (a package such as ApplicationSuite covers all its models)."" },
           ""maxResults"": { ""type"": ""integer"", ""description"": ""Default 50, max 200."" }
         },
         ""required"": [""pattern""]
@@ -440,6 +460,7 @@ namespace XppVsCode.Server.Tools
                 case "xpp_find_references": return HandleFindReferences(idToken, json);
                 case "xpp_find_examples": return HandleFindExamples(idToken, json);
                 case "xpp_search_code": return HandleSearchCode(idToken, json);
+                case "xpp_analyze_security": return HandleAnalyzeSecurity(idToken, json);
                 case "xpp_get_model_info": return HandleGetModelInfo(idToken, json);
                 case "xpp_list_models": return DelegateToBridge(idToken, json, "list_models");
                 case "xpp_read_label": return HandleReadLabel(idToken, json);
@@ -634,6 +655,8 @@ namespace XppVsCode.Server.Tools
                 foreach (var m in methods)
                     sb.AppendLine("  " + (MethodSignature(Str(m, "source")) ?? Str(m, "name")));
             }
+            else
+                sb.AppendLine("\n=== Methods (requested " + wanted.Count + " of " + methods.Count + ") ===");
             var selected = wanted == null ? methods : methods.FindAll(m => wanted.Contains(Str(m, "name") ?? ""));
             int totalChars = 0;
             foreach (var m in selected) totalChars += (Str(m, "source") ?? "").Length;
@@ -695,7 +718,10 @@ namespace XppVsCode.Server.Tools
 
         private static void AppendGenericMetadata(StringBuilder sb, string bridgeResponse)
         {
-            if (TypesWithDedicatedOutput.Contains(JsonHelpers.ExtractJsonString(bridgeResponse, "objectType") ?? "")) return;
+            string readType = JsonHelpers.ExtractJsonString(bridgeResponse, "objectType") ?? "";
+            bool compositeQuery = readType == "AxQuery"
+                && !string.IsNullOrEmpty(JsonHelpers.ExtractJsonString(JsonHelpers.ExtractNestedObject(bridgeResponse, "properties") ?? "{}", "Query"));
+            if (TypesWithDedicatedOutput.Contains(readType) && !compositeQuery) return;
 
             string typed = JsonHelpers.ExtractNestedObject(bridgeResponse, "typedMetadata");
             if (string.IsNullOrEmpty(typed) || typed.Length < 3) return;
@@ -821,7 +847,9 @@ namespace XppVsCode.Server.Tools
 
             var requested = (wanted ?? new string[0]).Select(w => new string(w.Where(char.IsLetter).ToArray()).ToLowerInvariant())
                 .Where(w => w.Length > 0).ToList();
-            if (requested.Contains("all") || sections.Count == 0 || (requested.Count == 0 && (text.Length <= ReadSummaryThreshold || methodsAsked)))
+            if (methodsAsked && requested.Count > 0 && !requested.Contains("methods")) requested.Add("methods");
+            if (methodsAsked && requested.Count == 0 && text.Length > ReadSummaryThreshold) requested.Add("methods");
+            if (requested.Contains("all") || sections.Count == 0 || (requested.Count == 0 && text.Length <= ReadSummaryThreshold))
                 return text;
 
             string Describe(ReadSection sec)
@@ -948,6 +976,9 @@ namespace XppVsCode.Server.Tools
             string token = string.IsNullOrEmpty(member) ? objectName : member;
             var tokenRx = new System.Text.RegularExpressions.Regex(@"\b" + System.Text.RegularExpressions.Regex.Escape(token) + @"\b",
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            // Members: accessed as .member / ::member, not a same-named enum or EDT used as Name::Value.
+            var strictRx = string.IsNullOrEmpty(member) ? tokenRx : new System.Text.RegularExpressions.Regex(
+                @"(\.|::)\s*" + System.Text.RegularExpressions.Regex.Escape(token) + @"\b(?!\s*::)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             var sb = new StringBuilder();
             sb.AppendLine("Code using " + objectName + (string.IsNullOrEmpty(member) ? "" : "." + member) + " (" + refs.Count + (parsed.ContainsKey("more") && parsed["more"] is bool more && more ? "+" : "") + " references; showing up to " + max + " places):");
             var sourceCache = new Dictionary<string, List<KeyValuePair<string[], string>>>(StringComparer.OrdinalIgnoreCase);
@@ -964,7 +995,9 @@ namespace XppVsCode.Server.Tools
                     && string.Equals(sx.Key[sx.Key.Length - 1], path[path.Length - 1], StringComparison.OrdinalIgnoreCase)
                     && (path.Length == 2 || sx.Key.Length < 3 || string.Equals(sx.Key[sx.Key.Length - 3], path[path.Length - 3], StringComparison.OrdinalIgnoreCase)));
                 var lines = source?.Value.Replace("\r\n", "\n").Split('\n');
-                var hits = lines == null ? new List<int>() : Enumerable.Range(0, lines.Length).Where(i => tokenRx.IsMatch(lines[i])).Take(2).ToList();
+                var hits = lines == null ? new List<int>() : Enumerable.Range(0, lines.Length).Where(i => strictRx.IsMatch(lines[i])).Take(2).ToList();
+                if (hits.Count == 0 && lines != null)
+                    hits = Enumerable.Range(0, lines.Length).Where(i => tokenRx.IsMatch(lines[i])).Take(2).ToList();
                 sb.AppendLine("- " + type + " " + name + (path.Length > 0 ? " / " + string.Join("/", path) : "") + " [" + (r.TryGetValue("kind", out object k) ? k : "") + "]");
                 foreach (int i in hits)
                     sb.AppendLine("    line " + (i + 1) + ": " + lines[i].Trim());
@@ -999,6 +1032,71 @@ namespace XppVsCode.Server.Tools
             return JsonHelpers.BuildToolResult(idToken, sb.ToString());
         }
 
+        private string HandleAnalyzeSecurity(string idToken, string json)
+        {
+            string argsJson = JsonHelpers.ExtractToolArgumentsObject(json);
+            string op = JsonHelpers.ExtractArgString(argsJson, "op");
+            var result = _security.Handle(op, k => JsonHelpers.ExtractArgString(argsJson, k),
+                k => JsonHelpers.ExtractJsonStringArray(argsJson, k), k => ArgFlag(argsJson, k));
+            if (!(result.TryGetValue("success", out object ok) && ok is bool okFlag && okFlag))
+                return JsonHelpers.BuildToolResult(idToken, result.TryGetValue("message", out object m) ? m as string : "Failed.", isError: true);
+            if (op == "report") return JsonHelpers.BuildToolResult(idToken, result["text"] as string);
+            return JsonHelpers.BuildToolResult(idToken, SecurityText(op, result));
+        }
+
+        /// <summary>Readable text of a security analysis result for the agent.</summary>
+        private static string SecurityText(string op, Dictionary<string, object> r)
+        {
+            var sb = new StringBuilder();
+            System.Collections.IEnumerable List(string key) => r.TryGetValue(key, out object v) ? v as System.Collections.IEnumerable : null;
+            switch (op)
+            {
+                case "license":
+                    sb.AppendLine(r["kind"] + " " + r["name"] + " requires license: " + r["license"]);
+                    sb.AppendLine("Entry points by license: " + string.Join(", ", ((Dictionary<string, object>)r["byLicense"]).Select(kv => kv.Key + " " + kv.Value))
+                        + "; " + r["duties"] + " duties, " + r["privileges"] + " privileges.");
+                    var drivers = (List<Dictionary<string, object>>)r["drivers"];
+                    if (drivers.Count > 0)
+                    {
+                        sb.AppendLine("Menu items that require " + r["license"] + " (" + r["driverCount"] + "):");
+                        foreach (var d in drivers.Take(30))
+                            sb.AppendLine("- " + d["menuItem"] + " [" + d["type"] + ", " + d["grant"] + "; view " + d["viewLicense"] + " / maintain " + d["maintainLicense"] + "] via " + string.Join("; ", (List<string>)d["via"]));
+                    }
+                    var hints = (List<string>)r["lowerWithReadOnly"];
+                    if (hints.Count > 0) { sb.AppendLine("Read-only would lower the license for:"); foreach (string h in hints) sb.AppendLine("- " + h); }
+                    var missing = (List<string>)r["missing"];
+                    if (missing.Count > 0) sb.AppendLine("Missing objects: " + string.Join("; ", missing));
+                    break;
+                case "access":
+                    foreach (var m in (List<Dictionary<string, object>>)r["menuItems"])
+                        sb.AppendLine("Menu item " + m["type"] + " " + m["name"] + ": view " + m["viewLicense"] + ", maintain " + m["maintainLicense"]);
+                    var viaForms = r.TryGetValue("viaForms", out object vf) ? (List<string>)vf : new List<string>();
+                    if (viaForms.Count > 0) sb.AppendLine("Through the forms using this table: " + string.Join(", ", viaForms.Take(40)) + (viaForms.Count > 40 ? ", ..." : ""));
+                    var rows = (List<Dictionary<string, object>>)r["privileges"];
+                    sb.AppendLine(rows.Count + " privilege(s), " + r["roleCount"] + " role(s) reach " + r["objectType"] + " " + r["name"] + ":");
+                    foreach (var p in rows.Take(80))
+                        sb.AppendLine("- " + p["privilege"] + " [" + p["model"] + "] " + p["grant"] + "; duties: " + string.Join(", ", (List<string>)p["duties"])
+                            + "; roles: " + string.Join(", ", ((List<string>)p["roles"]).Take(15)) + (((List<string>)p["roles"]).Count > 15 ? ", ..." : ""));
+                    break;
+                case "gaps":
+                    var findings = (List<Dictionary<string, object>>)r["findings"];
+                    sb.AppendLine(findings.Count + " security finding(s) in " + string.Join(", ", (List<string>)r["models"]) + (findings.Count == 0 ? "." : ":"));
+                    foreach (var f in findings.Take(150)) sb.AppendLine("- " + f["severity"] + " " + f["kind"] + " " + f["objectType"] + " " + f["name"] + ": " + f["message"]);
+                    break;
+                case "sod":
+                    var conflicts = (List<Dictionary<string, object>>)r["conflicts"];
+                    sb.AppendLine("Segregation of duties: " + r["rulesChecked"] + " rule(s) checked on " + ((List<string>)r["roles"]).Count + " role(s); " + conflicts.Count + " conflict(s).");
+                    foreach (var c in conflicts) sb.AppendLine("- " + c["severity"] + " " + c["role"] + ": " + c["rule"] + " (" + c["first"] + " + " + c["second"] + "): " + c["reason"]);
+                    var skipped = (List<string>)r["rulesSkipped"];
+                    if (skipped.Count > 0) sb.AppendLine("Rules skipped (duties not in this version): " + string.Join("; ", skipped));
+                    break;
+                default:
+                    sb.Append(new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(r));
+                    break;
+            }
+            return sb.ToString();
+        }
+
         private string HandleSearchCode(string idToken, string json)
         {
             string argsJson = JsonHelpers.ExtractToolArgumentsObject(json);
@@ -1011,7 +1109,8 @@ namespace XppVsCode.Server.Tools
             if (result.Error != null && result.Hits.Count == 0) return JsonHelpers.BuildToolResult(idToken, result.Error, isError: true);
             var sb = new StringBuilder();
             sb.AppendLine(result.Hits.Count + (result.Truncated ? "+" : "") + " match(es) for '" + pattern + "' (" + result.Scanned + " files, " + result.Ms + " ms)"
-                + (result.Truncated ? "; more exist: narrow with objectTypes, model or a more specific pattern" : "") + ":");
+                + (result.Truncated ? "; stopped at the first matches found by the parallel scan (which ones, and the file count, vary between calls); "
+                    + "more exist: narrow with objectTypes, model (a model or package) or a more specific pattern" : "") + ":");
             foreach (var h in result.Hits)
                 sb.AppendLine("- " + h.ObjectType + " " + h.ObjectName + " [" + h.Model + "] " + string.Join("/", h.MemberPath) + " line " + h.Line + ": " + h.Text);
             if (result.Error != null) sb.AppendLine(result.Error);

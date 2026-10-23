@@ -424,13 +424,16 @@ namespace XppVsCode.Server.Tools
         // Object-level search covers the object and all its members; member search covers one method or field.
         private static string TargetFilter(string memberName) => string.IsNullOrEmpty(memberName)
             ? "(t.Path = @p OR t.Path LIKE @prefix)"
-            : "t.Path IN (@p + '/Methods/' + @m, @p + '/Fields/' + @m)";
+            // Fields added by table extensions are indexed under the extension (/TableExtensions/Table.Ext/Fields/Field).
+            : "(t.Path IN (@p + '/Methods/' + @m, @p + '/Fields/' + @m) OR (@ext <> '' AND t.Path LIKE @ext))";
 
         private static void AddTargetParameters(SqlCommand cmd, string objectPath, string memberName)
         {
             cmd.Parameters.AddWithValue("@p", objectPath);
             cmd.Parameters.AddWithValue("@prefix", EscapeLike(objectPath) + "/%");
             cmd.Parameters.AddWithValue("@m", memberName ?? "");
+            cmd.Parameters.AddWithValue("@ext", objectPath.StartsWith("/Tables/", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(memberName)
+                ? "/TableExtensions/" + EscapeLike(objectPath.Substring(8)) + ".%/Fields/" + EscapeLike(memberName) : "");
         }
 
         private static bool TargetExists(SqlConnection conn, string objectPath, string memberName)
@@ -457,7 +460,9 @@ namespace XppVsCode.Server.Tools
             string sql = "SELECT TOP (@take) s.Path, t.Path, r.Kind, r.Line, m.Module "
                 + "FROM Names t JOIN [References] r ON r.TargetId = t.Id JOIN Names s ON s.Id = r.SourceId "
                 + "LEFT JOIN Modules m ON m.Id = s.ModuleId "
-                + "WHERE " + TargetFilter(memberName) + " AND s.Path <> @p AND s.Path NOT LIKE @prefix "
+                + "WHERE " + TargetFilter(memberName)
+                // A member's callers include other methods of the same object; an object's callers exclude the object itself.
+                + (string.IsNullOrEmpty(memberName) ? " AND s.Path <> @p AND s.Path NOT LIKE @prefix " : " AND s.Path <> t.Path ")
                 + (kind > 0 ? "AND r.Kind = @kind " : "")
                 + "ORDER BY m.Module, s.Path, r.Line";
             using (var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 })
@@ -488,8 +493,10 @@ namespace XppVsCode.Server.Tools
                 sb.Append(objectType + " '" + objectName + "' is indexed, but it has no method or field '" + memberName
                     + "'. Check the member name with xpp_read_object.");
             else
-                sb.Append("No cross-reference entries for " + objectType + " '" + objectName + "'. Either the name is wrong "
-                    + "(check it with xpp_find_object) or its package was not built with 'Build cross reference data'.");
+                sb.Append("No cross-reference entries for " + objectType + " '" + objectName + "': nothing in the indexed packages "
+                    + "refers to it, the name is wrong (check it with xpp_find_object), or its package was not built with 'Build cross reference data'."
+                    + (objectType.StartsWith("AxMenuItem", StringComparison.Ordinal)
+                        ? " The privileges, duties and roles that grant a menu item are listed by xpp_analyze_security op=access." : ""));
             AppendWarnings(sb, health);
             return sb.ToString();
         }

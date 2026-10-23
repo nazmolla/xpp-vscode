@@ -78,6 +78,16 @@ const ToolsMenu: ToolNode[] = [
     { label: 'Search Code…', icon: 'search-fuzzy', command: 'xpp.searchCode', description: 'all packages' },
     { label: 'Find Similar Standard Implementations…', icon: 'lightbulb', command: 'xpp.findExamples' },
     {
+        label: 'Security', icon: 'shield', children: [
+            { label: 'Find Security Gaps…', icon: 'checklist', command: 'xpp.security.findGaps' },
+            { label: 'Segregation of Duties…', icon: 'law', command: 'xpp.security.checkSod' },
+            { label: 'Security Report…', icon: 'file-text', command: 'xpp.security.report' },
+            { label: 'Who Can Access…', icon: 'person', command: 'xpp.security.whoCanAccess' },
+            { label: 'Analyze License…', icon: 'credit-card', command: 'xpp.security.analyzeLicense' },
+            { label: 'Edit Segregation of Duties Rules', icon: 'edit', command: 'xpp.security.editSodRules' },
+        ],
+    },
+    {
         label: 'View', icon: 'type-hierarchy', children: [
             { label: 'View Hierarchy…', icon: 'type-hierarchy-sub', command: 'xpp.viewHierarchy' },
             { label: 'View References…', icon: 'references', command: 'xpp.viewReferences' },

@@ -50,10 +50,13 @@ namespace XppVsCode.Server.Tools
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (string root in Roots())
                 foreach (string package in SafeDirectories(root))
+                {
+                    // The filter matches a model or a package (all its models): ApplicationSuite is a package of several models.
+                    bool packageMatch = !string.IsNullOrEmpty(model) && Path.GetFileName(package).Equals(model, StringComparison.OrdinalIgnoreCase);
                     foreach (string modelDir in SafeDirectories(package))
                     {
                         string modelName = Path.GetFileName(modelDir);
-                        if (!string.IsNullOrEmpty(model) && !modelName.Equals(model, StringComparison.OrdinalIgnoreCase)) continue;
+                        if (!string.IsNullOrEmpty(model) && !packageMatch && !modelName.Equals(model, StringComparison.OrdinalIgnoreCase)) continue;
                         if (!seen.Add(modelName + "|" + package)) continue;
                         foreach (string type in wanted)
                         {
@@ -61,6 +64,7 @@ namespace XppVsCode.Server.Tools
                             if (Directory.Exists(dir)) yield return new KeyValuePair<string, string>(dir, modelName);
                         }
                     }
+                }
         }
 
         private static IEnumerable<string> SafeDirectories(string dir)
@@ -93,7 +97,13 @@ namespace XppVsCode.Server.Tools
             var hits = new ConcurrentBag<Hit>();
             int scanned = 0, count = 0;
             bool truncated = false, timedOut = false;
-            var files = Folders(objectTypes, model)
+            var folders = Folders(objectTypes, model).ToList();
+            if (!string.IsNullOrEmpty(model) && folders.Count == 0)
+            {
+                result.Error = "No model or package named '" + model + "' has code to search. Check the name with xpp_list_models.";
+                return result;
+            }
+            var files = folders
                 .SelectMany(f => SafeFiles(f.Key).Select(file => new KeyValuePair<string, string>(file, f.Value)));
             Parallel.ForEach(files, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(2, Environment.ProcessorCount / 2) }, (entry, state) =>
             {

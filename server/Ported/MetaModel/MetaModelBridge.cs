@@ -366,7 +366,21 @@ namespace XppVsCode.Server.MetaModel
                         result.DataSources = ExtractQueryDataSources(qry);
                         foreach (var m in qry.Methods)
                             result.Methods.Add(new MethodInfo { Name = m.Name, Source = m.Source });
-                        result.TypedMetadataJson = BuildTypedMetadataJson(objectType, qry);
+                        if (qry is AxQuerySimple)
+                            result.TypedMetadataJson = BuildTypedMetadataJson(objectType, qry);
+                        else
+                        {
+                            // Composite query: its own ranges come from the generic graph; data sources come from the base query.
+                            result.TypedMetadataJson = BuildFullGraphJson(qry);
+                            string baseName = ReadStringProperty(qry, "Query");
+                            var baseQuery = string.IsNullOrEmpty(baseName) ? null : MetaService.GetQuery(baseName);
+                            if (baseQuery != null && result.DataSources.Count == 0)
+                            {
+                                result.DataSources = ExtractQueryDataSources(baseQuery);
+                                result.Message = "Composite query over " + baseName + ": the data sources below are the base query's; "
+                                    + "this query's own ranges are in the Metadata (typedMetadata) section.";
+                            }
+                        }
                         result.ModelName = GetObjectModelName(objectType, objectName);
                         break;
 
@@ -1624,6 +1638,9 @@ namespace XppVsCode.Server.MetaModel
             foreach (var prop in underlying.GetProperties(BindingFlags.Public | BindingFlags.Instance))
             {
                 if (!prop.CanRead || prop.GetIndexParameters().Length > 0) continue;
+                // Read-only scalars (e.g. AxEnum.HelpText, an alias of Help) cannot be set by create/update.
+                Type propType = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+                if (!prop.CanWrite && (IsSimpleType(propType) || propType.IsEnum)) continue;
                 var propSchema = BuildTypeSchema(prop.PropertyType, depth + 1, new HashSet<Type>(visited));
                 if (propSchema != null)
                     properties[prop.Name] = propSchema;
@@ -2492,12 +2509,27 @@ namespace XppVsCode.Server.MetaModel
             return Ok("Updated AxMenu '" + req.ObjectName + "'.");
         }
 
+        // Simple metadata types (menu items, services, tiles, configuration keys, ...): MetaService.Get<X>/Update<X> by reflection.
         private MetaModelResult UpdateGenericByTypedApi(UpdateObjectRequest req)
         {
-            return Fail("Update for type '" + req.ObjectType + "' is not yet supported via the typed API. "
-                + "Supported types: AxClass, AxTable, AxForm, AxEdt, AxEnum, AxView, AxQuery, AxDataEntityView, AxMenu, "
-                + "AxSecurityPrivilege, AxSecurityDuty, AxSecurityRole, AxTableExtension, AxEnumExtension, AxEdtExtension, "
-                + "AxFormExtension, AxDataEntityViewExtension, AxSecurityDutyExtension, AxSecurityRoleExtension.");
+            string core = req.ObjectType.StartsWith("Ax") ? req.ObjectType.Substring(2) : req.ObjectType;
+            Type metaType = ResolveMetadataType(req.ObjectType);
+            var svcType = MetaService.GetType();
+            var getter = svcType.GetMethod("Get" + core, new[] { typeof(string) });
+            var updater = metaType == null ? null : svcType.GetMethods().FirstOrDefault(m => m.Name == "Update" + core
+                && m.GetParameters().Length == 2 && m.GetParameters()[0].ParameterType.IsAssignableFrom(metaType));
+            if (getter == null || updater == null)
+                return Fail("Update for type '" + req.ObjectType + "' is not supported.");
+
+            object obj = getter.Invoke(MetaService, new object[] { req.ObjectName });
+            if (obj == null)
+                return Fail(req.ObjectType + " '" + req.ObjectName + "' not found.");
+            var saveInfo = GetModelSaveInfoForObject(req.ObjectType, req.ObjectName);
+            if (saveInfo == null) return Fail("Cannot resolve model for '" + req.ObjectName + "'.");
+
+            ApplyTypedMetadata(obj, req);
+            updater.Invoke(MetaService, new object[] { obj, saveInfo });
+            return Ok("Updated " + req.ObjectType + " '" + req.ObjectName + "'.");
         }
 
         // ── Utility methods ──

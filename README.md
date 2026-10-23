@@ -68,6 +68,15 @@ Each feature can be turned on or off under **Code intelligence** in the Dynamics
 - **Add to Privilege** for menu items, **Generate SysTest Class** for classes, and **Run Snippet in Environment** (runs a `main` method from an untitled X++ editor through a scratch class in your model).
 - **Snippets** for Chain of Command, event handlers, SysOperation, RunBaseBatch, find/exist, parm methods, transactions with retry and SysTest.
 
+### Security and licensing
+- **Security view:** the roles of your models and the standard roles they extend, each with its user license, and all roles (with a name filter). Expand a role to see its sub-roles, duties, privileges and entry points with their grant and license.
+- **Analyze License** on a role, duty or privilege: the license it needs (from the View or Maintain user license of the menu items it grants, depending on the access), the entry points per license, the menu items that drive it and through which duties and privileges, the menu items where read-only access would lower it, and missing objects.
+- **Who Can Access** on a menu item, form, table or data entity: the privileges that grant it, with their duties and roles, and the licenses of its menu items.
+- **Find Security Gaps** in your models (for example menu items no privilege grants), grouped by severity.
+- **Segregation of Duties:** finds roles that combine conflicting duties. The rules are editable: **Edit Segregation of Duties Rules** writes the built-in rules to `.xpp/sod-rules.json` and uses that file (`xpp.security.sodRulesFile`).
+- **Security Report** for sign-off: roles, duties, privileges, entry points and licenses as Markdown or CSV.
+- Results open in a panel with clickable objects, Copy as Markdown and Export.
+
 ### Build, deploy and debug
 - **Build Model** with the X++ compiler (`Ctrl+Shift+B`), and **Build Project**, which reports only the problems in the project's objects. Errors appear in the Problems panel at the right line. A compiler crash (Fatal) or a missing output assembly fails the build.
 - **Run Tests:** runs SysTest test classes on the environment the way Visual Studio's Test Explorer does, and shows each test's result. Tests run against the deployed code, so build and deploy first.
@@ -90,7 +99,8 @@ Copilot can:
 - find how standard code does it, which is how X++ is developed: `xpp_find_examples` (standard implementations for a task such as "batch job with a contract" or "number sequence", forms with a pattern, or objects similar to a given one), `xpp_search_code` (text or regex over the code of every package), and `xpp_find_references` with `includeCode` (the calling code lines). The agent's plan names the standard precedent of every object and reuses it, extends it, or copies it only when it cannot be reused;
 - create label files, and many labels with translations in one call, and add elements to the project;
 - form extensions: controls are placed and checked against the form's patterns (a new tab page gets the pattern its place expects, required values are set, unknown pattern versions become the latest; anything the build would reject is refused, and the check takes seconds even on SalesTable), properties of base controls are changed only where D365FO allows it, and the extension's own controls can be updated, moved and removed;
-- create menu extensions, and work with security privileges, duties and roles;
+- create and update menu items, create menu extensions, and work with security privileges, duties and roles;
+- analyze security with `xpp_analyze_security`: the license of a role, duty or privilege and what drives it, who can access an object, security gaps, segregation of duties conflicts and the sign-off report;
 - create data entity extensions, including their staging tables, also on entities built on other entities or views; create composite data entities;
 - delete elements of your own models (refused while other elements reference them; their cross-reference entries are removed) or exclude them from the project;
 - select the active project, build the model and read every compiler error;
@@ -126,6 +136,7 @@ The tools are registered automatically. `node scripts/tool-regression.js --proje
 | `xpp.pacPath` | Path to `pac` |
 | `xpp.debuggerProxyPath` | Path to `Microsoft.Dynamics.AX.DebuggerProxy.exe`, if not in the default location |
 | `xpp.erd.depth`, `xpp.erd.direction`, `xpp.erd.fields` | Defaults for the entity relationship diagram (also changeable in the diagram) |
+| `xpp.security.sodRulesFile` | Segregation of duties rules (JSON); empty uses the built-in rules |
 | `xpp.codeIntelligence.<feature>` | Turn each code intelligence feature on or off (also in the Dynamics 365 view) |
 
 ## Status

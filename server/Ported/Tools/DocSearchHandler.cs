@@ -105,11 +105,22 @@ namespace XppVsCode.Server.Tools
             public string Url;
         }
 
+        private static readonly System.Text.RegularExpressions.Regex CodeIntent = new System.Text.RegularExpressions.Regex(
+            @"\b(x\+\+|code|class|method|api|programmatic\w*|extension|coc|chain of command|event handler|developer|compile|build|metadata|table|form|entity|query|sysoperation|batch job)\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
         // Microsoft Learn's semantic search (the public Learn MCP endpoint) in relevance order; the keyword search API as fallback.
+        // Questions about code get developer pages (dev-itpro) first: end-user pages answer how to use a feature, not how to code it.
         private static System.Collections.Generic.List<SearchHit> SearchLearn(string query)
         {
-            var hits = SearchLearnSemantic(query);
-            return hits.Count > 0 ? hits : SearchLearnKeyword(query);
+            bool dev = CodeIntent.IsMatch(query ?? "");
+            string q = dev && query.IndexOf("developer", StringComparison.OrdinalIgnoreCase) < 0 ? query + " developer" : query;
+            var hits = SearchLearnSemantic(q);
+            if (hits.Count == 0) hits = SearchLearnKeyword(q);
+            return dev
+                ? hits.Select((h, i) => new { h, i }).OrderBy(x => x.h.Url.IndexOf("/dev-itpro/", StringComparison.OrdinalIgnoreCase) >= 0 ? 0 : 1)
+                    .ThenBy(x => x.i).Select(x => x.h).ToList()
+                : hits;
         }
 
         private static System.Collections.Generic.List<SearchHit> SearchLearnSemantic(string query)
@@ -159,7 +170,7 @@ namespace XppVsCode.Server.Tools
                 {
                     string url = item.TryGetValue("contentUrl", out object u) ? u as string : null;
                     if (url == null || url.IndexOf("/dynamics365/", StringComparison.OrdinalIgnoreCase) < 0) continue;
-                    if (url.IndexOf("dynamics-ax-2012", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                    if (url.IndexOf("dynamics-ax-2012", StringComparison.OrdinalIgnoreCase) >= 0 || url.IndexOf("/business-central/", StringComparison.OrdinalIgnoreCase) >= 0) continue;
                     int anchor = url.IndexOf('#');
                     if (anchor >= 0) url = url.Substring(0, anchor);
                     url = url.Replace("https://learn.microsoft.com/dynamics365/", "https://learn.microsoft.com/en-us/dynamics365/");
@@ -196,7 +207,7 @@ namespace XppVsCode.Server.Tools
                     {
                         string url = item.TryGetValue("url", out object u) ? u as string : null;
                         if (url == null || url.IndexOf("/dynamics365/", StringComparison.OrdinalIgnoreCase) < 0) continue;
-                        if (url.IndexOf("dynamics-ax-2012", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                        if (url.IndexOf("dynamics-ax-2012", StringComparison.OrdinalIgnoreCase) >= 0 || url.IndexOf("/business-central/", StringComparison.OrdinalIgnoreCase) >= 0) continue;
                         hits.Add(new SearchHit { Title = item.TryGetValue("title", out object t) ? t as string : url, Url = url });
                     }
                 }

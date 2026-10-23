@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Text;
@@ -33,23 +34,48 @@ namespace XppVsCode.Server
             while ((line = input.ReadLine()) != null)
             {
                 if (line.Length == 0) continue;
-
-                string idToken = null;
-                string response;
-                try
-                {
-                    idToken = JsonHelpers.ExtractJsonValueToken(line, "id");
-                    response = Handle(line, idToken);
-                }
-                catch (Exception ex)
-                {
-                    Log.Write("Request failed: " + ex);
-                    response = idToken != null ? JsonHelpers.BuildError(idToken, -32603, "Internal error: " + ex.Message) : null;
-                }
-
-                // Responses must be single-line JSON.
-                if (response != null) output.WriteLine(response.Replace("\r", "").Replace("\n", ""));
+                string request = line;
+                // Read-only agent tools run in parallel (searches, references, reads); everything else in order. Calls that
+                // need the metadata API still take turns on the bridge's lock.
+                if (IsParallelRead(request))
+                    System.Threading.Tasks.Task.Run(() => Respond(request, output));
+                else
+                    Respond(request, output);
             }
+        }
+
+        private static readonly HashSet<string> ParallelTools = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "xpp_search_code", "xpp_find_examples", "xpp_find_references", "xpp_search_docs", "xpp_read_object", "xpp_find_object",
+            "xpp_list_objects", "xpp_list_model_objects", "xpp_get_form_layout", "xpp_read_label", "xpp_get_model_info",
+            "xpp_list_models", "xpp_get_environment", "xpp_get_object_type_schema", "xpp_list_project_items", "xpp_validate_object", "xpp_analyze_security",
+        };
+
+        private static bool IsParallelRead(string json) =>
+            JsonHelpers.ExtractJsonString(json, "method") == "tools/call"
+            && ParallelTools.Contains(JsonHelpers.ExtractNestedString(json, "params", "name") ?? "");
+
+        private readonly object _outputLock = new object();
+
+        private void Respond(string line, StreamWriter output)
+        {
+            string idToken = null;
+            string response;
+            try
+            {
+                idToken = JsonHelpers.ExtractJsonValueToken(line, "id");
+                response = Handle(line, idToken);
+            }
+            catch (Exception ex)
+            {
+                Log.Write("Request failed: " + ex);
+                response = idToken != null ? JsonHelpers.BuildError(idToken, -32603, "Internal error: " + ex.Message) : null;
+            }
+
+            // Responses must be single-line JSON, one at a time.
+            if (response != null)
+                lock (_outputLock)
+                    output.WriteLine(response.Replace("\r", "").Replace("\n", ""));
         }
 
         private string Handle(string json, string idToken)

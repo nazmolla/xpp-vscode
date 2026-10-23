@@ -146,3 +146,27 @@ User request: tools developers use in other languages; above all "find a similar
 | VS companion port | Done | 0.5.14: mcp-server CodeSearch.cs, CodeExamples.cs (cache folder XppCopilotCompanion), XRefQuery helpers, ToolRouter tools + includeCode, prompt. |
 
 0.8.0 released (round 6).
+
+## Round 7 (2026-10-23): design run 3 findings (0.8.0, all tools)
+
+Run: the session; end-to-end built as 46 objects, build 0 errors / 93 warnings (all ReferencedObjectIsObsolete from
+the dual-write header entity chain). Precedent step worked (every object named its OOB precedent and reuse/extend/copy).
+Chat dump: c:\Users\Mohamed the session chat history; stats in the session's files\tool_stats.txt.
+
+| # | Tool | Finding | Status |
+|---|---|---|---|
+| R7-1 | xpp_find_examples | Plain-language queries without a recipe word fall back to class-name matching; "similar to" a menu item returns nothing; ~13 s per call. | Fixed: free text scores class names (all words first, stemmed, stopwords dropped, no test classes) then method names; similar-to a menu item compares what it opens; explanations only for the top 5. |
+| R7-2 | xpp_search_code | First searches 28-44 s (only the first is documented as slow); model filter with a package name (ApplicationSuite) silently scans 0 files; scanned counts vary between identical calls (parallel early stop). | Fixed: model filter accepts a package (all its models); unknown model/package is an error; truncated results explain the varying counts; description says how to make it fast. |
+| R7-3 | xpp_find_references | Missed a call to findActiveLine from inside the same class; fields added by a table extension are only found when searching the extension; includeCode code lines also match an enum of the same name; menu items say "not built with cross reference" (misleading). | Fixed: member queries include calls from the same object; table member queries include fields added by table extensions; includeCode prefers .member/::member lines; clearer no-entries message (menu items point to xpp_analyze_security op=access). |
+| R7-4 | xpp_read_object | methodNames together with the methods section reported the method missing; one method of SalesTable still returned 48 KB; a composite query shows no data sources or ranges. | Fixed: methodNames gets its own Methods section (and selects it); large reads with methodNames return only the methods; composite queries show their ranges (typedMetadata) and the base query's data sources. |
+| R7-5 | xpp_create_object (form patterns) | New tab pages on AssetTable and CustParameters got the DimensionEntryControl sub-pattern (first allowed) instead of FieldsFieldGroups, then CustParameters rejected the tool's own choice; missed the pattern on the new line-details tab of SalesTable (build flagged it). | Fixed: sub-pattern chosen by structural fit with the control's children (FieldsFieldGroups first on ties); new FastTab pages outside any pattern node (SalesTable LineDetailsTab) get the best-fitting pattern. |
+| R7-6 | xpp_update_object | Menu items cannot be updated at all (so the privilege best-practice check cannot be re-run either). | Fixed: generic update (MetaService.Get/Update by reflection) for menu items, services, tiles, configuration keys, ... |
+| R7-7 | xpp_get_object_type_schema | Lists HelpText as an AxEnum property, which create rejects. | Fixed: schema omits read-only scalars (AxEnum.HelpText alias). |
+| R7-8 | xpp_search_docs | A developer question (posting journals in code) returned an end-user page. | Fixed: code questions add 'developer' and rank dev-itpro pages first; Business Central pages dropped. |
+| R7-9 | server | Tool calls run one at a time; parallel calls queue. | Done: read-only tools run in parallel (ParallelTools in McpStdioServer). |
+| R7-10 | best practices | Alternate key / CacheLookup warnings on an append-only log table are noise the agent has to justify. | Decided: keep the warnings. |
+
+Security (R8, user request): server SecurityAnalysis.cs + xpp_analyze_security (license, access, gaps, sod, report, roles,
+children, refresh) done and spot-tested; system prompt security-design rules added; VS Code Security view/panel/commands
+built (src/security/*), host smoke test test/securitySmoke.js passes. R7 + R8 regression cases added: 175/175 pass.
+Released 0.9.0. Next: VS companion port (security tool, parallel reads, R7 fixes), DevExt docs.

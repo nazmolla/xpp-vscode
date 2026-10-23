@@ -50,6 +50,46 @@ namespace XppVsCode.Server.MetaModel
             }
             var settled = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+            for (int round = 0; round < 2; round++)
+            {
+                RunPatternPasses(baseForm, ext, wanted, added, settled, applied);
+                // A new FastTab outside any pattern's reach (e.g. SalesTable's LineDetailsTab) still needs a pattern of its
+                // own, or the build warns ErrorFormControlPatternUnspecified.
+                if (round > 0 || !AssignFallbackFastTabPatterns(baseForm, ext, added, applied)) break;
+            }
+            return applied;
+        }
+
+        private static readonly string[] FastTabFallbackPatterns = { "FieldsFieldGroups", "ToolbarFields", "ToolbarList", "FillText", "TabularFields" };
+
+        private bool AssignFallbackFastTabPatterns(string baseForm, AxFormExtension ext, HashSet<string> added, List<string> applied)
+        {
+            var preview = BuildEffectiveForm(baseForm, ObjectCloner.MakeCopy(ext));
+            if (preview == null) return false;
+            bool any = false;
+            foreach (string name in added)
+            {
+                if (!preview.ByName.TryGetValue(name, out var node) || !(node.Control is AxFormTabPageControl)
+                    || !(node.Parent?.Control is AxFormTabControl tab)) continue;
+                bool siblingsPatterned = node.Parent.Children.Any(c => c != node && c.Control is AxFormTabPageControl sp
+                    && !string.IsNullOrEmpty(sp.Pattern) && !string.Equals(sp.Pattern, "Custom", StringComparison.OrdinalIgnoreCase));
+                if (tab.Style != TabStyle.FastTabs && !siblingsPatterned) continue;
+                var own = FindOwnControl(ext, name);
+                if (!(own?.Control is AxFormTabPageControl page) || !string.IsNullOrEmpty(page.Pattern)) continue;
+                var best = BestSubPattern(page, FastTabFallbackPatterns);
+                if (best == null) continue;
+                page.Pattern = best.Name;
+                page.PatternVersion = best.Version;
+                applied.Add(name + ".Pattern = " + best.Name + " (FastTab page without a pattern)");
+                applied.Add(name + ".PatternVersion = " + best.Version + " (FastTab page without a pattern)");
+                any = true;
+            }
+            return any;
+        }
+
+        private void RunPatternPasses(string baseForm, AxFormExtension ext, HashSet<string> wanted, HashSet<string> added,
+            HashSet<string> settled, List<string> applied)
+        {
             for (int pass = 0; pass < 3; pass++)
             {
                 var preview = BuildEffectiveForm(baseForm, ObjectCloner.MakeCopy(ext));
@@ -85,7 +125,6 @@ namespace XppVsCode.Server.MetaModel
                 }
                 if (!changed) break;
             }
-            return applied;
         }
 
         /// <summary>Control name ("Design" for the design) to the pattern node it matched, with the pattern's name.</summary>
@@ -166,12 +205,12 @@ namespace XppVsCode.Server.MetaModel
                 foreach (var v in result.Violations.Where(v => v.Op == PropertyViolation.Operator.Equals))
                     fixes.Add(Tuple.Create(name, v.PropertyName, v.PatternValue ?? "", pattern.FriendlyName ?? pattern.Name));
             // A container placed where the pattern expects a sub-pattern (e.g. a TabPage in a Details or Table of contents
-            // tab) gets the first one allowed there, as Visual Studio proposes; its required values follow in the next pass.
+            // tab) gets the allowed sub-pattern whose structure its children match (FieldsFieldGroups first on a tie), as
+            // Visual Studio proposes; its required values follow in the next pass.
             if (name != null && added.Contains(name) && result.Control is IPatternable patternable && string.IsNullOrEmpty(patternable.Pattern)
                 && depth > 0 && result.Node?.SubPatterns != null)
             {
-                string sub = result.Node.SubPatterns.FirstOrDefault(p => !string.IsNullOrEmpty(p) && !string.Equals(p, "Custom", StringComparison.OrdinalIgnoreCase));
-                var latest = sub == null ? null : LatestPattern(sub);
+                var latest = BestSubPattern(patternable, result.Node.SubPatterns);
                 if (latest != null)
                 {
                     fixes.Add(Tuple.Create(name, "Pattern", latest.Name, pattern.FriendlyName ?? pattern.Name));
@@ -182,6 +221,41 @@ namespace XppVsCode.Server.MetaModel
             foreach (var list in result.ChildResults.Values)
                 foreach (var child in list)
                     CollectEqualsViolations(child, pattern, wanted, added, fixes, visited, depth + 1);
+        }
+
+        private static readonly string[] PreferredSubPatterns = { "FieldsFieldGroups", "ToolbarFields", "SimpleListDetailsGrid", "TabularFields" };
+
+        /// <summary>Picks the sub-pattern for a new container: structural fit with its children first (property values are
+        /// fixed afterwards), then the common choices, then the declared order.</summary>
+        private static Pattern BestSubPattern(IPatternable control, IEnumerable<string> allowed)
+        {
+            var candidates = allowed.Where(p => !string.IsNullOrEmpty(p) && !string.Equals(p, "Custom", StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase).Select((p, i) => new { Pattern = LatestPattern(p), Order = i })
+                .Where(c => c.Pattern != null).ToList();
+            if (candidates.Count == 0) return null;
+            string saved = control.Pattern, savedVersion = control.PatternVersion;
+            try
+            {
+                return candidates.Select(c =>
+                {
+                    bool fits = false;
+                    try
+                    {
+                        control.Pattern = c.Pattern.Name;
+                        control.PatternVersion = c.Pattern.Version;
+                        var r = new PatternAnalyzer().TestPattern(control, c.Pattern, null);
+                        fits = r != null && r.AllDescendantNodesMatched && !r.ExtraDescendants;
+                    }
+                    catch { }
+                    int pref = Array.FindIndex(PreferredSubPatterns, x => string.Equals(x, c.Pattern.Name, StringComparison.OrdinalIgnoreCase));
+                    return new { c.Pattern, Score = (fits ? 0 : 1000) + (pref >= 0 ? pref : 100) * 10 + c.Order };
+                }).OrderBy(x => x.Score).First().Pattern;
+            }
+            finally
+            {
+                control.Pattern = saved;
+                control.PatternVersion = savedVersion;
+            }
         }
 
         private static Pattern LatestPattern(string name)

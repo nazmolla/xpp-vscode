@@ -2,7 +2,7 @@
   "name": "xpp-vscode",
   "displayName": "F&O Studio for VS Code",
   "description": "A full Dynamics 365 Finance & Operations development environment in VS Code: Application Explorer, designers, X++ code, build, deploy, debugging, and AI agent tools.",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "publisher": "MNazmi",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -178,6 +178,10 @@
         {
           "id": "xpp.project",
           "name": "D365FO Project"
+        },
+        {
+          "id": "xpp.security",
+          "name": "Security"
         },
         {
           "id": "xpp.tools",
@@ -536,6 +540,60 @@
         "title": "Run Snippet in Environment",
         "category": "X++",
         "icon": "$(play)"
+      },
+      {
+        "command": "xpp.security.refresh",
+        "title": "Refresh Security",
+        "category": "X++",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "xpp.security.filter",
+        "title": "Filter Roles…",
+        "category": "X++",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "xpp.security.clearFilter",
+        "title": "Clear Role Filter",
+        "category": "X++",
+        "icon": "$(filter-filled)"
+      },
+      {
+        "command": "xpp.security.analyzeLicense",
+        "title": "Analyze License",
+        "category": "X++",
+        "icon": "$(credit-card)"
+      },
+      {
+        "command": "xpp.security.whoCanAccess",
+        "title": "Who Can Access",
+        "category": "X++",
+        "icon": "$(person)"
+      },
+      {
+        "command": "xpp.security.findGaps",
+        "title": "Find Security Gaps",
+        "category": "X++",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "xpp.security.checkSod",
+        "title": "Check Segregation of Duties",
+        "category": "X++",
+        "icon": "$(law)"
+      },
+      {
+        "command": "xpp.security.report",
+        "title": "Security Report…",
+        "category": "X++",
+        "icon": "$(file-text)"
+      },
+      {
+        "command": "xpp.security.editSodRules",
+        "title": "Edit Segregation of Duties Rules",
+        "category": "X++",
+        "icon": "$(edit)"
       }
     ],
     "menus": {
@@ -624,6 +682,41 @@
           "command": "xpp.createProject",
           "when": "view == xpp.project",
           "group": "navigation@5"
+        },
+        {
+          "command": "xpp.security.filter",
+          "when": "view == xpp.security && !xpp.security.filtered",
+          "group": "navigation@0"
+        },
+        {
+          "command": "xpp.security.clearFilter",
+          "when": "view == xpp.security && xpp.security.filtered",
+          "group": "navigation@0"
+        },
+        {
+          "command": "xpp.security.findGaps",
+          "when": "view == xpp.security",
+          "group": "navigation@1"
+        },
+        {
+          "command": "xpp.security.checkSod",
+          "when": "view == xpp.security",
+          "group": "navigation@2"
+        },
+        {
+          "command": "xpp.security.report",
+          "when": "view == xpp.security",
+          "group": "navigation@3"
+        },
+        {
+          "command": "xpp.security.refresh",
+          "when": "view == xpp.security",
+          "group": "navigation@4"
+        },
+        {
+          "command": "xpp.security.editSodRules",
+          "when": "view == xpp.security",
+          "group": "1_rules@1"
         }
       ],
       "view/item/context": [
@@ -746,6 +839,56 @@
           "command": "xpp.generateTests",
           "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\bclass\\b/",
           "group": "5_run@4"
+        },
+        {
+          "command": "xpp.openDesigner",
+          "when": "view == xpp.security && viewItem =~ /^xppSec (role|duty|privilege|access)$/",
+          "group": "navigation@1"
+        },
+        {
+          "command": "xpp.security.analyzeLicense",
+          "when": "view == xpp.security && viewItem =~ /^xppSec (role|duty|privilege)$/",
+          "group": "1_security@1"
+        },
+        {
+          "command": "xpp.security.analyzeLicense",
+          "when": "view == xpp.security && viewItem =~ /^xppSec (role|duty|privilege)$/",
+          "group": "inline"
+        },
+        {
+          "command": "xpp.security.checkSod",
+          "when": "view == xpp.security && viewItem == 'xppSec role'",
+          "group": "1_security@2"
+        },
+        {
+          "command": "xpp.security.report",
+          "when": "view == xpp.security && viewItem == 'xppSec role'",
+          "group": "1_security@3"
+        },
+        {
+          "command": "xpp.security.whoCanAccess",
+          "when": "view == xpp.security && viewItem == 'xppSec access'",
+          "group": "1_security@1"
+        },
+        {
+          "command": "xpp.security.whoCanAccess",
+          "when": "view == xpp.security && viewItem == 'xppSec access'",
+          "group": "inline"
+        },
+        {
+          "command": "xpp.security.whoCanAccess",
+          "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\b(menuitem|form|table|entity)\\b/",
+          "group": "4_refs@6"
+        },
+        {
+          "command": "xpp.security.analyzeLicense",
+          "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\b(role|duty|privilege)\\b/",
+          "group": "4_refs@6"
+        },
+        {
+          "command": "xpp.security.checkSod",
+          "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\brole\\b/",
+          "group": "4_refs@7"
         }
       ],
       "webview/context": [
@@ -873,6 +1016,21 @@
           "command": "xpp.generateTests",
           "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\bclass\\b/",
           "group": "0_5_run@4"
+        },
+        {
+          "command": "xpp.security.whoCanAccess",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\b(menuitem|form|table|entity)\\b/",
+          "group": "0_4_refs@6"
+        },
+        {
+          "command": "xpp.security.analyzeLicense",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\b(role|duty|privilege)\\b/",
+          "group": "0_4_refs@6"
+        },
+        {
+          "command": "xpp.security.checkSod",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\brole\\b/",
+          "group": "0_4_refs@7"
         }
       ],
       "commandPalette": [
@@ -923,6 +1081,10 @@
         {
           "command": "xpp.designer.findEventHandlers",
           "when": "false"
+        },
+        {
+          "command": "xpp.security.clearFilter",
+          "when": "xpp.security.filtered"
         }
       ],
       "editor/title": [
@@ -1086,6 +1248,11 @@
             "All fields"
           ],
           "description": "Fields shown in each ERD table box."
+        },
+        "xpp.security.sodRulesFile": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Segregation of duties rules (JSON: `Name`, `First`, `Second`, `Severity`, `Reason`; `First` and `Second` are duty names). Empty uses the built-in rules. **X++: Edit Segregation of Duties Rules** creates the file from the built-in rules. A relative path is under the first workspace folder."
         }
       }
     }

@@ -90,7 +90,21 @@ namespace XppVsCode.Server.Tools
                 {
                     string folder = XRefQuery.FolderOf(objectType ?? "AxClass");
                     if (folder == null) return Failure("Unknown objectType '" + objectType + "'.");
-                    items.AddRange(Similar(conn, "/" + folder + "/" + objectName, max));
+                    string path = "/" + folder + "/" + objectName;
+                    if (folder.StartsWith("MenuItem", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // A menu item references little: compare what it opens (its form, class or report) instead.
+                        string target = Column(conn, "SELECT TOP 1 t.Path FROM [References] r JOIN Names s ON s.Id = r.SourceId JOIN Names t ON t.Id = r.TargetId "
+                            + "WHERE s.Path = @p AND (t.Path LIKE '/Forms/%' OR t.Path LIKE '/Classes/%' OR t.Path LIKE '/Reports/%') AND t.Path NOT LIKE '/%/%/%'",
+                            ("@p", path)).FirstOrDefault() ?? MenuItemTarget(objectType ?? "AxMenuItemDisplay", objectName);
+                        if (target != null)
+                        {
+                            notes.Add(objectName + " opens " + Short(target));
+                            path = target;
+                            objectName = Short(target);
+                        }
+                    }
+                    items.AddRange(Similar(conn, path, max));
                     notes.Add("objects sharing the most distinctive references (base class, interfaces, attributes, APIs, tables) with " + objectName);
                 }
                 if (!string.IsNullOrWhiteSpace(query))
@@ -111,7 +125,7 @@ namespace XppVsCode.Server.Tools
                     if (notes.Count == 0 || (string.IsNullOrEmpty(objectName) && items.Count == 0))
                     {
                         items.AddRange(ByName(conn, q, max));
-                        notes.Add("classes whose names contain the words of the query (no framework pattern recognized; try words like batch, contract, number sequence, lookup, workflow, business event, report, service, data entity, or a form pattern name)");
+                        notes.Add("classes whose name or method names contain the most query words (no framework pattern recognized; words like batch, contract, number sequence, lookup, workflow, business event, report, service, data entity, or a form pattern name find framework examples)");
                     }
                 }
             }
@@ -170,8 +184,8 @@ GROUP BY u.Obj ORDER BY score DESC";
                         found.Add(ToExample(r.GetString(0), r.IsDBNull(3) ? null : r.GetString(3), Convert.ToDouble(r.GetValue(1)),
                             "shares " + r.GetInt32(2) + " distinctive reference(s)"));
             }
-            // The shared targets with the fewest users explain the match.
-            foreach (var e in found.Take(max))
+            // The shared targets with the fewest users explain the match (one query each: the top few only).
+            foreach (var e in found.Take(Math.Min(max, 5)))
             {
                 var shared = Column(conn, @"
 SELECT TOP 4 t.Path FROM Names t
@@ -240,15 +254,54 @@ GROUP BY " + obj;
                 .ToList();
         }
 
+        private static readonly HashSet<string> StopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "how", "the", "and", "for", "with", "from", "into", "that", "this", "code", "standard", "example", "examples", "using",
+            "create", "make", "want", "need", "when", "what", "where", "which", "some", "does", "find", "show", "like", "similar",
+        };
+
+        // posting -> post, journals -> journal, created -> creat (still a substring of "create").
+        private static string Stem(string w) =>
+            w.Length > 6 && w.EndsWith("ing") ? w.Substring(0, w.Length - 3)
+            : w.Length > 5 && w.EndsWith("ed") ? w.Substring(0, w.Length - 2)
+            : w.Length > 4 && w.EndsWith("s") && !w.EndsWith("ss") ? w.Substring(0, w.Length - 1)
+            : w;
+
+        /// <summary>Free text: classes whose name (then method names) contain the most query words.</summary>
         private List<Example> ByName(SqlConnection conn, string q, int max)
         {
-            var words = q.Split(' ').Where(w => w.Length >= 4).Distinct().Take(3).ToList();
-            var found = new List<Example>();
-            foreach (string w in words)
-                foreach (string path in Column(conn, "SELECT TOP 20 Path FROM Names WHERE Path LIKE '/Classes/%' AND Path NOT LIKE '/Classes/%/%' AND Path LIKE @w ORDER BY LEN(Path)",
-                             ("@w", "%" + Like(w) + "%")))
-                    found.Add(ToExample(path, null, 10, "name contains '" + w + "'"));
-            return found.Take(max).ToList();
+            var words = q.Split(' ').Where(w => w.Length >= 3 && !StopWords.Contains(w)).Select(Stem).Where(w => w.Length >= 3)
+                .Distinct().Take(5).ToList();
+            if (words.Count == 0) return new List<Example>();
+            bool tests = words.Any(w => w.StartsWith("test"));
+            var args = words.Select((w, i) => ("@w" + i, (object)("%" + Like(w) + "%"))).ToArray();
+            string all = string.Join(" AND ", words.Select((w, i) => "Path LIKE @w" + i));
+            string any = string.Join(" OR ", words.Select((w, i) => "Path LIKE @w" + i));
+            const string classLevel = "Path LIKE '/Classes/%' AND Path NOT LIKE '/Classes/%/%'";
+            var scored = new Dictionary<string, KeyValuePair<double, string>>(StringComparer.OrdinalIgnoreCase);
+            void Add(string cls, double score, string reason)
+            {
+                if (!tests && cls.IndexOf("Test", StringComparison.OrdinalIgnoreCase) >= 0) return;
+                if (!scored.TryGetValue(cls, out var best) || best.Key < score) scored[cls] = new KeyValuePair<double, string>(score, reason);
+            }
+            // Class names containing every word, then the most words (short names first: the framework class itself).
+            foreach (string path in Column(conn, "SELECT TOP 200 Path FROM Names WHERE " + classLevel + " AND " + all + " ORDER BY LEN(Path)", args)
+                .Concat(words.Count > 1 ? Column(conn, "SELECT TOP 2000 Path FROM Names WHERE " + classLevel + " AND (" + any + ") ORDER BY LEN(Path)", args) : new List<string>()))
+            {
+                string cls = path.Substring("/Classes/".Length);
+                var matched = words.Where(w => cls.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+                if (matched.Count > 0) Add(cls, matched.Count * 10 - cls.Length / 10.0, "name matches " + string.Join(", ", matched));
+            }
+            // Method names complete the picture when no class name has every word.
+            if (words.Count > 1 && !scored.Values.Any(v => v.Key >= words.Count * 10 - 5))
+                foreach (string path in Column(conn, "SELECT TOP 300 Path FROM Names WHERE Path LIKE '/Classes/%/Methods/%' AND " + all + " ORDER BY LEN(Path)", args))
+                {
+                    var parts = path.TrimStart('/').Split('/');
+                    if (parts.Length != 4) continue;
+                    Add(parts[1], words.Count * 8 - parts[1].Length / 10.0, "method " + parts[3] + " matches " + string.Join(", ", words));
+                }
+            return scored.OrderByDescending(kv => kv.Value.Key).Take(max)
+                .Select(kv => ToExample("/Classes/" + kv.Key, null, kv.Value.Key / 10.0, kv.Value.Value)).ToList();
         }
 
         // Forms by Design pattern: a cached scan of the forms' Design element (patterns are not in the cross-reference database).
@@ -405,6 +458,27 @@ WHERE t.Path IN ('/Classes/SysObsoleteAttribute', '/Classes/SysObsolete') AND r.
                 }
             }
             return items;
+        }
+
+        private static readonly Regex MenuItemObject = new Regex(@"<Object>([^<]+)</Object>", RegexOptions.Compiled);
+        private static readonly Regex MenuItemObjectType = new Regex(@"<ObjectType>([^<]+)</ObjectType>", RegexOptions.Compiled);
+
+        /// <summary>The cross-reference path of what a menu item opens (Object / ObjectType of its metadata; forms by default).</summary>
+        private static string MenuItemTarget(string objectType, string name)
+        {
+            foreach (var folder in CodeSearch.Folders(new[] { objectType }, null))
+            {
+                string file = Path.Combine(folder.Key, name + ".xml");
+                if (!File.Exists(file)) continue;
+                string text;
+                try { text = File.ReadAllText(file); } catch { continue; }
+                var obj = MenuItemObject.Match(text);
+                if (!obj.Success) return null;
+                string kind = MenuItemObjectType.Match(text) is var t && t.Success ? t.Groups[1].Value.Trim() : "Form";
+                string targetFolder = kind == "Class" ? "Classes" : kind == "SSRSReport" ? "Reports" : kind == "Form" ? "Forms" : null;
+                return targetFolder == null ? null : "/" + targetFolder + "/" + obj.Groups[1].Value.Trim();
+            }
+            return null;
         }
 
         // ── SQL helpers ──

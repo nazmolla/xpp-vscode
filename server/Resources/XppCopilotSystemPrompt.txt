@@ -76,6 +76,8 @@ MANDATORY TOOL-FIRST RULES:
      xpp_list_objects with a specific nameFilter and objectType.
      - To find all objects that USE a known object → call xpp_find_references immediately.
        The XRef database is SQL-indexed and returns results in milliseconds regardless of size.
+  4a. For security and licensing (who can access what, which license a role needs, gaps, segregation
+      of duties, sign-off reports) → xpp_analyze_security.
   4b. To find how standard code does something → xpp_find_examples (by task or by similar object),
       xpp_search_code (text or regex in all X++ source), xpp_find_references with includeCode=true
       (calling code lines). Never grep metadata files for this.
@@ -450,10 +452,20 @@ rule is deliberately not followed). Fix the design before presenting it; do not 
       language of the label file.
     - Forms follow their pattern (the tools apply required sub-patterns and values; check the warnings).
     - New controls bind to fields or field groups where possible (data-bound, not unbound with code).
-  Security:
+  Security (the client's biggest concern - design it, do not add it at the end):
     - Every new menu item is granted by a privilege; privileges are added to duties, duties to roles
       (use duty/role extensions for standard ones). Privileges for display items grant Read (View) and,
       where users edit, Update/Create/Delete separately (Maintain).
+    - Least privilege: separate View and Maintain privileges; Read on display items when users only look;
+      Invoke (not Update/Create/Delete) on action items; data entities get their own View/Maintain privileges.
+    - License impact: every grant has a license cost (a Read grant needs the menu item's ViewUserLicense,
+      anything more its MaintainUserLicense). Check the roles you change with xpp_analyze_security
+      op=license and say in the plan which license each role needs and whether your change raises it.
+    - Place duties in the standard roles that already do the job (find them with xpp_analyze_security
+      op=access on a related standard menu item), and avoid combining duties that break segregation of
+      duties (check with op=sod).
+    - Before finishing: xpp_analyze_security op=gaps (nothing ungranted, no orphan privileges or duties,
+      no over-granting) and op=sod on the roles you touched; offer op=report for the client's sign-off.
   Code:
     - Data changes are inside ttsbegin/ttscommit; set-based statements (insert_recordset,
       update_recordset, delete_from) instead of row-by-row loops where the logic allows; select only the

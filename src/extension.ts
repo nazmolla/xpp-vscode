@@ -21,6 +21,7 @@ import { registerTests } from './tests';
 import { checkEnvironmentConnection } from './ude';
 import { CodeIntelligence } from './codeIntel/providers';
 import { registerProductivity } from './productivity';
+import { registerSecurity } from './security';
 
 export function activate(context: vscode.ExtensionContext): void {
     const log = vscode.window.createOutputChannel('X++');
@@ -128,14 +129,16 @@ export function activate(context: vscode.ExtensionContext): void {
         aotTree.refresh();
         projectTree.refresh();
     }, command, [codeIntel]);
-    registerProductivity(context, command, {
+    const productivity = {
         server, languageServer, log, codeIntel,
-        refreshCode: uri => codeFs.refresh(uri),
+        refreshCode: (uri: vscode.Uri) => codeFs.refresh(uri),
         refreshTrees: () => {
             aotTree.refresh();
             projectTree.refresh();
         },
-    });
+    };
+    registerProductivity(context, command, productivity);
+    registerSecurity(context, command, productivity);
     command('xpp.designer.new', (node: DesignerNodeContext) => ElementDesigner.runAction('new', node));
     command('xpp.designer.newMethod', (node: DesignerNodeContext) => ElementDesigner.runAction('newMethod', node));
     command('xpp.designer.override', (node: DesignerNodeContext) => ElementDesigner.runAction('override', node));

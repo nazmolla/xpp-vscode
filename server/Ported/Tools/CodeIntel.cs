@@ -48,6 +48,7 @@ namespace XppVsCode.Server.Tools
 
         private readonly CodeExamples _examples;
         private readonly CodeSearch _search = new CodeSearch();
+        private readonly SecurityAnalysis _security = new SecurityAnalysis();
 
         public string Handle(string action, string body)
         {
@@ -70,6 +71,8 @@ namespace XppVsCode.Server.Tools
                     case "search_code": return SearchCode(body);
                     case "find_examples": return _json.Serialize(_examples.Find(Str(body, "query"), Str(body, "objectType"), Str(body, "objectName"), Int(body, "maxResults", 15)));
                     case "obsolete": return _json.Serialize(_examples.Obsolete());
+                    case "security": return _json.Serialize(_security.Handle(Str(body, "op"), k => Str(body, k),
+                        k => JsonHelpers.ExtractJsonStringArray(body, k), k => Flag(body, k)));
                     default: return Fail("Unknown language action '" + action + "'.");
                 }
             }
