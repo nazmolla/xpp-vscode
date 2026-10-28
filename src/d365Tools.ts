@@ -5,7 +5,7 @@ import * as vscode from 'vscode';
 import { CodeExtensionFunctions, CodeTypes, ExtensionTypes, listModels, ModelLocation, typeLabel } from './aot';
 import { methodUri, objectUri } from './codeView';
 import { DiagramNode, DiagramPanel, hierarchyDiagram, MetadataDocuments, MetadataScheme, referencesDiagram } from './diagrams';
-import { readActiveEnvironment } from './environment';
+import { readActiveEnvironment, selectedEnvironmentUrl } from './environment';
 import { findActiveProject, readProject } from './project';
 import { XppServerClient } from './serverClient';
 import { compilerLineToDocumentLine } from './xppSource';
@@ -102,14 +102,7 @@ const ToolsMenu: ToolNode[] = [
             { label: 'Open Table Browser…', icon: 'table', command: 'xpp.openTableBrowser' },
         ],
     },
-    {
-        label: 'Environment', icon: 'server-environment', children: [
-            { label: 'Connect to Environment…', icon: 'plug', command: 'xpp.connectEnvironment' },
-            { label: 'Check Environment Connection', icon: 'pulse', command: 'xpp.checkEnvironment' },
-            { label: 'Show Active Configuration', icon: 'info', command: 'xpp.showEnvironment' },
-            { label: 'Sign In (pac)', icon: 'account', command: 'xpp.pac.signIn' },
-        ],
-    },
+    // Environment (EnvironmentStatus) and Code Intelligence are contributed here, before Options.
     { label: 'Options…', icon: 'gear', command: 'xpp.tools.options' },
 ];
 
@@ -644,7 +637,13 @@ async function pickTable(): Promise<{ objectType: string; objectName: string } |
     return name ? { objectType: 'AxTable', objectName: name } : undefined;
 }
 
+/** The web client of the active environment; xpp.financeAndOperationsUrl when its configuration has none. */
 async function financeAndOperationsUrl(): Promise<string | undefined> {
+    const env = await readActiveEnvironment().catch(() => undefined);
+    // A selected environment without metadata here runs on another environment's configuration, which names the wrong web client.
+    if (env?.finOpsUrl && (env.dataverseUrl || !selectedEnvironmentUrl())) {
+        return env.finOpsUrl;
+    }
     const config = vscode.workspace.getConfiguration('xpp');
     let url = config.get<string>('financeAndOperationsUrl');
     if (!url) {
