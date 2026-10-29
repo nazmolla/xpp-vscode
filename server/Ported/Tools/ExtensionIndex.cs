@@ -340,8 +340,7 @@ WHERE at.Path IN ('/Classes/PostHandlerFor', '/Classes/PreHandlerFor', '/Classes
             var config = DynamicsConfigurationReader.ReadActiveConfiguration();
             var snap = new Snapshot();
             _scannedCustomClasses.Clear();
-            if (!config.HasCustom) return snap;
-            foreach (string file in ClassFiles(new[] { config.CustomMetadataFolder }))
+            foreach (string file in PackageClassFolders(config.CustomPackageFolders()).SelectMany(d => Directory.EnumerateFiles(d, "*.xml")))
             {
                 _scannedCustomClasses.Add(Path.GetFileNameWithoutExtension(file));
                 ScanClassFile(file, File.ReadAllText(file), snap, includeXRefKinds: true);
@@ -383,19 +382,18 @@ WHERE at.Path IN ('/Classes/PostHandlerFor', '/Classes/PreHandlerFor', '/Classes
             return snap;
         }
 
-        private static IEnumerable<string> ClassFolders(IEnumerable<string> roots)
-        {
-            foreach (string root in roots)
-                foreach (string package in Directory.GetDirectories(root))
-                    foreach (string model in Directory.GetDirectories(package))
-                    {
-                        string dir = Path.Combine(model, "AxClass");
-                        if (Directory.Exists(dir)) yield return dir;
-                    }
-        }
+        private static IEnumerable<string> ClassFolders(IEnumerable<string> roots) =>
+            PackageClassFolders(roots.SelectMany(Directory.GetDirectories));
 
-        private static IEnumerable<string> ClassFiles(IEnumerable<string> roots) =>
-            ClassFolders(roots.Where(Directory.Exists)).SelectMany(d => Directory.EnumerateFiles(d, "*.xml"));
+        private static IEnumerable<string> PackageClassFolders(IEnumerable<string> packages)
+        {
+            foreach (string package in packages)
+                foreach (string model in Directory.GetDirectories(package))
+                {
+                    string dir = Path.Combine(model, "AxClass");
+                    if (Directory.Exists(dir)) yield return dir;
+                }
+        }
 
         /// <summary>Extension declarations, wrappers and handler attributes of one class file.</summary>
         private static void ScanClassFile(string path, string xml, Snapshot snap, bool includeXRefKinds)

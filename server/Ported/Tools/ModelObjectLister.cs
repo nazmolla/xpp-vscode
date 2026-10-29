@@ -210,7 +210,7 @@ namespace XppVsCode.Server.Tools
                             Name = name,
                             Package = Path.GetFileName(packageDir),
                             Folder = modelFolder,
-                            IsCustom = root.Value
+                            IsCustom = root.Value && config.IsCustomPath(packageDir)
                         };
                     }
                 }

@@ -180,5 +180,48 @@ namespace XppVsCode.Server
 
         public bool HasCustom => !string.IsNullOrWhiteSpace(CustomMetadataFolder);
         public bool HasReference => ReferenceMetadataFolders.Count > 0;
+
+        /// <summary>
+        /// Cloud-hosted and VHD environments keep every package in PackagesLocalDirectory, which is then both the custom
+        /// and the reference folder; the user's own packages are told apart by their publisher.
+        /// </summary>
+        public bool SharedStore => HasCustom && ReferenceMetadataFolders.Contains(CustomMetadataFolder, StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Package folders of the user's own models.</summary>
+        public IEnumerable<string> CustomPackageFolders()
+        {
+            if (!HasCustom || !Directory.Exists(CustomMetadataFolder)) return Enumerable.Empty<string>();
+            return Directory.GetDirectories(CustomMetadataFolder)
+                .Where(p => Directory.Exists(Path.Combine(p, "Descriptor")) && (!SharedStore || !IsMicrosoftPackage(p)));
+        }
+
+        /// <summary>True when the file or folder belongs to one of the user's own packages.</summary>
+        public bool IsCustomPath(string path)
+        {
+            if (!HasCustom) return false;
+            string root = Path.GetFullPath(CustomMetadataFolder).TrimEnd('\\') + "\\";
+            string full = Path.GetFullPath(path);
+            if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return false;
+            if (!SharedStore) return true;
+            string package = full.Substring(root.Length).Split('\\')[0];
+            return package.Length > 0 && !IsMicrosoftPackage(Path.Combine(root, package));
+        }
+
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> MicrosoftPackages =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+        // A package is Microsoft's when every model descriptor in it names Microsoft as the publisher.
+        private static bool IsMicrosoftPackage(string packageFolder) => MicrosoftPackages.GetOrAdd(packageFolder, folder =>
+        {
+            var publishers = new List<string>();
+            try
+            {
+                foreach (string descriptor in Directory.EnumerateFiles(Path.Combine(folder, "Descriptor"), "*.xml"))
+                    publishers.Add(System.Xml.Linq.XDocument.Load(descriptor).Root?.Elements()
+                        .FirstOrDefault(e => e.Name.LocalName == "Publisher")?.Value.Trim() ?? "");
+            }
+            catch { }
+            return publishers.Count > 0 && publishers.All(p => p.StartsWith("Microsoft", StringComparison.OrdinalIgnoreCase));
+        });
     }
 }

@@ -618,7 +618,7 @@
         },
         {
           "command": "xpp.debug.start",
-          "when": "view == xpp.infolog || view == xpp.tools",
+          "when": "(view == xpp.infolog || view == xpp.tools) && !xpp.localEnvironment",
           "group": "navigation@0"
         },
         {
@@ -678,7 +678,7 @@
         },
         {
           "command": "xpp.runTests",
-          "when": "view == xpp.project",
+          "when": "view == xpp.project && !xpp.localEnvironment",
           "group": "navigation@3"
         },
         {
@@ -785,7 +785,7 @@
         },
         {
           "command": "xpp.runTests",
-          "when": "(view == xpp.project || view == xpp.aot) && viewItem =~ /\\bclass\\b/",
+          "when": "((view == xpp.project || view == xpp.aot) && viewItem =~ /\\bclass\\b/) && !xpp.localEnvironment",
           "group": "5_run@3"
         },
         {
@@ -962,7 +962,7 @@
         },
         {
           "command": "xpp.runTests",
-          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\bclass\\b/",
+          "when": "(webviewId == 'xppElementDesigner' && xppRoot =~ /\\bclass\\b/) && !xpp.localEnvironment",
           "group": "0_5_run@3"
         },
         {
@@ -1108,6 +1108,26 @@
         {
           "command": "xpp.security.clearFilter",
           "when": "xpp.security.filtered"
+        },
+        {
+          "command": "xpp.pac.signIn",
+          "when": "!xpp.localEnvironment"
+        },
+        {
+          "command": "xpp.pac.init",
+          "when": "!xpp.localEnvironment"
+        },
+        {
+          "command": "xpp.pac.deploy",
+          "when": "!xpp.localEnvironment"
+        },
+        {
+          "command": "xpp.debug.start",
+          "when": "!xpp.localEnvironment"
+        },
+        {
+          "command": "xpp.runTests",
+          "when": "!xpp.localEnvironment"
         }
       ],
       "editor/title": [

@@ -525,30 +525,27 @@ namespace XppVsCode.Server.Tools
             var config = DynamicsConfigurationReader.ReadActiveConfiguration();
             var store = new LabelStore(config);
             var result = new List<Dictionary<string, object>>();
-            if (config.HasCustom && Directory.Exists(config.CustomMetadataFolder))
+            foreach (string file in config.CustomPackageFolders().SelectMany(p => Directory.EnumerateFiles(p, "*." + language + ".label.txt", SearchOption.AllDirectories)))
             {
-                foreach (string file in Directory.EnumerateFiles(config.CustomMetadataFolder, "*." + language + ".label.txt", SearchOption.AllDirectories))
+                string fileId = Path.GetFileName(file);
+                fileId = fileId.Substring(0, fileId.Length - ("." + language + ".label.txt").Length);
+                var mtime = File.GetLastWriteTimeUtc(file);
+                Dictionary<string, LabelEntry> labels;
+                lock (_labelCache)
                 {
-                    string fileId = Path.GetFileName(file);
-                    fileId = fileId.Substring(0, fileId.Length - ("." + language + ".label.txt").Length);
-                    var mtime = File.GetLastWriteTimeUtc(file);
-                    Dictionary<string, LabelEntry> labels;
-                    lock (_labelCache)
-                    {
-                        if (!_labelCache.TryGetValue(file, out var cached) || cached.Key != mtime)
-                            _labelCache[file] = cached = new KeyValuePair<DateTime, Dictionary<string, LabelEntry>>(mtime, store.ReadAll(file));
-                        labels = cached.Value;
-                    }
-                    foreach (var l in labels.Values)
-                    {
-                        string reference = "@" + fileId + ":" + l.Id;
-                        if (search.Length > 0 && reference.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0
-                            && (l.Text ?? "").IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0) continue;
-                        result.Add(new Dictionary<string, object> { ["reference"] = reference, ["text"] = l.Text, ["comment"] = l.Comment ?? "" });
-                        if (result.Count >= max) break;
-                    }
+                    if (!_labelCache.TryGetValue(file, out var cached) || cached.Key != mtime)
+                        _labelCache[file] = cached = new KeyValuePair<DateTime, Dictionary<string, LabelEntry>>(mtime, store.ReadAll(file));
+                    labels = cached.Value;
+                }
+                foreach (var l in labels.Values)
+                {
+                    string reference = "@" + fileId + ":" + l.Id;
+                    if (search.Length > 0 && reference.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0
+                        && (l.Text ?? "").IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    result.Add(new Dictionary<string, object> { ["reference"] = reference, ["text"] = l.Text, ["comment"] = l.Comment ?? "" });
                     if (result.Count >= max) break;
                 }
+                if (result.Count >= max) break;
             }
             return Ok(new Dictionary<string, object> { ["labels"] = result });
         }

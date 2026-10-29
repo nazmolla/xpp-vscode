@@ -365,7 +365,7 @@ namespace XppVsCode.Server.Tools
                     using (var r = cmd.ExecuteReader())
                         while (r.Read()) modules.Add(r.GetString(0));
 
-                    var missing = CustomPackages(config.CustomMetadataFolder).Where(p => !modules.Contains(p)).ToList();
+                    var missing = config.CustomPackageFolders().Select(Path.GetFileName).Where(p => !modules.Contains(p)).ToList();
                     if (missing.Count > 0)
                         h.Warnings.Add("Custom package(s) not in the cross-reference database: " + string.Join(", ", missing)
                             + ". References from their code are NOT included; build them with 'Build cross reference data' enabled.");
@@ -384,14 +384,6 @@ namespace XppVsCode.Server.Tools
                         : "");
                 return h;
             }
-        }
-
-        private static IEnumerable<string> CustomPackages(string customFolder)
-        {
-            if (string.IsNullOrEmpty(customFolder) || !Directory.Exists(customFolder)) yield break;
-            foreach (string dir in Directory.EnumerateDirectories(customFolder))
-                if (Directory.Exists(Path.Combine(dir, "Descriptor")))
-                    yield return Path.GetFileName(dir);
         }
 
         // ── Queries ──

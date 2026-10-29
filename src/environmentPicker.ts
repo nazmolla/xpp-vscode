@@ -104,6 +104,7 @@ export class EnvironmentStatus implements ToolsContribution, vscode.Disposable {
 
     private async update(): Promise<void> {
         this.current = await readActiveEnvironment().catch(() => undefined);
+        void vscode.commands.executeCommand('setContext', 'xpp.localEnvironment', !!this.current?.local);
         if (this.current) {
             this.item.text = `$(${this.mismatch() ? 'warning' : 'server-environment'}) ${this.current.name}`;
             this.item.tooltip = this.tooltip();
@@ -132,6 +133,7 @@ export class EnvironmentStatus implements ToolsContribution, vscode.Disposable {
             env.finOpsUrl,
             mismatch
                 ? `${mismatch} has no metadata on this machine; this is the machine-wide configuration. Connect to Environment downloads it.`
+                : env.local ? 'Cloud-hosted or VHD environment (local AOS and PackagesLocalDirectory)'
                 : !env.dataverseUrl && 'Machine-wide configuration (shared with Visual Studio)',
             'Click to switch.',
         ].filter(Boolean).join('\n');
