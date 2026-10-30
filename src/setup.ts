@@ -5,6 +5,7 @@ import * as path from 'path';
 import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import * as vscode from 'vscode';
+import { dynamics365Folder, readActiveEnvironment, selectedEnvironmentUrl, useEnvironment } from './environment';
 import { ClientAssets, getAssetDownloadUrl, getDataverseToken, readUdeEnvironment, resolveDataverseUrl, UdeEnvironment, validateDataverseUrl } from './ude';
 
 const ConfigurationsKey = 'HKCU\\Software\\Microsoft\\Dynamics\\AX7\\Development\\Configurations';
@@ -22,7 +23,7 @@ export async function connectEnvironment(context: vscode.ExtensionContext, log: 
         title: 'Connect to a unified developer environment',
         prompt: 'Dataverse URL of the environment',
         placeHolder: 'https://yourorg.crm.dynamics.com',
-        value: vscode.workspace.getConfiguration('xpp').get<string>('environmentUrl') || undefined,
+        value: selectedEnvironmentUrl(),
         ignoreFocusOut: true,
         validateInput: validateDataverseUrl,
     });
@@ -47,7 +48,7 @@ export async function connectEnvironment(context: vscode.ExtensionContext, log: 
             };
             try {
                 await runSetup(context, dataverseUrl, step, token);
-                await vscode.workspace.getConfiguration('xpp').update('environmentUrl', dataverseUrl, vscode.ConfigurationTarget.Global);
+                await useEnvironment(dataverseUrl);
                 return true;
             } catch (err) {
                 step(`FAILED: ${(err as Error).message}`);
@@ -67,7 +68,7 @@ async function runSetup(context: vscode.ExtensionContext, dataverseUrl: string, 
     step(`Environment ${env.finOpsUrl}, application ${env.applicationVersion}.`);
 
     const orgName = new URL(dataverseUrl).hostname.split('.')[0];
-    const dynamics365 = path.join(process.env.LOCALAPPDATA ?? os.homedir(), 'Microsoft', 'Dynamics365');
+    const dynamics365 = dynamics365Folder();
     const versionPath = path.join(dynamics365, env.applicationVersion);
     const pld = path.join(versionPath, 'PackagesLocalDirectory');
     const serverExe = context.asAbsolutePath('server/bin/XppVsCode.Server.exe');
@@ -166,14 +167,11 @@ async function runSetup(context: vscode.ExtensionContext, dataverseUrl: string, 
     step(`Done. Active configuration: ${configFile}`);
 }
 
-/** The custom metadata folder of the current configuration, or a new C:\CustomXppMetadata<random>. */
+/** The custom metadata folder of the active configuration, so every environment builds the same models, or a new C:\CustomXppMetadata<random>. */
 async function customMetadataFolder(): Promise<string> {
-    const current = await readRegistry('CurrentMetadataConfig');
-    if (current && existsSync(current)) {
-        const store = JSON.parse((await fs.readFile(current, 'utf8')).replace(/^\uFEFF/, '')).ModelStoreFolder;
-        if (store && existsSync(store)) {
-            return store;
-        }
+    const store = (await readActiveEnvironment().catch(() => undefined))?.modelStoreFolder;
+    if (store && existsSync(store)) {
+        return store;
     }
     const folder = path.join(path.parse(os.homedir()).root, 'CustomXppMetadata' + Math.random().toString(36).slice(2, 10));
     await fs.mkdir(folder, { recursive: true });
@@ -273,15 +271,6 @@ async function runJson(exe: string, args: string[]): Promise<any> {
             resolve({ ok: false, message: stdout.trim() || 'no output' });
         }
     }));
-}
-
-async function readRegistry(name: string): Promise<string | undefined> {
-    try {
-        const out = await exec('reg', ['query', ConfigurationsKey, '/v', name]);
-        return new RegExp(`${name}\\s+REG_\\w+\\s+(.+)`).exec(out)?.[1].trim();
-    } catch {
-        return undefined;
-    }
 }
 
 export type { UdeEnvironment };

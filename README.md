@@ -89,7 +89,8 @@ Each feature can be turned on or off under **Code intelligence** in the Dynamics
 - **Model management:** Create Model, Update Model Parameters, View Model Dependencies.
 - **Projects:** Select Project, **Create D365FO Project** (for one of your models; writes the `.rnrproj` and `.slnx` like Visual Studio), Export Project and Import Project (`.axpp`, compatible with Visual Studio). The project view follows the `.rnrproj`, so elements added by agents or other editors appear by themselves. Selecting or creating a project makes the window a multi-root workspace with the project folder and the model folder. In the project view, **Exclude from Project** keeps an element in the model; **Delete** removes it from the model (your own models only).
 - **Search:** Find Labels, Find Tag References, Metadata Search, Find References, Search Code, Find Similar Standard Implementations, Find Message Source.
-- **Environment:** Connect to Environment (downloads metadata, restores the cross-reference database, configures the machine), Check Connection, Sign in.
+- **Environment:** Connect to Environment (downloads metadata, restores the cross-reference database, configures the machine), Select Environment, Check Connection, Sign in.
+- **Several environments:** connect to each one once; **Select Environment** (also in the status bar) switches between them. Each workspace remembers its own environment, so two windows can work with two environments at the same time. The choice is kept out of the workspace's settings files, since every developer has an environment of their own; `xpp.environmentUrl` is the default for workspaces that haven't chosen one. Metadata, cross references, build, MCP tools, deploy, database sync, tests, debugging and Open in Browser all follow the selected environment. **Sign In (pac)** creates a pac profile named after the environment, which deploy and database sync select first, so environments in different tenants keep their own accounts. If the selected environment's metadata isn't on this machine, the tools fall back to the machine-wide configuration (shared with Visual Studio) and the status bar shows a warning.
 
 ### AI agent tools (MCP)
 Copilot can:
@@ -132,8 +133,8 @@ The tools are registered automatically. `node scripts/tool-regression.js --proje
 | Setting | Description |
 | --- | --- |
 | `xpp.project` | Project (`.rnrproj`) that new elements are added to |
-| `xpp.environmentUrl` | Dataverse URL of your unified developer environment |
-| `xpp.financeAndOperationsUrl` | Web client URL, for Open in Browser and Open Table Browser |
+| `xpp.environmentUrl` | Dataverse URL of your default unified developer environment (**Select Environment** chooses one per workspace) |
+| `xpp.financeAndOperationsUrl` | Web client URL, for Open in Browser and Open Table Browser when the environment's configuration has none |
 | `xpp.auth.clientId` | Optional Entra app ID for sign-in |
 | `xpp.build.crossReference` | Update cross references while building |
 | `xpp.build.runAppCheckerRules` | Run AppChecker rules during the build |
