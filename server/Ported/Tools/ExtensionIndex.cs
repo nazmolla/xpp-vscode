@@ -352,7 +352,8 @@ WHERE at.Path IN ('/Classes/PostHandlerFor', '/Classes/PreHandlerFor', '/Classes
         {
             var config = DynamicsConfigurationReader.ReadActiveConfiguration();
             var roots = config.ReferenceMetadataFolders.Where(Directory.Exists).ToList();
-            var dirs = ClassFolders(roots).ToList();
+            // The user's packages are scanned by ScanCustomModels; on a shared store they sit among the reference packages.
+            var dirs = PackageClassFolders(roots.SelectMany(Directory.GetDirectories).Where(p => !config.IsCustomPath(p))).ToList();
             string key = dirs.Count + "-" + string.Join(";", dirs.Select(d => Directory.GetLastWriteTimeUtc(d).Ticks)).GetHashCode();
             string file = Path.Combine(CacheFolder, "event-handlers-" + Safe(string.Join("_", roots).GetHashCode().ToString()) + ".json");
             var serializer = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
@@ -381,9 +382,6 @@ WHERE at.Path IN ('/Classes/PostHandlerFor', '/Classes/PreHandlerFor', '/Classes
             File.WriteAllText(file, serializer.Serialize(snap));
             return snap;
         }
-
-        private static IEnumerable<string> ClassFolders(IEnumerable<string> roots) =>
-            PackageClassFolders(roots.SelectMany(Directory.GetDirectories));
 
         private static IEnumerable<string> PackageClassFolders(IEnumerable<string> packages)
         {

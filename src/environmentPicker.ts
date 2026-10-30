@@ -91,9 +91,13 @@ export class EnvironmentStatus implements ToolsContribution, vscode.Disposable {
                 { label: 'Connect to Environment…', icon: 'plug', command: 'xpp.connectEnvironment' },
                 { label: 'Check Environment Connection', icon: 'pulse', command: 'xpp.checkEnvironment' },
                 { label: 'Show Active Configuration', icon: 'info', command: 'xpp.showEnvironment' },
-                { label: 'Sign In (pac)', icon: 'account', command: 'xpp.pac.signIn' },
+                { label: 'Sign In (pac)', icon: 'account', command: 'xpp.pac.signIn', udeOnly: true },
             ],
         }];
+    }
+
+    hides(node: ToolNode): boolean {
+        return !!node.udeOnly && !!this.current?.local;
     }
 
     dispose(): void {

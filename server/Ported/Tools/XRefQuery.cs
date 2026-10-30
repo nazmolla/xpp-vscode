@@ -542,9 +542,7 @@ namespace XppVsCode.Server.Tools
             try
             {
                 var config = DynamicsConfigurationReader.ReadActiveConfiguration();
-                var roots = new List<string>(config.ReferenceMetadataFolders);
-                if (config.HasCustom) roots.Add(config.CustomMetadataFolder);
-                foreach (string root in roots.Where(System.IO.Directory.Exists))
+                foreach (string root in config.MetadataRoots().Where(System.IO.Directory.Exists))
                     foreach (string dir in System.IO.Directory.GetDirectories(root))
                         if (System.IO.Directory.Exists(System.IO.Path.Combine(dir, "Descriptor")))
                             set.Add(System.IO.Path.GetFileName(dir));

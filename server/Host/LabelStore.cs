@@ -164,11 +164,7 @@ namespace XppVsCode.Server.Host
             lines.InsertRange(insertAt, block);
         }
 
-        private IEnumerable<string> Roots()
-        {
-            if (_config.HasCustom) yield return _config.CustomMetadataFolder;
-            foreach (string r in _config.ReferenceMetadataFolders) yield return r;
-        }
+        private IEnumerable<string> Roots() => _config.MetadataRoots();
 
         private static IEnumerable<LabelEntry> Parse(IEnumerable<string> lines)
         {

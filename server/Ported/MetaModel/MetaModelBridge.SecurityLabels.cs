@@ -30,10 +30,7 @@ namespace XppVsCode.Server.MetaModel
             var sw = Stopwatch.StartNew();
             var index = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var config = DynamicsConfigurationReader.ReadActiveConfiguration();
-            var roots = new List<string>();
-            if (!string.IsNullOrEmpty(config.CustomMetadataFolder)) roots.Add(config.CustomMetadataFolder);
-            roots.AddRange(config.ReferenceMetadataFolders ?? Enumerable.Empty<string>());
-            foreach (string root in roots.Where(System.IO.Directory.Exists))
+            foreach (string root in config.MetadataRoots().Where(System.IO.Directory.Exists))
                 foreach (string package in System.IO.Directory.GetDirectories(root))
                     foreach (string model in System.IO.Directory.GetDirectories(package))
                     {

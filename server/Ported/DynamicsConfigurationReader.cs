@@ -183,16 +183,21 @@ namespace XppVsCode.Server
 
         /// <summary>
         /// Cloud-hosted and VHD environments keep every package in PackagesLocalDirectory, which is then both the custom
-        /// and the reference folder; the user's own packages are told apart by their publisher.
+        /// and the reference folder; the user's own packages are told apart by their descriptors.
         /// </summary>
         public bool SharedStore => HasCustom && ReferenceMetadataFolders.Contains(CustomMetadataFolder, StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>The custom folder, then the reference folders, each once (a shared store is both).</summary>
+        public IEnumerable<string> MetadataRoots() =>
+            (HasCustom ? new[] { CustomMetadataFolder } : new string[0]).Concat(ReferenceMetadataFolders)
+                .Where(r => !string.IsNullOrWhiteSpace(r)).Distinct(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Package folders of the user's own models.</summary>
         public IEnumerable<string> CustomPackageFolders()
         {
             if (!HasCustom || !Directory.Exists(CustomMetadataFolder)) return Enumerable.Empty<string>();
             return Directory.GetDirectories(CustomMetadataFolder)
-                .Where(p => Directory.Exists(Path.Combine(p, "Descriptor")) && (!SharedStore || !IsMicrosoftPackage(p)));
+                .Where(p => Directory.Exists(Path.Combine(p, "Descriptor")) && (!SharedStore || !IsStandardPackage(p)));
         }
 
         /// <summary>True when the file or folder belongs to one of the user's own packages.</summary>
@@ -204,24 +209,35 @@ namespace XppVsCode.Server
             if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return false;
             if (!SharedStore) return true;
             string package = full.Substring(root.Length).Split('\\')[0];
-            return package.Length > 0 && !IsMicrosoftPackage(Path.Combine(root, package));
+            return package.Length > 0 && !IsStandardPackage(Path.Combine(root, package));
         }
 
-        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> MicrosoftPackages =
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> StandardPackages =
             new System.Collections.Concurrent.ConcurrentDictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
 
-        // A package is Microsoft's when every model descriptor in it names Microsoft as the publisher.
-        private static bool IsMicrosoftPackage(string packageFolder) => MicrosoftPackages.GetOrAdd(packageFolder, folder =>
+        // Not the user's when every model in it is published by Microsoft or sealed (Customization=DoNotAllow, as ISVs ship).
+        private static bool IsStandardPackage(string packageFolder)
         {
-            var publishers = new List<string>();
+            string key = Path.GetFullPath(packageFolder).TrimEnd('\\');
+            if (StandardPackages.TryGetValue(key, out bool known)) return known;
+            var models = new List<System.Xml.Linq.XElement>();
             try
             {
-                foreach (string descriptor in Directory.EnumerateFiles(Path.Combine(folder, "Descriptor"), "*.xml"))
-                    publishers.Add(System.Xml.Linq.XDocument.Load(descriptor).Root?.Elements()
-                        .FirstOrDefault(e => e.Name.LocalName == "Publisher")?.Value.Trim() ?? "");
+                foreach (string descriptor in Directory.EnumerateFiles(Path.Combine(key, "Descriptor"), "*.xml"))
+                    models.Add(System.Xml.Linq.XDocument.Load(descriptor).Root);
             }
-            catch { }
-            return publishers.Count > 0 && publishers.All(p => p.StartsWith("Microsoft", StringComparison.OrdinalIgnoreCase));
-        });
+            catch
+            {
+                // Unreadable now (e.g. being written): treated as standard, so nothing is edited, and asked again next time.
+                return true;
+            }
+            bool standard = models.Count > 0 && models.All(m =>
+                DescriptorValue(m, "Publisher").StartsWith("Microsoft", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(DescriptorValue(m, "Customization"), "DoNotAllow", StringComparison.OrdinalIgnoreCase));
+            return StandardPackages[key] = standard;
+        }
+
+        private static string DescriptorValue(System.Xml.Linq.XElement model, string name) =>
+            model?.Elements().FirstOrDefault(e => e.Name.LocalName == name)?.Value.Trim() ?? "";
     }
 }
