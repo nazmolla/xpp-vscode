@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { promises as dns } from 'dns';
 import * as vscode from 'vscode';
+import { orgName, selectedEnvironmentUrl, useEnvironment } from './environment';
 
 const DevToolsService = 'https://developertools.powerplatform.microsoft.com';
 
@@ -153,7 +154,7 @@ export async function checkEnvironmentConnection(log: vscode.OutputChannel): Pro
         title: 'Dataverse environment URL',
         prompt: 'The Dataverse URL of your unified developer environment',
         placeHolder: 'https://yourorg.crm.dynamics.com',
-        value: vscode.workspace.getConfiguration('xpp').get<string>('environmentUrl') || undefined,
+        value: selectedEnvironmentUrl(),
         ignoreFocusOut: true,
         validateInput: validateDataverseUrl,
     });
@@ -187,7 +188,14 @@ export async function checkEnvironmentConnection(log: vscode.OutputChannel): Pro
             log.appendLine(`3. ${asset.file}: download link OK${size ? `, ${(size / 1024 ** 3).toFixed(2)} GB` : ''}`);
         }
         log.appendLine('All read-only setup steps succeeded.');
-        await vscode.workspace.getConfiguration('xpp').update('environmentUrl', dataverseUrl, vscode.ConfigurationTarget.Global);
+        // A check is not a switch: only the first environment is selected by it.
+        const selected = selectedEnvironmentUrl();
+        if (!selected) {
+            await useEnvironment(dataverseUrl);
+        } else if (orgName(selected) !== orgName(dataverseUrl)
+            && await vscode.window.showInformationMessage(`${orgName(dataverseUrl)} is reachable. This window works with ${orgName(selected)}.`, 'Use This Environment') === 'Use This Environment') {
+            await useEnvironment(dataverseUrl);
+        }
     } catch (err) {
         log.appendLine(`FAILED: ${(err as Error).message}`);
         vscode.window.showErrorMessage(`Environment check failed: ${(err as Error).message}`);

@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { listModels } from './aot';
 import { objectUri, parseObjectUri, XppScheme } from './codeView';
-import { readActiveEnvironment } from './environment';
+import { dynamics365Folder, readActiveEnvironment, selectedEnvironmentUrl } from './environment';
 import { XppServerClient } from './serverClient';
 import { getDataverseToken, readUdeEnvironment, resolveDataverseUrl } from './ude';
 import { compilerView, documentLineToCompilerLine } from './xppSource';
@@ -62,9 +62,9 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
         }
         return vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Preparing X++ debugging…' }, async progress => {
             progress.report({ message: 'signing in' });
-            const dataverseSetting = vscode.workspace.getConfiguration('xpp').get<string>('environmentUrl');
+            const dataverseSetting = selectedEnvironmentUrl();
             if (!dataverseSetting) {
-                vscode.window.showErrorMessage('Set the environment first: X++: Check Environment Connection.');
+                vscode.window.showErrorMessage('Select the environment first: X++: Select Environment.');
                 return undefined;
             }
             const dataverseUrl = await resolveDataverseUrl(dataverseSetting);
@@ -196,7 +196,7 @@ async function findDebuggerProxy(applicationVersion?: string): Promise<string> {
     const configured = vscode.workspace.getConfiguration('xpp').get<string>('debuggerProxyPath');
     const candidates: string[] = configured ? [configured] : [];
     const env = await readActiveEnvironment().catch(() => undefined);
-    const dynamics365 = path.join(process.env.LOCALAPPDATA ?? os.homedir(), 'Microsoft', 'Dynamics365');
+    const dynamics365 = dynamics365Folder();
     for (const version of [applicationVersion, env ? path.basename(path.dirname(env.frameworkDirectory)) : undefined]) {
         if (version) {
             candidates.push(path.join(dynamics365, version, 'FinOpsTools', 'DebuggerProxy', 'Microsoft.Dynamics.AX.DebuggerProxy.exe'));

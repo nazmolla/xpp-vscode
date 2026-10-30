@@ -463,6 +463,12 @@
         "icon": "$(new-folder)"
       },
       {
+        "command": "xpp.selectEnvironment",
+        "title": "Select Environment…",
+        "category": "X++",
+        "icon": "$(server-environment)"
+      },
+      {
         "command": "xpp.connectEnvironment",
         "title": "Connect to Environment…",
         "category": "X++"
@@ -1139,7 +1145,7 @@
         "xpp.environmentUrl": {
           "type": "string",
           "default": "",
-          "description": "Dataverse URL of your unified developer environment, e.g. https://yourorg.crm.dynamics.com."
+          "description": "Dataverse URL of your default unified developer environment, e.g. https://yourorg.crm.dynamics.com. X++: Select Environment chooses another one per workspace."
         },
         "xpp.auth.clientId": {
           "type": "string",
@@ -1169,7 +1175,7 @@
         "xpp.financeAndOperationsUrl": {
           "type": "string",
           "default": "",
-          "description": "Web client URL of your environment (e.g. https://yourorg.operations.dynamics.com), used by Open in Browser and Open Table Browser."
+          "description": "Web client URL (e.g. https://yourorg.operations.dynamics.com) for Open in Browser and Open Table Browser, when the selected environment's configuration has none."
         },
         "xpp.codeIntelligence.outline": {
           "type": "boolean",

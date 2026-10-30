@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { objectUri } from '../codeView';
 import { addCreatedToProject, openInBrowser, targetModel } from '../d365Tools';
+import { selectedEnvironmentUrl } from '../environment';
 import { readProject } from '../project';
 import { methodName, splitSource } from '../xppSource';
 import { call, findExact, indent, ProductivityContext } from './common';
@@ -91,7 +92,7 @@ function scratchSource(text: string, runner: string): { declaration: string; met
 function needsDeploy(): boolean {
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const solution = !!root && existsSync(path.join(root, '.erp', 'xpp.json'));
-    return solution || !!vscode.workspace.getConfiguration('xpp').get<string>('environmentUrl');
+    return solution || !!selectedEnvironmentUrl();
 }
 
 async function openTemplate(): Promise<void> {

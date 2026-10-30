@@ -3,7 +3,7 @@ import { promises as fs } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { readActiveEnvironment } from './environment';
+import { readActiveEnvironment, selectedEnvironmentUrl } from './environment';
 import { findActiveProject, readProject } from './project';
 import { XppServerClient } from './serverClient';
 import { getDataverseToken, resolveDataverseUrl } from './ude';
@@ -204,9 +204,9 @@ export async function runTests(server: XppServerClient, request: TestRunRequest,
         return { summary: 'No tests found. Test classes must extend SysTestCase (or a subclass) and test methods must be public and start with "test" or carry [SysTestMethod].', results: [] };
     }
 
-    const environmentUrl = vscode.workspace.getConfiguration('xpp').get<string>('environmentUrl');
+    const environmentUrl = selectedEnvironmentUrl();
     if (!environmentUrl) {
-        throw new Error('No environment connected (xpp.environmentUrl). Run "Dynamics 365: Connect to Environment" first.');
+        throw new Error('No environment selected. Run "X++: Connect to Environment" or "X++: Select Environment" first.');
     }
     const dataverseUrl = await resolveDataverseUrl(environmentUrl);
     const dv = new Dataverse(`${dataverseUrl}/api/data/v9.2`, await getDataverseToken(dataverseUrl));

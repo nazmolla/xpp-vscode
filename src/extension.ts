@@ -10,7 +10,8 @@ import { registerTools } from './d365Tools';
 import { XppDebugger } from './debug';
 import { DesignerNodeContext, ElementDesigner } from './elementDesigner';
 import { LabelEditor } from './labelEditor';
-import { readActiveEnvironment } from './environment';
+import { initEnvironmentSelection, onDidChangeEnvironment, readActiveEnvironment } from './environment';
+import { EnvironmentStatus, selectEnvironment } from './environmentPicker';
 import { registerMcpProvider } from './mcpProvider';
 import { openObject, XppDocumentSelector, XppNavigation } from './navigation';
 import { PacCommands } from './pac';
@@ -26,6 +27,7 @@ import { registerSecurity } from './security';
 export function activate(context: vscode.ExtensionContext): void {
     const log = vscode.window.createOutputChannel('X++');
     const buildOutput = vscode.window.createOutputChannel('X++ Build');
+    initEnvironmentSelection(context);
     const server = new XppServerClient(context, log, findActiveProject);
     // Language features run in a server process of their own, so index builds never block the designers.
     const languageServer = new XppServerClient(context, log, findActiveProject);
@@ -35,7 +37,8 @@ export function activate(context: vscode.ExtensionContext): void {
     const codeFs = new XppCodeFileSystem(server);
     const navigation = new XppNavigation(server);
     const pac = new PacCommands();
-    context.subscriptions.push(log, buildOutput, server, languageServer, builder);
+    const environment = new EnvironmentStatus();
+    context.subscriptions.push(log, buildOutput, server, languageServer, builder, environment);
 
     registerMcpProvider(context, log);
 
@@ -60,6 +63,12 @@ export function activate(context: vscode.ExtensionContext): void {
                 void syncWorkspaceFolders().catch(err => log.appendLine('Workspace folders: ' + (err as Error).message));
             }
         }),
+        onDidChangeEnvironment(() => {
+            server.restart();
+            languageServer.restart();
+            aotTree.refresh();
+            projectTree.refresh();
+        }),
         projectTree,
     );
 
@@ -76,6 +85,7 @@ export function activate(context: vscode.ExtensionContext): void {
         log.appendLine(JSON.stringify(await readActiveEnvironment(), null, 2));
         log.show(true);
     });
+    command('xpp.selectEnvironment', () => selectEnvironment());
     command('xpp.checkEnvironment', () => checkEnvironmentConnection(log));
     command('xpp.connectEnvironment', async () => {
         if (await connectEnvironment(context, log)) {
@@ -128,7 +138,7 @@ export function activate(context: vscode.ExtensionContext): void {
     registerTools(context, server, () => {
         aotTree.refresh();
         projectTree.refresh();
-    }, command, [codeIntel]);
+    }, command, [environment, codeIntel]);
     const productivity = {
         server, languageServer, log, codeIntel,
         refreshCode: (uri: vscode.Uri) => codeFs.refresh(uri),

@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import * as vscode from 'vscode';
-import { readActiveEnvironment } from './environment';
+import { onDidChangeEnvironment, readActiveEnvironment } from './environment';
 import { findActiveProject } from './project';
 
 const ServerVersion = '0.1.0';
@@ -13,7 +13,7 @@ export function registerMcpProvider(context: vscode.ExtensionContext, log: vscod
         if (e.affectsConfiguration('xpp.project')) {
             changed.fire();
         }
-    }));
+    }), onDidChangeEnvironment(() => changed.fire()));
 
     context.subscriptions.push(vscode.lm.registerMcpServerDefinitionProvider('xpp.mcp', {
         onDidChangeMcpServerDefinitions: changed.event,
