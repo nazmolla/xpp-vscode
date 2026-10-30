@@ -43,7 +43,7 @@ export const onDidChangeEnvironment = changed.event;
 /** Remembers the environment per workspace; the user setting xpp.environmentUrl is the default of every window. */
 export function initEnvironmentSelection(context: vscode.ExtensionContext): void {
     workspaceState = context.workspaceState;
-    context.subscriptions.push(changed, vscode.workspace.onDidChangeConfiguration(e => {
+    context.subscriptions.push(changed, changed.event(() => active = undefined), vscode.workspace.onDidChangeConfiguration(e => {
         if (e.affectsConfiguration('xpp.environmentUrl') && !workspaceState?.get<string>(WorkspaceEnvironmentKey)) {
             changed.fire();
         }
@@ -130,12 +130,25 @@ export async function findEnvironment(dataverseUrl: string): Promise<Environment
     return (await listEnvironments()).find(e => e.org === org);
 }
 
+// Many callers ask at once (status bar, trees, MCP); a short cache spares rereading every configuration.
+const ActiveEnvironmentTtl = 5000;
+let active: { url: string | undefined; time: number; environment: Promise<XppEnvironment> } | undefined;
+
 /**
  * The metadata configuration of the selected environment. Without a selection, or when the selected environment has
  * no configuration on this machine, the machine-wide one shared with Visual Studio.
  */
-export async function readActiveEnvironment(): Promise<XppEnvironment> {
-    const dataverseUrl = selectedEnvironmentUrl();
+export function readActiveEnvironment(): Promise<XppEnvironment> {
+    const url = selectedEnvironmentUrl();
+    if (!active || active.url !== url || Date.now() - active.time > ActiveEnvironmentTtl) {
+        const entry = { url, time: Date.now(), environment: loadActiveEnvironment(url) };
+        entry.environment.catch(() => active === entry ? active = undefined : undefined);
+        active = entry;
+    }
+    return active.environment;
+}
+
+async function loadActiveEnvironment(dataverseUrl: string | undefined): Promise<XppEnvironment> {
     const selected = dataverseUrl ? await findEnvironment(dataverseUrl).catch(() => undefined) : undefined;
     const configFile = selected?.configFile ?? await readRegistryValue('CurrentMetadataConfig');
     if (!configFile) {
@@ -167,7 +180,7 @@ export async function readActiveEnvironment(): Promise<XppEnvironment> {
 }
 
 async function readConfig(configFile: string): Promise<any> {
-    return JSON.parse((await fs.readFile(configFile, 'utf8')).replace(/^﻿/, ''));
+    return JSON.parse((await fs.readFile(configFile, 'utf8')).replace(/^\uFEFF/, ''));
 }
 
 function webClientUrl(json: any): string | undefined {

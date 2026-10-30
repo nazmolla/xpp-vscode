@@ -1,4 +1,4 @@
-import { execFile } from 'child_process';
+import { exec } from 'child_process';
 import { existsSync } from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -28,8 +28,11 @@ export class PacCommands {
             return;
         }
         if (await this.selectProfile(url)) {
-            vscode.window.showInformationMessage(`pac uses its profile ${profileName(url)} for ${orgName(url)}.`);
-            return;
+            const choice = await vscode.window.showInformationMessage(`pac uses its profile ${profileName(url)} for ${orgName(url)}.`, 'Sign In Again');
+            if (choice !== 'Sign In Again') {
+                return;
+            }
+            await this.run('Remove profile', ['auth', 'delete', '--name', profileName(url)]);
         }
         await this.run('Sign in', ['auth', 'create', '--name', profileName(url), '--environment', url]);
     }
@@ -43,7 +46,9 @@ export class PacCommands {
         if (!sync) {
             return;
         }
-        await this.selectProfile();
+        if (!await this.useProfile()) {
+            return;
+        }
         // Compile against the selected environment's version, not the one registered for pac's active environment.
         const env = await readActiveEnvironment().catch(() => undefined);
         const version = env?.dataverseUrl && env.applicationVersion ? ['--app-version', env.applicationVersion] : [];
@@ -65,7 +70,9 @@ export class PacCommands {
             }
             args.push('--modules', modules);
         }
-        await this.selectProfile();
+        if (!await this.useProfile()) {
+            return;
+        }
         await this.run('Synchronize database', args);
     }
 
@@ -74,14 +81,26 @@ export class PacCommands {
         return url ? ['--environment', url] : [];
     }
 
-    /** Makes the environment's profile from Sign In active; without one, pac keeps its active profile. */
-    private selectProfile(url = selectedEnvironmentUrl()): Promise<boolean> {
-        if (!url) {
-            return Promise.resolve(false);
+    /** Selects the environment's profile; without one, asks before running on pac's active profile, which may be another tenant's. */
+    private async useProfile(): Promise<boolean> {
+        const url = selectedEnvironmentUrl();
+        if (!url || await this.selectProfile(url)) {
+            return true;
         }
-        const shell = process.platform === 'win32';
-        return new Promise(resolve => execFile(shell ? `"${this.pac()}"` : this.pac(), ['auth', 'select', '--name', profileName(url)],
-            { shell, windowsHide: true, timeout: 60_000 }, err => resolve(!err)));
+        const choice = await vscode.window.showWarningMessage(
+            `pac has no profile for ${orgName(url)}, so it would use its active profile.`, 'Sign In (pac)', 'Continue');
+        if (choice === 'Sign In (pac)') {
+            await this.signIn();
+            return this.selectProfile(url);
+        }
+        return choice === 'Continue';
+    }
+
+    /** Makes the environment's profile from Sign In active. */
+    private selectProfile(url: string): Promise<boolean> {
+        // The name comes from a host name ([a-z0-9-]), so the command line needs no further quoting.
+        return new Promise(resolve => exec(`"${this.pac()}" auth select --name ${profileName(url)}`,
+            { windowsHide: true, timeout: 60_000 }, err => resolve(!err)));
     }
 
     private pac(): string {
