@@ -347,6 +347,8 @@ async function loadModels(): Promise<ModelLocation[]> {
         roots.push([root, false]);
     }
 
+    // Cloud-hosted and VHD environments keep every package in one folder; Microsoft's models are told apart by publisher.
+    const shared = env.referencePackagesPaths.some(p => path.resolve(p).toLowerCase() === path.resolve(env.modelStoreFolder ?? '').toLowerCase());
     const models = new Map<string, ModelLocation>();
     for (const [root, isCustom] of roots) {
         await Promise.all((await subdirectories(root)).map(async pkg => {
@@ -359,9 +361,11 @@ async function loadModels(): Promise<ModelLocation[]> {
                 if (models.has(name.toLowerCase()) || !await isDirectory(folder)) {
                     continue;
                 }
-                const displayName = await readDisplayName(path.join(descriptorDir, descriptor)) ?? name;
+                const text = await fs.readFile(path.join(descriptorDir, descriptor), 'utf8').catch(() => '');
+                const displayName = descriptorValue(text, 'DisplayName') ?? name;
+                const microsoft = shared && /^Microsoft/i.test(descriptorValue(text, 'Publisher') ?? '');
                 if (!models.has(name.toLowerCase())) {
-                    models.set(name.toLowerCase(), { name, displayName, packageName: pkg, folder, isCustom });
+                    models.set(name.toLowerCase(), { name, displayName, packageName: pkg, folder, isCustom: isCustom && !microsoft });
                 }
             }
         }));
@@ -370,10 +374,8 @@ async function loadModels(): Promise<ModelLocation[]> {
 }
 
 /** The model's display name ("Application Suite") from its descriptor. */
-async function readDisplayName(descriptor: string): Promise<string | undefined> {
-    const text = await fs.readFile(descriptor, 'utf8').catch(() => '');
-    const match = /<DisplayName>([^<]*)<\/DisplayName>/.exec(text);
-    return match?.[1].trim() || undefined;
+function descriptorValue(text: string, element: string): string | undefined {
+    return new RegExp(`<${element}>([^<]*)</${element}>`).exec(text)?.[1].trim() || undefined;
 }
 
 async function subdirectories(dir: string): Promise<string[]> {

@@ -1,11 +1,13 @@
 import { execFile } from 'child_process';
-import { promises as fs } from 'fs';
+import { existsSync, promises as fs } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
 const ConfigurationsKey = 'HKCU\\Software\\Microsoft\\Dynamics\\AX7\\Development\\Configurations';
 const WorkspaceEnvironmentKey = 'xpp.environmentUrl';
+/** Cloud-hosted and VHD environments keep every package here, next to a local AOS. */
+const LocalPackagesFolders = ['K:\\AosService\\PackagesLocalDirectory', 'C:\\AosService\\PackagesLocalDirectory'];
 
 export interface XppEnvironment {
     /** Org name of the environment (the configuration is <org>___<application version>.json). */
@@ -18,12 +20,16 @@ export interface XppEnvironment {
     runtimePackagesDirectory?: string;
     crossReferencesDbServerName?: string;
     crossReferencesDatabaseName?: string;
+    databaseServer?: string;
+    businessDatabaseName?: string;
     defaultModelForNewProjects?: string;
     applicationVersion?: string;
     /** Web client URL (CloudInstanceURL). */
     finOpsUrl?: string;
     /** Set when the configuration belongs to the selected environment; unset for the machine-wide configuration. */
     dataverseUrl?: string;
+    /** Cloud-hosted or VHD environment: a local AOS and database, no Dataverse, deploy or pac. */
+    local: boolean;
 }
 
 /** A metadata configuration in XPPConfig, written by Connect to Environment or Visual Studio's Power Platform Tools. */
@@ -35,6 +41,7 @@ export interface EnvironmentConfig {
 }
 
 let workspaceState: vscode.Memento | undefined;
+let storageFolder: string | undefined;
 const changed = new vscode.EventEmitter<void>();
 
 /** Fires when this window switches to another environment. */
@@ -43,6 +50,7 @@ export const onDidChangeEnvironment = changed.event;
 /** Remembers the environment per workspace; the user setting xpp.environmentUrl is the default of every window. */
 export function initEnvironmentSelection(context: vscode.ExtensionContext): void {
     workspaceState = context.workspaceState;
+    storageFolder = context.globalStorageUri.fsPath;
     context.subscriptions.push(changed, changed.event(() => active = undefined), vscode.workspace.onDidChangeConfiguration(e => {
         if (e.affectsConfiguration('xpp.environmentUrl') && !workspaceState?.get<string>(WorkspaceEnvironmentKey)) {
             changed.fire();
@@ -136,7 +144,8 @@ let active: { url: string | undefined; time: number; environment: Promise<XppEnv
 
 /**
  * The metadata configuration of the selected environment. Without a selection, or when the selected environment has
- * no configuration on this machine, the machine-wide one shared with Visual Studio.
+ * no configuration on this machine, the machine-wide one shared with Visual Studio, or else the local AOS of a
+ * cloud-hosted or VHD environment.
  */
 export function readActiveEnvironment(): Promise<XppEnvironment> {
     const url = selectedEnvironmentUrl();
@@ -150,9 +159,11 @@ export function readActiveEnvironment(): Promise<XppEnvironment> {
 
 async function loadActiveEnvironment(dataverseUrl: string | undefined): Promise<XppEnvironment> {
     const selected = dataverseUrl ? await findEnvironment(dataverseUrl).catch(() => undefined) : undefined;
-    const configFile = selected?.configFile ?? await readRegistryValue('CurrentMetadataConfig');
+    const registered = selected ? undefined : await readRegistryValue('CurrentMetadataConfig');
+    // On cloud-hosted environments the registry may name Visual Studio's DefaultConfig.xml instead of an XPPConfig file.
+    const configFile = selected?.configFile ?? (registered && /\.json$/i.test(registered) && existsSync(registered) ? registered : await writeLocalConfig());
     if (!configFile) {
-        throw new Error('No active D365FO configuration found. Connect to a unified developer environment first.');
+        throw new Error('No active D365FO configuration found. Connect to a unified developer environment first, or work on a cloud-hosted or VHD environment (AosService\\PackagesLocalDirectory).');
     }
 
     const json = await readConfig(configFile);
@@ -172,11 +183,46 @@ async function loadActiveEnvironment(dataverseUrl: string | undefined): Promise<
         runtimePackagesDirectory: json.RuntimePackagesDirectory,
         crossReferencesDbServerName: json.CrossReferencesDbServerName,
         crossReferencesDatabaseName: json.CrossReferencesDatabaseName,
+        databaseServer: json.DatabaseServer,
+        businessDatabaseName: json.BusinessDatabaseName,
         defaultModelForNewProjects: json.DefaultModelForNewProjects,
         applicationVersion: selected?.applicationVersion ?? (/^\d+(\.\d+)+$/.test(applicationVersion ?? '') ? applicationVersion : undefined),
         finOpsUrl: webClientUrl(json),
         dataverseUrl: selected ? dataverseUrl : undefined,
+        // As the metadata server decides: unified developer environments have runtime packages and host type 4.
+        local: !json.RuntimePackagesDirectory && json.RuntimeHostType !== 4,
     };
+}
+
+/**
+ * Cloud-hosted and VHD environments have no XPPConfig, so a configuration is made from PackagesLocalDirectory (both
+ * the custom and the reference folder there) and the AOS web.config. Rewritten only when it changes, since the
+ * metadata server reads it on every request.
+ */
+async function writeLocalConfig(): Promise<string | undefined> {
+    const packages = LocalPackagesFolders.find(p => existsSync(path.join(p, 'bin', 'xppc.exe')));
+    if (!packages || !storageFolder) {
+        return undefined;
+    }
+    const webConfig = await fs.readFile(path.join(path.dirname(packages), 'webroot', 'web.config'), 'utf8').catch(() => '');
+    const setting = (key: string) => new RegExp(`key="${key.replace(/\./g, '\\.')}"\\s+value="([^"]*)"`, 'i').exec(webConfig)?.[1] || undefined;
+    const dbServer = setting('DataAccess.DbServer') ?? 'localhost';
+    const content = JSON.stringify({
+        FrameworkDirectory: packages,
+        ModelStoreFolder: packages,
+        ReferencePackagesPaths: [packages],
+        DatabaseServer: dbServer,
+        BusinessDatabaseName: setting('DataAccess.Database') ?? 'AxDB',
+        CrossReferencesDbServerName: dbServer,
+        CrossReferencesDatabaseName: 'DYNAMICSXREFDB',
+        CloudInstanceURL: setting('Infrastructure.HostUrl'),
+    }, null, 4);
+    const file = path.join(storageFolder, `${os.hostname().toLowerCase()}.json`);
+    if (await fs.readFile(file, 'utf8').catch(() => undefined) !== content) {
+        await fs.mkdir(storageFolder, { recursive: true });
+        await fs.writeFile(file, content, 'utf8');
+    }
+    return file;
 }
 
 async function readConfig(configFile: string): Promise<any> {

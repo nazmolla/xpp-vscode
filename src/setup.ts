@@ -169,9 +169,10 @@ async function runSetup(context: vscode.ExtensionContext, dataverseUrl: string, 
 
 /** The custom metadata folder of the active configuration, so every environment builds the same models, or a new C:\CustomXppMetadata<random>. */
 async function customMetadataFolder(): Promise<string> {
-    const store = (await readActiveEnvironment().catch(() => undefined))?.modelStoreFolder;
-    if (store && existsSync(store)) {
-        return store;
+    const env = await readActiveEnvironment().catch(() => undefined);
+    // PackagesLocalDirectory of a cloud-hosted environment holds Microsoft's packages too.
+    if (env && !env.local && env.modelStoreFolder && existsSync(env.modelStoreFolder)) {
+        return env.modelStoreFolder;
     }
     const folder = path.join(path.parse(os.homedir()).root, 'CustomXppMetadata' + Math.random().toString(36).slice(2, 10));
     await fs.mkdir(folder, { recursive: true });

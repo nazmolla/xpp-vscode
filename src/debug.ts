@@ -60,6 +60,10 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
         if (!config.type) {
             config = this.provideDebugConfigurations()[0];
         }
+        if ((await readActiveEnvironment().catch(() => undefined))?.local) {
+            vscode.window.showErrorMessage('The X++ debugger attaches to unified developer environments. On a cloud-hosted or VHD environment, debug from Visual Studio on the VM.');
+            return undefined;
+        }
         return vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Preparing X++ debugging…' }, async progress => {
             progress.report({ message: 'signing in' });
             const dataverseSetting = selectedEnvironmentUrl();

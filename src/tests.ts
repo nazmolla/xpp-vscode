@@ -193,6 +193,9 @@ async function extractTrx(zipBytes: Uint8Array, folder: string): Promise<string[
 
 export async function runTests(server: XppServerClient, request: TestRunRequest, log: (line: string) => void, token?: vscode.CancellationToken): Promise<{ summary: string; results: TestOutcome[] }> {
     const env = await readActiveEnvironment();
+    if (env.local) {
+        throw new Error('Tests run through Dataverse, which only unified developer environments have. On a cloud-hosted or VHD environment, run them from Visual Studio on the VM.');
+    }
     const project = await readProject(await findActiveProject());
     const model = project?.model;
     if (!model) {

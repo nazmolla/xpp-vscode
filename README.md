@@ -2,7 +2,7 @@
 
 A full Dynamics 365 Finance & Operations development environment in VS Code, with AI built in. It covers what the Visual Studio Dynamics 365 tools do: Application Explorer, designers, code editing, build, deploy, debugging, plus agent tools for Copilot.
 
-It works against a unified developer environment (UDE) and uses the same metadata API, compiler and scripts as Visual Studio, so projects and models move freely between the two.
+It works against a unified developer environment (UDE), or on a cloud-hosted (CHE) or VHD environment, and uses the same metadata API, compiler and scripts as Visual Studio, so projects and models move freely between the two.
 
 ## Features
 
@@ -91,6 +91,7 @@ Each feature can be turned on or off under **Code intelligence** in the Dynamics
 - **Search:** Find Labels, Find Tag References, Metadata Search, Find References, Search Code, Find Similar Standard Implementations, Find Message Source.
 - **Environment:** Connect to Environment (downloads metadata, restores the cross-reference database, configures the machine), Select Environment, Check Connection, Sign in.
 - **Several environments:** connect to each one once; **Select Environment** (also in the status bar) switches between them. Each workspace remembers its own environment, so two windows can work with two environments at the same time. The choice is kept out of the workspace's settings files, since every developer has an environment of their own; `xpp.environmentUrl` is the default for workspaces that haven't chosen one. Metadata, cross references, build, MCP tools, deploy, database sync, tests, debugging and Open in Browser all follow the selected environment. **Sign In (pac)** creates a pac profile named after the environment, which deploy and database sync select first, so environments in different tenants keep their own accounts. If the selected environment's metadata isn't on this machine, the tools fall back to the machine-wide configuration (shared with Visual Studio) and the status bar shows a warning.
+- **Cloud-hosted and VHD environments:** with no unified developer environment configured, the extension uses `K:\AosService\PackagesLocalDirectory` (or `C:\…`) with no connection step. Database, cross-reference database and web client URL come from the AOS `web.config`. Your models are the ones not published by Microsoft. Build writes to the local AOS and **Synchronize Database** runs SyncEngine against the local database; deploy (pac), Run Tests and the debugger are UDE features and are hidden there.
 
 ### AI agent tools (MCP)
 Copilot can:
@@ -117,7 +118,7 @@ The tools are registered automatically. `node scripts/tool-regression.js --proje
 ## Requirements
 
 - Windows.
-- A Dynamics 365 Finance & Operations unified developer environment. **X++: Connect to Environment** installs the metadata, compiler and FinOps tools.
+- A Dynamics 365 Finance & Operations unified developer environment (**X++: Connect to Environment** installs the metadata, compiler and FinOps tools), or a cloud-hosted or VHD environment. On a cloud-hosted or VHD environment, run VS Code as administrator, as Visual Studio does, to build into PackagesLocalDirectory.
 - SQL Server LocalDB, for cross references.
 - [Power Platform CLI](https://learn.microsoft.com/power-platform/developer/cli/introduction) (`pac`), for deploy and database sync.
 

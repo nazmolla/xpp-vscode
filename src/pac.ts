@@ -2,15 +2,19 @@ import { exec } from 'child_process';
 import { existsSync } from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { orgName, readActiveEnvironment, selectedEnvironmentUrl } from './environment';
+import { orgName, readActiveEnvironment, selectedEnvironmentUrl, XppEnvironment } from './environment';
 import { readProject } from './project';
 
 /**
  * Deploy and database sync for unified developer environments run through the Power Platform CLI
- * (pac package ... --package-type erp), which needs a solution folder with .erp/xpp.json.
+ * (pac package ... --package-type erp), which needs a solution folder with .erp/xpp.json. Cloud-hosted and VHD
+ * environments have their own AOS and database: no deploy, and the database is synchronized with SyncEngine.
  */
 export class PacCommands {
     async initSolution(): Promise<void> {
+        if (await this.local()) {
+            return;
+        }
         const root = this.workspaceRoot();
         const project = await readProject();
         const model = await vscode.window.showInputBox({ title: 'Model(s) for the deployment solution', value: project?.model ?? '', prompt: 'Comma-separated model names' });
@@ -22,6 +26,9 @@ export class PacCommands {
 
     /** One named profile per environment, so environments in other tenants keep their own account. */
     async signIn(): Promise<void> {
+        if (await this.local()) {
+            return;
+        }
         const url = selectedEnvironmentUrl()
             || await vscode.window.showInputBox({ title: 'Dataverse environment URL', placeHolder: 'https://yourorg.crm.dynamics.com' });
         if (!url) {
@@ -38,6 +45,9 @@ export class PacCommands {
     }
 
     async deploy(): Promise<void> {
+        if (await this.local()) {
+            return;
+        }
         const root = this.solutionRoot();
         if (!root) {
             return;
@@ -57,6 +67,11 @@ export class PacCommands {
     }
 
     async syncDatabase(): Promise<void> {
+        const env = await readActiveEnvironment().catch(() => undefined);
+        if (env?.local) {
+            await this.syncLocalDatabase(env);
+            return;
+        }
         const mode = await vscode.window.showQuickPick(['Full', 'Module'], { title: 'Database synchronization' });
         if (!mode) {
             return;
@@ -74,6 +89,26 @@ export class PacCommands {
             return;
         }
         await this.run('Synchronize database', args);
+    }
+
+    /** Full synchronization of the local business database, as the metadata server's build does. */
+    private async syncLocalDatabase(env: XppEnvironment): Promise<void> {
+        const connection = `Data Source=${env.databaseServer ?? 'localhost'};Initial Catalog=${env.businessDatabaseName ?? 'AxDB'};Integrated Security=True;Enlist=True;Application Name=SyncEngine`;
+        await this.run('Synchronize database', [
+            '-syncmode=fullall',
+            `-metadatabinaries=${env.frameworkDirectory}`,
+            `-connect=${connection}`,
+            '-fallbacktonative=False',
+        ], path.join(env.binDirectory, 'SyncEngine.exe'));
+    }
+
+    /** Tells the user that pac does not apply to a cloud-hosted or VHD environment. */
+    private async local(): Promise<boolean> {
+        const local = !!(await readActiveEnvironment().catch(() => undefined))?.local;
+        if (local) {
+            vscode.window.showInformationMessage('This is a cloud-hosted or VHD environment: your models run on the local AOS once they are built, so there is nothing to deploy with pac.');
+        }
+        return local;
     }
 
     private environmentArgs(): string[] {
@@ -125,9 +160,11 @@ export class PacCommands {
         return root;
     }
 
-    /** Runs pac as a visible task and resolves when it finishes; rejects on a non-zero exit. */
-    private async run(name: string, args: string[]): Promise<void> {
-        const task = new vscode.Task({ type: 'xpp-pac' }, vscode.TaskScope.Workspace, name, 'X++', new vscode.ShellExecution(this.pac(), args));
+    /** Runs pac (or another tool) as a visible task and resolves when it finishes; rejects on a non-zero exit. */
+    private async run(name: string, args: string[], tool = this.pac()): Promise<void> {
+        // pac is a .cmd and needs a shell; other tools get their arguments (connection strings) unquoted.
+        const process = tool === this.pac() ? new vscode.ShellExecution(tool, args) : new vscode.ProcessExecution(tool, args);
+        const task = new vscode.Task({ type: 'xpp-pac' }, vscode.TaskScope.Workspace, name, 'X++', process);
         task.presentationOptions = { reveal: vscode.TaskRevealKind.Always, panel: vscode.TaskPanelKind.Shared, clear: false };
         const execution = await vscode.tasks.executeTask(task);
         const exitCode = await new Promise<number | undefined>(resolve => {
@@ -139,7 +176,9 @@ export class PacCommands {
             });
         });
         if (exitCode !== 0) {
-            throw new Error(`pac ${args.slice(0, 2).join(' ')} failed (exit ${exitCode}). Is the Power Platform CLI installed and signed in? See the terminal output.`);
+            throw new Error(tool === this.pac()
+                ? `pac ${args.slice(0, 2).join(' ')} failed (exit ${exitCode}). Is the Power Platform CLI installed and signed in? See the terminal output.`
+                : `${path.basename(tool)} failed (exit ${exitCode}). See the terminal output.`);
         }
     }
 }
