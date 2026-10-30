@@ -31,12 +31,15 @@ export interface ToolNode {
     /** Shows a checkbox bound to this state; toggling calls onToggle. */
     checked?: boolean;
     onToggle?: (checked: boolean) => void;
+    /** Only for unified developer environments (pac, Dataverse); hidden on cloud-hosted and VHD environments. */
+    udeOnly?: boolean;
 }
 
 /** Extra top-level nodes contributed by other parts of the extension, with a change event to refresh them. */
 export interface ToolsContribution {
     nodes(): ToolNode[];
     onDidChange: vscode.Event<void>;
+    hides?(node: ToolNode): boolean;
 }
 
 /** The Dynamics 365 menu of Visual Studio, as a view. */
@@ -44,8 +47,8 @@ const ToolsMenu: ToolNode[] = [
     {
         label: 'Deploy', icon: 'cloud-upload', children: [
             { label: 'Create Deployment Package…', icon: 'package', command: 'xpp.tools.createPackage' },
-            { label: 'Deploy Models to Online Environment…', icon: 'cloud-upload', command: 'xpp.pac.deploy', description: 'pac' },
-            { label: 'Initialize Deployment Solution…', icon: 'new-folder', command: 'xpp.pac.init', description: 'pac' },
+            { label: 'Deploy Models to Online Environment…', icon: 'cloud-upload', command: 'xpp.pac.deploy', description: 'pac', udeOnly: true },
+            { label: 'Initialize Deployment Solution…', icon: 'new-folder', command: 'xpp.pac.init', description: 'pac', udeOnly: true },
         ],
     },
     {
@@ -60,7 +63,7 @@ const ToolsMenu: ToolNode[] = [
     { label: 'Synchronize Database', icon: 'database', command: 'xpp.pac.dbSync', description: 'pac' },
     {
         label: 'Debug', icon: 'debug-alt', children: [
-            { label: 'Launch Debugger', icon: 'debug-start', command: 'xpp.debug.start' },
+            { label: 'Launch Debugger', icon: 'debug-start', command: 'xpp.debug.start', udeOnly: true },
             { label: 'Infolog', icon: 'output', command: 'xpp.infolog.focus' },
         ],
     },
@@ -136,10 +139,10 @@ export class ToolsTreeProvider implements vscode.TreeDataProvider<ToolNode> {
     }
 
     getChildren(node?: ToolNode): ToolNode[] {
-        if (!node) {
-            return [...ToolsMenu.slice(0, -1), ...this.contributions.flatMap(c => c.nodes()), ...ToolsMenu.slice(-1)];
-        }
-        return node.dynamicChildren ? node.dynamicChildren() : node.children ?? [];
+        const nodes = !node
+            ? [...ToolsMenu.slice(0, -1), ...this.contributions.flatMap(c => c.nodes()), ...ToolsMenu.slice(-1)]
+            : node.dynamicChildren ? node.dynamicChildren() : node.children ?? [];
+        return nodes.filter(n => !this.contributions.some(c => c.hides?.(n)));
     }
 }
 

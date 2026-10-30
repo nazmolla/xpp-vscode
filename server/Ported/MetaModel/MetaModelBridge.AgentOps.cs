@@ -506,10 +506,7 @@ namespace XppVsCode.Server.MetaModel
         private static long? DescriptorModelId(ModelInfo model)
         {
             var config = DynamicsConfigurationReader.ReadActiveConfiguration();
-            var roots = new List<string>();
-            if (config.HasCustom) roots.Add(config.CustomMetadataFolder);
-            roots.AddRange(config.ReferenceMetadataFolders);
-            foreach (string root in roots)
+            foreach (string root in config.MetadataRoots())
             {
                 string descriptor = Path.Combine(root, model.Module ?? model.Name, "Descriptor", model.Name + ".xml");
                 if (!File.Exists(descriptor)) continue;

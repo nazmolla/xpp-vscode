@@ -347,25 +347,32 @@ async function loadModels(): Promise<ModelLocation[]> {
         roots.push([root, false]);
     }
 
-    // Cloud-hosted and VHD environments keep every package in one folder; Microsoft's models are told apart by publisher.
+    // Cloud-hosted and VHD environments keep every package in one folder; as the server decides, a package there is
+    // standard when every model in it is published by Microsoft or sealed (Customization=DoNotAllow).
     const shared = env.referencePackagesPaths.some(p => path.resolve(p).toLowerCase() === path.resolve(env.modelStoreFolder ?? '').toLowerCase());
     const models = new Map<string, ModelLocation>();
+    const scanned = new Set<string>();
     for (const [root, isCustom] of roots) {
+        if (scanned.has(path.resolve(root).toLowerCase())) {
+            continue;
+        }
+        scanned.add(path.resolve(root).toLowerCase());
         await Promise.all((await subdirectories(root)).map(async pkg => {
             const descriptorDir = path.join(root, pkg, 'Descriptor');
-            const descriptors = await fs.readdir(descriptorDir).catch(() => [] as string[]);
-            for (const descriptor of descriptors.filter(d => d.toLowerCase().endsWith('.xml'))) {
+            const descriptors = (await fs.readdir(descriptorDir).catch(() => [] as string[])).filter(d => d.toLowerCase().endsWith('.xml'));
+            const texts = await Promise.all(descriptors.map(d => fs.readFile(path.join(descriptorDir, d), 'utf8').catch(() => '')));
+            const standard = shared && texts.length > 0 && texts.every(text =>
+                /^Microsoft/i.test(descriptorValue(text, 'Publisher') ?? '') || /^DoNotAllow$/i.test(descriptorValue(text, 'Customization') ?? ''));
+            for (const [i, descriptor] of descriptors.entries()) {
                 const name = descriptor.slice(0, -4);
                 const folder = path.join(root, pkg, name);
                 // Custom roots are read first, so a custom model wins over a same-named reference copy.
                 if (models.has(name.toLowerCase()) || !await isDirectory(folder)) {
                     continue;
                 }
-                const text = await fs.readFile(path.join(descriptorDir, descriptor), 'utf8').catch(() => '');
-                const displayName = descriptorValue(text, 'DisplayName') ?? name;
-                const microsoft = shared && /^Microsoft/i.test(descriptorValue(text, 'Publisher') ?? '');
+                const displayName = descriptorValue(texts[i], 'DisplayName') ?? name;
                 if (!models.has(name.toLowerCase())) {
-                    models.set(name.toLowerCase(), { name, displayName, packageName: pkg, folder, isCustom: isCustom && !microsoft });
+                    models.set(name.toLowerCase(), { name, displayName, packageName: pkg, folder, isCustom: isCustom && !standard });
                 }
             }
         }));

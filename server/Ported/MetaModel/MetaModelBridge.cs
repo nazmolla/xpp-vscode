@@ -4299,7 +4299,15 @@ namespace XppVsCode.Server.MetaModel
 
             // Microsoft/ISV models not covered by the list above are marked Customization=DoNotAllow.
             var info = MetaService?.GetModel(modelName);
+            if (info != null && !IsCustomPackage(info.Module ?? info.Name)) return false;
             return info == null || (!info.Readonly && info.Customization != ModelCustomizationLevel.DoNotAllow);
+        }
+
+        // On a shared store (cloud-hosted, VHD) the custom folder also holds Microsoft's packages.
+        private static bool IsCustomPackage(string package)
+        {
+            var config = DynamicsConfigurationReader.ReadActiveConfiguration();
+            return !config.SharedStore || config.IsCustomPath(Path.Combine(config.CustomMetadataFolder, package));
         }
 
         private static bool IsStandardPackagePath(string filePath)

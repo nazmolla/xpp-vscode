@@ -94,12 +94,14 @@ export class PacCommands {
     /** Full synchronization of the local business database, as the metadata server's build does. */
     private async syncLocalDatabase(env: XppEnvironment): Promise<void> {
         const connection = `Data Source=${env.databaseServer ?? 'localhost'};Initial Catalog=${env.businessDatabaseName ?? 'AxDB'};Integrated Security=True;Enlist=True;Application Name=SyncEngine`;
-        await this.run('Synchronize database', [
+        const syncEngine = path.join(env.binDirectory, 'SyncEngine.exe');
+        // No shell, so the connection string reaches SyncEngine as one argument.
+        await this.runTask('Synchronize database', new vscode.ProcessExecution(syncEngine, [
             '-syncmode=fullall',
             `-metadatabinaries=${env.frameworkDirectory}`,
             `-connect=${connection}`,
             '-fallbacktonative=False',
-        ], path.join(env.binDirectory, 'SyncEngine.exe'));
+        ]), exitCode => `SyncEngine failed (exit ${exitCode}). It needs VS Code running as administrator; see the terminal output.`);
     }
 
     /** Tells the user that pac does not apply to a cloud-hosted or VHD environment. */
@@ -160,25 +162,27 @@ export class PacCommands {
         return root;
     }
 
-    /** Runs pac (or another tool) as a visible task and resolves when it finishes; rejects on a non-zero exit. */
-    private async run(name: string, args: string[], tool = this.pac()): Promise<void> {
-        // pac is a .cmd and needs a shell; other tools get their arguments (connection strings) unquoted.
-        const process = tool === this.pac() ? new vscode.ShellExecution(tool, args) : new vscode.ProcessExecution(tool, args);
-        const task = new vscode.Task({ type: 'xpp-pac' }, vscode.TaskScope.Workspace, name, 'X++', process);
+    /** Runs pac (a .cmd, so through a shell) as a visible task. */
+    private run(name: string, args: string[]): Promise<void> {
+        return this.runTask(name, new vscode.ShellExecution(this.pac(), args), exitCode =>
+            `pac ${args.slice(0, 2).join(' ')} failed (exit ${exitCode}). Is the Power Platform CLI installed and signed in? See the terminal output.`);
+    }
+
+    /** Runs a visible task and resolves when it finishes; rejects on a non-zero exit. */
+    private async runTask(name: string, execution: vscode.ShellExecution | vscode.ProcessExecution, failure: (exitCode: number | undefined) => string): Promise<void> {
+        const task = new vscode.Task({ type: 'xpp', task: name }, vscode.TaskScope.Workspace, name, 'X++', execution);
         task.presentationOptions = { reveal: vscode.TaskRevealKind.Always, panel: vscode.TaskPanelKind.Shared, clear: false };
-        const execution = await vscode.tasks.executeTask(task);
+        const running = await vscode.tasks.executeTask(task);
         const exitCode = await new Promise<number | undefined>(resolve => {
             const listener = vscode.tasks.onDidEndTaskProcess(e => {
-                if (e.execution === execution) {
+                if (e.execution === running) {
                     listener.dispose();
                     resolve(e.exitCode);
                 }
             });
         });
         if (exitCode !== 0) {
-            throw new Error(tool === this.pac()
-                ? `pac ${args.slice(0, 2).join(' ')} failed (exit ${exitCode}). Is the Power Platform CLI installed and signed in? See the terminal output.`
-                : `${path.basename(tool)} failed (exit ${exitCode}). See the terminal output.`);
+            throw new Error(failure(exitCode));
         }
     }
 }
