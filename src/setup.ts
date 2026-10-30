@@ -6,7 +6,7 @@ import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import * as vscode from 'vscode';
 import { dynamics365Folder, readActiveEnvironment, selectedEnvironmentUrl, useEnvironment } from './environment';
-import { ClientAssets, getAssetDownloadUrl, getDataverseToken, readUdeEnvironment, resolveDataverseUrl, UdeEnvironment, validateDataverseUrl } from './ude';
+import { ClientAssets, getAssetDownloadUrl, getDataverseToken, httpFetch, readUdeEnvironment, resolveDataverseUrl, UdeEnvironment, validateDataverseUrl } from './ude';
 
 const ConfigurationsKey = 'HKCU\\Software\\Microsoft\\Dynamics\\AX7\\Development\\Configurations';
 const RequiredFreeBytes = 16 * 1024 ** 3;
@@ -217,7 +217,7 @@ async function download(url: string, target: string, label: string, step: Step, 
     const cancel = token.onCancellationRequested(() => controller.abort());
     const partial = target + '.partial';
     try {
-        const response = await fetch(url, { signal: controller.signal });
+        const response = await httpFetch(url, { signal: controller.signal });
         if (!response.ok || !response.body) {
             throw new Error(`Download of ${label} failed: ${response.status}`);
         }
