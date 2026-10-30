@@ -6,7 +6,7 @@ import * as vscode from 'vscode';
 import { readActiveEnvironment, selectedEnvironmentUrl } from './environment';
 import { findActiveProject, readProject } from './project';
 import { XppServerClient } from './serverClient';
-import { getDataverseToken, resolveDataverseUrl } from './ude';
+import { getDataverseToken, httpFetch, resolveDataverseUrl } from './ude';
 
 /**
  * Runs X++ SysTest tests on the unified developer environment's cloud runtime, the way Visual Studio's Test Explorer
@@ -110,7 +110,7 @@ class Dataverse {
     constructor(private readonly api: string, private readonly token: string) {}
 
     async send(method: string, url: string, body?: any, headers: Record<string, string> = {}): Promise<Response> {
-        const response = await fetch(url.startsWith('http') ? url : `${this.api}/${url}`, {
+        const response = await httpFetch(url.startsWith('http') ? url : `${this.api}/${url}`, {
             method,
             headers: {
                 Authorization: `Bearer ${this.token}`,

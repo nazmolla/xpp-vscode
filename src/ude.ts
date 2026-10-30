@@ -34,7 +34,7 @@ export async function getDataverseToken(dataverseUrl: string): Promise<string> {
 }
 
 async function dataverseCall(url: string, token: string, method: 'GET' | 'POST'): Promise<any> {
-    const response = await fetch(url, {
+    const response = await httpFetch(url, {
         method,
         headers: {
             Authorization: `Bearer ${token}`,
@@ -88,7 +88,7 @@ export async function readUdeEnvironment(dataverseUrl: string, token: string): P
 /** Asks the developer tools service for a time-limited download link; nothing is downloaded. */
 export async function getAssetDownloadUrl(env: UdeEnvironment, token: string, resource: string): Promise<string> {
     const version = (env.applicationVersion ?? '').replace(/\./g, '-');
-    const response = await fetch(`${DevToolsService}/api/clientmetadata/${resource}?version=${version}`, {
+    const response = await httpFetch(`${DevToolsService}/api/clientmetadata/${resource}?version=${version}`, {
         headers: {
             Authorization: `Bearer ${token}`,
             dataverseEnvironmentUri: `${env.dataverseUrl}/`,
@@ -104,18 +104,47 @@ export async function getAssetDownloadUrl(env: UdeEnvironment, token: string, re
 }
 
 async function blobSize(sasUrl: string): Promise<number | undefined> {
-    const response = await fetch(sasUrl, { method: 'HEAD' });
+    const response = await httpFetch(sasUrl, { method: 'HEAD' });
     const length = response.headers.get('content-length');
     return response.ok && length ? Number(length) : undefined;
 }
 
-export function validateDataverseUrl(input: string): string | undefined {
+const NetworkHints: Record<string, string> = {
+    ENOTFOUND: 'the host name does not resolve; check the URL, DNS or proxy',
+    ECONNREFUSED: 'the connection was refused; check the proxy and firewall',
+    ECONNRESET: 'the connection was reset; check the proxy and firewall',
+    ETIMEDOUT: 'the connection timed out; check the proxy and firewall',
+    UND_ERR_CONNECT_TIMEOUT: 'the connection timed out; check the proxy and firewall',
+    UNABLE_TO_GET_ISSUER_CERT_LOCALLY: 'a proxy inspects TLS with a certificate this machine does not trust',
+    SELF_SIGNED_CERT_IN_CHAIN: 'a proxy inspects TLS with a certificate this machine does not trust',
+};
+
+/** fetch whose network errors name the host and the cause; Node's own message is only "fetch failed". */
+export async function httpFetch(url: string, init?: RequestInit): Promise<Response> {
     try {
-        new URL(normalizeDataverseUrl(input));
-        return undefined;
+        return await fetch(url, init);
+    } catch (err) {
+        if ((err as Error).name === 'AbortError') {
+            throw err;
+        }
+        const cause = (err as { cause?: { code?: string; message?: string } }).cause;
+        const code = cause?.code ?? '';
+        // Only the host: download URLs carry a SAS token.
+        throw new Error(`Cannot reach ${new URL(url).host}: ${NetworkHints[code] ?? cause?.message ?? (err as Error).message}${code ? ` (${code})` : ''}.`);
+    }
+}
+
+export function validateDataverseUrl(input: string): string | undefined {
+    let host: string;
+    try {
+        host = new URL(normalizeDataverseUrl(input)).hostname.toLowerCase();
     } catch {
         return 'Enter a URL such as https://yourorg.crm.dynamics.com';
     }
+    if (/(^|\.)(powerplatform\.microsoft\.com|powerapps\.com)$/.test(host)) {
+        return 'That is a portal page. Copy the environment\'s "Environment URL" (https://yourorg.crm.dynamics.com) from the Power Platform admin center.';
+    }
+    return undefined;
 }
 
 export function normalizeDataverseUrl(input: string): string {

@@ -215,7 +215,7 @@ namespace XppVsCode.Server
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> StandardPackages =
             new System.Collections.Concurrent.ConcurrentDictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
 
-        // Not the user's when every model in it is published by Microsoft or sealed (Customization=DoNotAllow, as ISVs ship).
+        // Microsoft's when every model in it names Microsoft as the publisher. Not Customization=DoNotAllow: partners seal their own models too.
         private static bool IsStandardPackage(string packageFolder)
         {
             string key = Path.GetFullPath(packageFolder).TrimEnd('\\');
@@ -232,8 +232,7 @@ namespace XppVsCode.Server
                 return true;
             }
             bool standard = models.Count > 0 && models.All(m =>
-                DescriptorValue(m, "Publisher").StartsWith("Microsoft", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(DescriptorValue(m, "Customization"), "DoNotAllow", StringComparison.OrdinalIgnoreCase));
+                DescriptorValue(m, "Publisher").StartsWith("Microsoft", StringComparison.OrdinalIgnoreCase));
             return StandardPackages[key] = standard;
         }
 

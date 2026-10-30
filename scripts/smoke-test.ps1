@@ -35,7 +35,6 @@ $psi.RedirectStandardOutput = $true
 $psi.RedirectStandardError = $true
 $sw = [Diagnostics.Stopwatch]::StartNew()
 $p = [Diagnostics.Process]::Start($psi)
-$out = $p.StandardOutput.ReadToEndAsync()
 $err = $p.StandardError.ReadToEndAsync()
 
 $p.StandardInput.Write('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"1"}}}' + "`n")
@@ -46,6 +45,13 @@ foreach ($c in $calls) {
     $msg = @{ jsonrpc = '2.0'; id = $id++; method = 'tools/call'; params = @{ name = $c[0]; arguments = $c[1] } } | ConvertTo-Json -Depth 6 -Compress
     $p.StandardInput.Write($msg + "`n")
 }
+# Read-only calls run in parallel, so stdin stays open until every response has arrived.
+$lines = New-Object System.Collections.Generic.List[string]
+while ($lines.Count -lt $calls.Count + 2 -and $sw.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
+    $next = $p.StandardOutput.ReadLineAsync()
+    if (-not $next.Wait([int](($TimeoutSeconds - $sw.Elapsed.TotalSeconds) * 1000)) -or $null -eq $next.Result) { break }
+    if ($next.Result) { $lines.Add($next.Result) }
+}
 $p.StandardInput.Close()
 
 if (-not $p.WaitForExit($TimeoutSeconds * 1000)) { $p.Kill(); 'TIMEOUT' }
@@ -53,7 +59,7 @@ if (-not $p.WaitForExit($TimeoutSeconds * 1000)) { $p.Kill(); 'TIMEOUT' }
 "stderr: " + $err.Result.Trim()
 
 $pass = 0; $fail = 0
-foreach ($r in ($out.Result -split "`n" | Where-Object { $_ })) {
+foreach ($r in $lines) {
     $o = $r | ConvertFrom-Json
     if ($o.id -eq 1) { "init: $($o.result.serverInfo.name) $($o.result.serverInfo.version), instructions $($o.result.instructions.Length) chars"; continue }
     if ($o.id -eq 2) { "tools: $($o.result.tools.Count)"; continue }

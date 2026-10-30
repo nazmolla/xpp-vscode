@@ -348,7 +348,7 @@ async function loadModels(): Promise<ModelLocation[]> {
     }
 
     // Cloud-hosted and VHD environments keep every package in one folder; as the server decides, a package there is
-    // standard when every model in it is published by Microsoft or sealed (Customization=DoNotAllow).
+    // standard when every model in it is published by Microsoft.
     const shared = env.referencePackagesPaths.some(p => path.resolve(p).toLowerCase() === path.resolve(env.modelStoreFolder ?? '').toLowerCase());
     const models = new Map<string, ModelLocation>();
     const scanned = new Set<string>();
@@ -361,8 +361,7 @@ async function loadModels(): Promise<ModelLocation[]> {
             const descriptorDir = path.join(root, pkg, 'Descriptor');
             const descriptors = (await fs.readdir(descriptorDir).catch(() => [] as string[])).filter(d => d.toLowerCase().endsWith('.xml'));
             const texts = await Promise.all(descriptors.map(d => fs.readFile(path.join(descriptorDir, d), 'utf8').catch(() => '')));
-            const standard = shared && texts.length > 0 && texts.every(text =>
-                /^Microsoft/i.test(descriptorValue(text, 'Publisher') ?? '') || /^DoNotAllow$/i.test(descriptorValue(text, 'Customization') ?? ''));
+            const standard = shared && texts.length > 0 && texts.every(text => /^Microsoft/i.test(descriptorValue(text, 'Publisher') ?? ''));
             for (const [i, descriptor] of descriptors.entries()) {
                 const name = descriptor.slice(0, -4);
                 const folder = path.join(root, pkg, name);

@@ -4287,6 +4287,16 @@ namespace XppVsCode.Server.MetaModel
         private bool IsCustomModel(string modelName)
         {
             if (string.IsNullOrEmpty(modelName)) return false;
+            var info = MetaService?.GetModel(modelName);
+            var config = DynamicsConfigurationReader.ReadActiveConfiguration();
+            // Ownership is where the model lives: Customization=DoNotAllow only seals a model against others' overlayering,
+            // and partners seal their own models too.
+            if (info != null && config.HasCustom)
+            {
+                string package = Path.Combine(config.CustomMetadataFolder, info.Module ?? info.Name);
+                return File.Exists(Path.Combine(package, "Descriptor", info.Name + ".xml")) && config.IsCustomPath(package);
+            }
+
             string lower = modelName.ToLowerInvariant();
             string[] standard = {
                 "applicationsuite", "applicationplatform", "applicationfoundation",
@@ -4297,17 +4307,8 @@ namespace XppVsCode.Server.MetaModel
             foreach (string s in standard)
                 if (lower.Contains(s)) return false;
 
-            // Microsoft/ISV models not covered by the list above are marked Customization=DoNotAllow.
-            var info = MetaService?.GetModel(modelName);
-            if (info != null && !IsCustomPackage(info.Module ?? info.Name)) return false;
+            // Without a custom metadata folder: Microsoft/ISV models not covered by the list above are marked Customization=DoNotAllow.
             return info == null || (!info.Readonly && info.Customization != ModelCustomizationLevel.DoNotAllow);
-        }
-
-        // On a shared store (cloud-hosted, VHD) the custom folder also holds Microsoft's packages.
-        private static bool IsCustomPackage(string package)
-        {
-            var config = DynamicsConfigurationReader.ReadActiveConfiguration();
-            return !config.SharedStore || config.IsCustomPath(Path.Combine(config.CustomMetadataFolder, package));
         }
 
         private static bool IsStandardPackagePath(string filePath)
