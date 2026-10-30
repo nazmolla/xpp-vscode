@@ -38,8 +38,7 @@ namespace XppVsCode.Server.Host
             return null;
         }
 
-        public bool IsWritable(string path) =>
-            _config.HasCustom && path.StartsWith(Path.GetFullPath(_config.CustomMetadataFolder), StringComparison.OrdinalIgnoreCase);
+        public bool IsWritable(string path) => _config.IsCustomPath(path);
 
         /// <summary>Every language of a label file ID: language to the label text file (the first root that has it).</summary>
         public SortedDictionary<string, string> FindLanguages(string labelFileId)

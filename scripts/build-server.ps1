@@ -3,10 +3,16 @@ $ErrorActionPreference = 'Stop'
 
 $key = 'HKCU:\Software\Microsoft\Dynamics\AX7\Development\Configurations'
 $config = (Get-ItemProperty -Path $key -Name CurrentMetadataConfig -ErrorAction SilentlyContinue).CurrentMetadataConfig
-if (-not $config -or -not (Test-Path $config)) {
-    throw 'No active D365FO configuration. Connect to a unified developer environment first.'
+if ($config -and $config -like '*.json' -and (Test-Path $config)) {
+    $framework = (Get-Content $config -Raw | ConvertFrom-Json).FrameworkDirectory
+} else {
+    # Cloud-hosted and VHD environments: the metadata assemblies are in PackagesLocalDirectory\bin.
+    $framework = 'K:\AosService\PackagesLocalDirectory', 'C:\AosService\PackagesLocalDirectory' |
+        Where-Object { Test-Path (Join-Path $_ 'bin\xppc.exe') } | Select-Object -First 1
+    if (-not $framework) {
+        throw 'No active D365FO configuration. Connect to a unified developer environment first, or build on a cloud-hosted or VHD environment.'
+    }
 }
-$framework = (Get-Content $config -Raw | ConvertFrom-Json).FrameworkDirectory
 $bin = Join-Path $framework 'bin'
 
 $root = Split-Path $PSScriptRoot -Parent

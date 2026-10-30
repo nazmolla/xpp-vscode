@@ -111,12 +111,10 @@ namespace XppVsCode.Server.Tools
             var index = new Index { Key = key };
             try
             {
-                string custom = DynamicsConfigurationReader.ReadActiveConfiguration().CustomMetadataFolder;
-                if (!string.IsNullOrEmpty(custom) && Directory.Exists(custom))
-                    // Packages only (a Descriptor folder): XppSource and other build folders hold copies named after standard models.
-                    foreach (string package in Directory.GetDirectories(custom).Where(p => Directory.Exists(Path.Combine(p, "Descriptor"))))
-                        foreach (string model in Directory.GetDirectories(package).Where(m => !string.Equals(Path.GetFileName(m), "Descriptor", StringComparison.OrdinalIgnoreCase)))
-                            index.CustomModels.Add(Path.GetFileName(model));
+                // Packages only (a Descriptor folder): XppSource and other build folders hold copies named after standard models.
+                foreach (string package in DynamicsConfigurationReader.ReadActiveConfiguration().CustomPackageFolders())
+                    foreach (string model in Directory.GetDirectories(package).Where(m => !string.Equals(Path.GetFileName(m), "Descriptor", StringComparison.OrdinalIgnoreCase)))
+                        index.CustomModels.Add(Path.GetFileName(model));
             }
             catch { }
 
