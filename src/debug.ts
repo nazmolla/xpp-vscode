@@ -1,4 +1,6 @@
+import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import { existsSync, promises as fs } from 'fs';
+import * as net from 'net';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -107,16 +109,18 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
         });
     }
 
-    createDebugAdapterDescriptor(): vscode.DebugAdapterDescriptor {
+    async createDebugAdapterDescriptor(): Promise<vscode.DebugAdapterDescriptor> {
         const pending = this.pending;
         this.pending = undefined;
         if (!pending) {
             throw new Error('Start X++ debugging from the Run and Debug view or X++: Start Debugging.');
         }
-        // The same arguments Visual Studio passes in its VSDbgLaunch.json.
-        return new vscode.DebugAdapterExecutable(pending.proxy, [
-            '--remoteProxyHost', pending.host, '--VSVersion', 'vsdbg', '--accessToken', pending.token,
-        ]);
+        // The same arguments Visual Studio passes in its VSDbgLaunch.json; a free port so a Visual Studio session or a
+        // leftover proxy on the default 5119 does not stop the proxy.
+        const port = await freePort();
+        return new vscode.DebugAdapterInlineImplementation(new ProxyDebugAdapter(pending.proxy, [
+            '--port', String(port), '--remoteProxyHost', pending.host, '--VSVersion', 'vsdbg', '--accessToken', pending.token,
+        ], this.log));
     }
 
     /** Infolog messages arrive in the debugger output as <InfologMessage> XML, as in Visual Studio's Infolog window. */
@@ -186,6 +190,116 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
             vscode.debug.addBreakpoints(added);
         }
     }
+}
+
+/**
+ * Runs DebuggerProxy as the debug adapter over stdio, like DebugAdapterExecutable, but keeps its stderr and exit code:
+ * when the proxy stops, VS Code otherwise only reports "read error".
+ */
+class ProxyDebugAdapter implements vscode.DebugAdapter {
+    private readonly sent = new vscode.EventEmitter<vscode.DebugProtocolMessage>();
+    readonly onDidSendMessage = this.sent.event;
+    private readonly process: ChildProcessWithoutNullStreams;
+    private buffer = Buffer.alloc(0);
+    private stderr = '';
+    private disposed = false;
+    private disconnecting = false;
+
+    constructor(proxy: string, args: string[], private readonly log: vscode.OutputChannel) {
+        this.process = spawn(proxy, args, { cwd: path.dirname(proxy), windowsHide: true });
+        this.process.stdout.on('data', (chunk: Buffer) => this.read(chunk));
+        this.process.stderr.on('data', (chunk: Buffer) => {
+            const text = chunk.toString('utf8');
+            this.stderr = (this.stderr + text).slice(-4000);
+            this.log.append(`[DebuggerProxy] ${text}`);
+        });
+        this.process.stdin.on('error', () => undefined);
+        this.process.on('error', error => this.stopped(`DebuggerProxy could not start: ${error.message}`));
+        this.process.on('exit', (code, signal) => this.stopped(`DebuggerProxy exited with ${code !== null ? `code ${code}` : `signal ${signal}`}.`));
+    }
+
+    handleMessage(message: vscode.DebugProtocolMessage): void {
+        const command = (message as { command?: string }).command;
+        if (command === 'disconnect' || command === 'terminate') {
+            this.disconnecting = true;
+        }
+        // vsdbg rejects initialize with VS Code's debug type ('xpp'); 'clr' (.NET Framework, AXHost) as in VSDbgLaunch.json.
+        if (command === 'initialize') {
+            const request = message as { arguments?: Record<string, unknown> };
+            message = { ...request, arguments: { ...request.arguments, adapterID: 'clr' } } as vscode.DebugProtocolMessage;
+        }
+        if (this.process.stdin.writable) {
+            const json = JSON.stringify(message);
+            this.process.stdin.write(`Content-Length: ${Buffer.byteLength(json, 'utf8')}\r\n\r\n${json}`, 'utf8');
+        }
+    }
+
+    dispose(): void {
+        this.disposed = true;
+        if (this.process.exitCode === null) {
+            this.process.kill();
+        }
+        this.sent.dispose();
+    }
+
+    /** Splits the stdout stream into DAP messages (Content-Length header, blank line, JSON body). */
+    private read(chunk: Buffer): void {
+        this.buffer = Buffer.concat([this.buffer, chunk]);
+        for (;;) {
+            const headerEnd = this.buffer.indexOf('\r\n\r\n');
+            if (headerEnd < 0) {
+                return;
+            }
+            const length = /Content-Length:\s*(\d+)/i.exec(this.buffer.subarray(0, headerEnd).toString('ascii'));
+            if (!length) {
+                this.buffer = this.buffer.subarray(headerEnd + 4);
+                continue;
+            }
+            const start = headerEnd + 4;
+            const end = start + Number(length[1]);
+            if (this.buffer.length < end) {
+                return;
+            }
+            const body = this.buffer.subarray(start, end).toString('utf8');
+            this.buffer = this.buffer.subarray(end);
+            try {
+                this.sent.fire(JSON.parse(body));
+            } catch (error) {
+                this.log.appendLine(`[DebuggerProxy] Unreadable message: ${(error as Error).message}`);
+            }
+        }
+    }
+
+    private stopped(reason: string): void {
+        if (this.disposed) {
+            return;
+        }
+        this.disposed = true;
+        if (this.disconnecting) {
+            this.sent.fire({ type: 'event', seq: 0, event: 'terminated', body: {} } as vscode.DebugProtocolMessage);
+            return;
+        }
+        const hint = 'Check that the sign-in is current (X++: Connect to Environment), that the environment allows debugging, and that no firewall or proxy blocks wss://<environment>/___sidecar.';
+        // stderr already went to the output channel as it arrived.
+        this.log.appendLine(`${reason}\n${hint}`);
+        const detail = this.stderr.trim();
+        const message = `${reason}${detail ? `\n${detail}` : ''}\n${hint}`;
+        this.sent.fire({ type: 'event', seq: 0, event: 'output', body: { category: 'stderr', output: `${message}\n` } } as vscode.DebugProtocolMessage);
+        this.sent.fire({ type: 'event', seq: 0, event: 'terminated', body: {} } as vscode.DebugProtocolMessage);
+        vscode.window.showErrorMessage(`X++ debugging stopped: ${reason} See the X++ output for details.`);
+    }
+}
+
+function freePort(): Promise<number> {
+    return new Promise((resolve, reject) => {
+        const server = net.createServer();
+        server.unref();
+        server.on('error', reject);
+        server.listen(0, '127.0.0.1', () => {
+            const port = (server.address() as net.AddressInfo).port;
+            server.close(() => resolve(port));
+        });
+    });
 }
 
 function debugSourceRoot(): string {
