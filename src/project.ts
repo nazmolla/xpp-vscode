@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { promises as fs, watch as fsWatch, FSWatcher } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -19,14 +19,12 @@ export interface XppProjectInfo {
     items: ProjectItem[];
 }
 
-/** The .rnrproj new objects are added to: the xpp.project setting, else the first one in the workspace. */
+/**
+ * The project of this window: the xpp.project setting of the open workspace (written by Open Project into the
+ * project's own workspace). User settings and a .rnrproj that happens to be in the folder don't select a project.
+ */
 export async function findActiveProject(): Promise<string | undefined> {
-    const configured = vscode.workspace.getConfiguration('xpp').get<string>('project');
-    if (configured) {
-        return configured;
-    }
-    const found = await vscode.workspace.findFiles('**/*.rnrproj', '**/{node_modules,bin,obj}/**', 2);
-    return found[0]?.fsPath;
+    return vscode.workspace.getConfiguration('xpp').inspect<string>('project')?.workspaceValue || undefined;
 }
 
 export async function readProject(file?: string): Promise<XppProjectInfo | undefined> {
@@ -63,43 +61,145 @@ async function findProjectFiles(dir: string, depth: number, found: string[]): Pr
     }
 }
 
-/** Lets the user pick the project from Visual Studio's repos folder or the workspace; saved in xpp.project. */
-export async function selectProject(): Promise<void> {
-    const files: string[] = [];
-    await findProjectFiles(path.join(os.homedir(), 'source', 'repos'), 4, files);
-    for (const uri of await vscode.workspace.findFiles('**/*.rnrproj', '**/{node_modules,bin,obj}/**', 50)) {
-        if (!files.some(f => f.toLowerCase() === uri.fsPath.toLowerCase())) {
-            files.push(uri.fsPath);
+const RecentProjectsKey = 'xpp.recentProjects';
+const MaxRecentProjects = 10;
+
+/**
+ * Opening a project opens its workspace: the project folder (.rnrproj, .slnx, source control) and its model folder
+ * (the metadata the tools edit), with the project in the workspace's settings. Other windows have no project.
+ * The workspace files live in the extension's storage, so repositories stay clean; VS Code's Open Recent lists them too.
+ */
+export class ProjectWorkspaces {
+    constructor(private readonly context: vscode.ExtensionContext) { }
+
+    /** Projects opened before, newest first (only those that still exist). */
+    async recent(): Promise<string[]> {
+        const all = this.context.globalState.get<string[]>(RecentProjectsKey, []);
+        const existing: string[] = [];
+        for (const file of all) {
+            if (await fs.stat(file).then(s => s.isFile(), () => false)) {
+                existing.push(file);
+            }
+        }
+        return existing;
+    }
+
+    async open(file: string): Promise<void> {
+        const workspaceFile = await this.prepare(file);
+        if (workspaceFile && vscode.workspace.workspaceFile?.fsPath.toLowerCase() !== workspaceFile.fsPath.toLowerCase()) {
+            await vscode.commands.executeCommand('vscode.openFolder', workspaceFile, { forceNewWindow: false });
         }
     }
-    const browse = { label: '$(folder-opened) Browse…', file: '' };
-    const picked = await vscode.window.showQuickPick(
-        [...files.map(file => ({ label: path.basename(file, '.rnrproj'), description: path.dirname(file), file })), browse],
-        { title: 'Select the D365FO project (.rnrproj)', matchOnDescription: true });
-    if (!picked) {
-        return;
+
+    /** Writes the project's workspace file and remembers the project; returns the workspace file. */
+    async prepare(file: string): Promise<vscode.Uri | undefined> {
+        const project = await readProject(file);
+        if (!project) {
+            return undefined;
+        }
+        const model = (await listModels()).find(m => m.name.toLowerCase() === (project.model ?? '').toLowerCase());
+        const workspaceFile = await this.writeWorkspace(project, model?.folder);
+        await this.remember(file);
+        return workspaceFile;
     }
-    let file = picked.file;
-    if (!file) {
-        const chosen = await vscode.window.showOpenDialog({ canSelectMany: false, filters: { 'D365FO project': ['rnrproj'] }, title: 'Select the D365FO project' });
-        if (!chosen?.[0]) {
+
+    /** Picks a project: recent ones first, then the ones in Visual Studio's repos folder and the workspace, or browse. */
+    async select(): Promise<void> {
+        const recent = await this.recent();
+        const files = [...recent];
+        const found: string[] = [];
+        await findProjectFiles(path.join(os.homedir(), 'source', 'repos'), 4, found);
+        for (const uri of await vscode.workspace.findFiles('**/*.rnrproj', '**/{node_modules,bin,obj}/**', 50)) {
+            found.push(uri.fsPath);
+        }
+        for (const file of found) {
+            if (!files.some(f => f.toLowerCase() === file.toLowerCase())) {
+                files.push(file);
+            }
+        }
+        const browse = { label: '$(folder-opened) Browse…', description: '', file: '' };
+        const items = files.map(file => ({
+            label: path.basename(file, '.rnrproj'),
+            description: path.dirname(file),
+            detail: recent.includes(file) ? 'recently opened' : undefined,
+            file,
+        }));
+        const picked = await vscode.window.showQuickPick([...items, browse], { title: 'Open D365FO project (.rnrproj)', matchOnDescription: true });
+        if (!picked) {
             return;
         }
-        file = chosen[0].fsPath;
+        let file = picked.file;
+        if (!file) {
+            const chosen = await vscode.window.showOpenDialog({ canSelectMany: false, filters: { 'D365FO project': ['rnrproj'] }, title: 'Open D365FO project' });
+            if (!chosen?.[0]) {
+                return;
+            }
+            file = chosen[0].fsPath;
+        }
+        await this.open(file);
     }
-    const config = vscode.workspace.getConfiguration('xpp');
-    const unchanged = (config.get<string>('project') ?? '').toLowerCase() === file.toLowerCase();
-    await config.update('project', file, vscode.ConfigurationTarget.Global);
-    // Re-selecting the configured project changes no setting, so the workspace is not synced by the setting listener.
-    if (unchanged) {
-        await syncWorkspaceFolders();
+
+    async openRecent(): Promise<void> {
+        const recent = await this.recent();
+        if (recent.length === 0) {
+            vscode.window.showInformationMessage('No recent D365FO projects. Open one with Open D365FO Project.');
+            return;
+        }
+        const picked = await vscode.window.showQuickPick(
+            recent.map(file => ({ label: path.basename(file, '.rnrproj'), description: path.dirname(file), file })),
+            { title: 'Open recent D365FO project', matchOnDescription: true });
+        if (picked) {
+            await this.open(picked.file);
+        }
+    }
+
+    /** Closes the project's workspace; the window keeps running without a project. */
+    async close(): Promise<void> {
+        if (await findActiveProject()) {
+            await vscode.commands.executeCommand('workbench.action.closeFolder');
+        }
+    }
+
+    /** Earlier versions kept the project in the user settings, so every window opened it; it becomes a recent project. */
+    async migrateUserSetting(): Promise<void> {
+        const config = vscode.workspace.getConfiguration('xpp');
+        const global = config.inspect<string>('project')?.globalValue;
+        if (global) {
+            await this.remember(global);
+            await config.update('project', undefined, vscode.ConfigurationTarget.Global);
+        }
+    }
+
+    private async remember(file: string): Promise<void> {
+        const recent = this.context.globalState.get<string[]>(RecentProjectsKey, []).filter(f => f.toLowerCase() !== file.toLowerCase());
+        await this.context.globalState.update(RecentProjectsKey, [file, ...recent].slice(0, MaxRecentProjects));
+    }
+
+    /** Writes the project's workspace file, keeping folders and settings the user added to it. */
+    private async writeWorkspace(project: XppProjectInfo, modelFolder: string | undefined): Promise<vscode.Uri> {
+        const folder = vscode.Uri.joinPath(this.context.globalStorageUri, 'workspaces');
+        await fs.mkdir(folder.fsPath, { recursive: true });
+        const id = createHash('sha256').update(project.file.toLowerCase()).digest('hex').slice(0, 8);
+        const uri = vscode.Uri.joinPath(folder, `${project.name}-${id}.code-workspace`);
+        const existing = JSON.parse(await fs.readFile(uri.fsPath, 'utf8').catch(() => '{}')) as {
+            folders?: { path: string; name?: string }[];
+            settings?: Record<string, unknown>;
+        };
+        const ours: { path: string; name: string }[] = [{ path: path.dirname(project.file), name: `${project.name} (project)` }];
+        if (modelFolder) {
+            ours.push({ path: modelFolder, name: `${project.model} (model)` });
+        }
+        const added = (existing.folders ?? []).filter(f => !f.name?.endsWith(' (project)') && !f.name?.endsWith(' (model)'));
+        const content = { ...existing, folders: [...ours, ...added], settings: { ...existing.settings, 'xpp.project': project.file } };
+        await fs.writeFile(uri.fsPath, JSON.stringify(content, null, 2), 'utf8');
+        return uri;
     }
 }
 
 const ProjectTypeGuid = 'fc65038c-1b2f-41e1-a629-bed71d161fff';
 
-/** Creates a D365FO project (.rnrproj plus .slnx, as Visual Studio does) for one of your models and selects it. */
-export async function createProject(): Promise<void> {
+/** Creates a D365FO project (.rnrproj plus .slnx, as Visual Studio does) for one of your models; returns its file. */
+export async function createProject(): Promise<string | undefined> {
     const models = (await listModels()).filter(m => m.isCustom);
     if (models.length === 0) {
         throw new Error('No custom model found in the active configuration. Create a model first (Visual Studio: Dynamics 365 > Model Management).');
@@ -143,8 +243,8 @@ export async function createProject(): Promise<void> {
     await fs.writeFile(file, projectXml(name, model.model.name, guid), 'utf8');
     await fs.writeFile(path.join(dir, `${name}.slnx`),
         `<Solution>\r\n  <Configurations>\r\n    <BuildType Name="Debug" />\r\n  </Configurations>\r\n  <Project Path="${name}.rnrproj" Type="${ProjectTypeGuid}" Id="${guid}" />\r\n</Solution>\r\n`, 'utf8');
-    await vscode.workspace.getConfiguration('xpp').update('project', file, vscode.ConfigurationTarget.Global);
     vscode.window.showInformationMessage(`Created D365FO project ${name} for model ${model.model.name}.`);
+    return file;
 }
 
 function newGuid(): string {
@@ -189,41 +289,6 @@ function projectXml(name: string, model: string, guid: string): string {
   <Import Project="$(BuildTasksDirectory)\\Microsoft.Dynamics.Framework.Tools.BuildTasks.17.0.targets" />
 </Project>
 `.replace(/\r?\n/g, '\r\n');
-}
-
-/**
- * Makes the workspace show the active project: its folder (.rnrproj, .slnx, instructions, source control) and the
- * folder of its model (the metadata the tools edit), as a multi-root workspace. Folders of earlier projects and
- * models are replaced; other folders stay.
- */
-export async function syncWorkspaceFolders(): Promise<void> {
-    const project = await readProject().catch(() => undefined);
-    if (!project) {
-        return;
-    }
-    const models = await listModels();
-    const model = models.find(m => m.name.toLowerCase() === (project.model ?? '').toLowerCase());
-    const wanted: { uri: vscode.Uri; name: string }[] = [{ uri: vscode.Uri.file(path.dirname(project.file)), name: `${project.name} (project)` }];
-    if (model) {
-        wanted.push({ uri: vscode.Uri.file(model.folder), name: `${model.name} (model)` });
-    }
-
-    const same = (a: vscode.Uri, b: vscode.Uri) => a.fsPath.toLowerCase() === b.fsPath.toLowerCase();
-    const current = vscode.workspace.workspaceFolders ?? [];
-    if (wanted.every((w, i) => current[i] && same(current[i].uri, w.uri))) {
-        return;
-    }
-    const modelFolders = models.map(m => m.folder.toLowerCase());
-    const isOurs = async (f: vscode.WorkspaceFolder) =>
-        modelFolders.includes(f.uri.fsPath.toLowerCase())
-        || (await fs.readdir(f.uri.fsPath).catch(() => [] as string[])).some(n => n.toLowerCase().endsWith('.rnrproj'));
-    const keep: { uri: vscode.Uri; name?: string }[] = [];
-    for (const folder of current) {
-        if (!wanted.some(w => same(w.uri, folder.uri)) && !await isOurs(folder)) {
-            keep.push({ uri: folder.uri, name: folder.name });
-        }
-    }
-    vscode.workspace.updateWorkspaceFolders(0, current.length, ...wanted, ...keep);
 }
 
 type ProjectNode = { kind: 'folder'; folder: string; items: ProjectItem[] } | { kind: 'item'; item: ProjectItem };

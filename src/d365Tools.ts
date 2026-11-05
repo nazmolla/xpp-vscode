@@ -74,7 +74,8 @@ const ToolsMenu: ToolNode[] = [
     },
     {
         label: 'Project', icon: 'project', children: [
-            { label: 'Select Project…', icon: 'folder-opened', command: 'xpp.selectProject' },
+            { label: 'Open Project…', icon: 'folder-opened', command: 'xpp.selectProject' },
+            { label: 'Open Recent Project…', icon: 'history', command: 'xpp.openRecentProject' },
             { label: 'Export Project…', icon: 'export', command: 'xpp.tools.exportProject' },
             { label: 'Import Project…', icon: 'cloud-download', command: 'xpp.tools.importProject' },
         ],
@@ -776,8 +777,8 @@ async function importProject(server: XppServerClient, refreshTrees: () => void):
         throw new Error(result.message);
     }
     refreshTrees();
-    if (await vscode.window.showInformationMessage(result.message ?? '', 'Use this project')) {
-        await vscode.workspace.getConfiguration('xpp').update('project', result.projectFile, vscode.ConfigurationTarget.Global);
+    if (await vscode.window.showInformationMessage(result.message ?? '', 'Open This Project')) {
+        await vscode.commands.executeCommand('xpp.openProject', result.projectFile);
     }
 }
 

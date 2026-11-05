@@ -19,7 +19,7 @@ import { registerHistory } from './history';
 import { registerMcpProvider } from './mcpProvider';
 import { openObject, XppDocumentSelector, XppNavigation } from './navigation';
 import { PacCommands } from './pac';
-import { createProject, findActiveProject, ProjectTreeProvider, readProject, selectProject, syncWorkspaceFolders } from './project';
+import { createProject, findActiveProject, ProjectTreeProvider, ProjectWorkspaces, readProject } from './project';
 import { XppServerClient } from './serverClient';
 import { connectEnvironment } from './setup';
 import { registerTests } from './tests';
@@ -44,6 +44,8 @@ export function activate(context: vscode.ExtensionContext): void {
     const environment = new EnvironmentStatus();
     const dragAndDrop = new ElementDragAndDrop(server, () => projectTree.refresh());
     const designers: DesignerServices = { context, server, drags: dragAndDrop };
+    const projects = new ProjectWorkspaces(context);
+    void projects.migrateUserSetting().catch(err => log.appendLine('Project setting: ' + (err as Error).message));
     context.subscriptions.push(log, buildOutput, server, languageServer, builder, environment);
 
     registerMcpProvider(context, log);
@@ -67,8 +69,6 @@ export function activate(context: vscode.ExtensionContext): void {
                 server.restart();
                 languageServer.restart();
                 projectTree.refresh();
-                // U7: the workspace follows the selected or created project (project folder + model folder).
-                void syncWorkspaceFolders().catch(err => log.appendLine('Workspace folders: ' + (err as Error).message));
             }
         }),
         onDidChangeEnvironment(() => {
@@ -187,8 +187,16 @@ export function activate(context: vscode.ExtensionContext): void {
     registerHistory(context, server, command);
     context.subscriptions.push(ElementDesigner.onDidChange.event(e => codeFs.refresh(objectUri(e.objectType, e.objectName))));
     void vscode.commands.executeCommand('setContext', 'xpp.aot.modelView', false);
-    command('xpp.selectProject', () => selectProject());
-    command('xpp.createProject', () => createProject());
+    command('xpp.selectProject', () => projects.select());
+    command('xpp.openRecentProject', () => projects.openRecent());
+    command('xpp.openProject', (file?: string) => file ? projects.open(file) : projects.select());
+    command('xpp.closeProject', () => projects.close());
+    command('xpp.createProject', async () => {
+        const file = await createProject();
+        if (file) {
+            await projects.open(file);
+        }
+    });
     command('xpp.build', async () => {
         const project = await readProject();
         await vscode.window.withProgress(
@@ -212,7 +220,7 @@ export function activate(context: vscode.ExtensionContext): void {
             });
     });
     registerTests(context, server);
-    followAgentProjectSelection(context);
+    followAgentProjectSelection(context, projects);
     command('xpp.pac.init', () => pac.initSolution());
     command('xpp.pac.signIn', () => pac.signIn());
     command('xpp.pac.deploy', () => pac.deploy());
@@ -221,8 +229,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void { }
 
-/** The MCP server writes the project an agent selected (xpp_select_project); the views follow it through xpp.project. */
-function followAgentProjectSelection(context: vscode.ExtensionContext): void {
+/** The MCP server writes the project an agent selected (xpp_select_project); the user decides whether the window opens it. */
+function followAgentProjectSelection(context: vscode.ExtensionContext, projects: ProjectWorkspaces): void {
     const stateFile = path.join(process.env.LOCALAPPDATA ?? os.homedir(), 'XppVsCode', 'activeProject.txt');
     let lastWrite = 0;
     const written = async () => (await fs.stat(stateFile).catch(() => undefined))?.mtimeMs ?? 0;
@@ -233,9 +241,12 @@ function followAgentProjectSelection(context: vscode.ExtensionContext): void {
         }
         lastWrite = mtime;
         const selected = (await fs.readFile(stateFile, 'utf8').catch(() => '')).trim();
-        const config = vscode.workspace.getConfiguration('xpp');
-        if (selected && (config.get<string>('project') ?? '').toLowerCase() !== selected.toLowerCase()) {
-            await config.update('project', selected, vscode.ConfigurationTarget.Global);
+        if (selected && (await findActiveProject() ?? '').toLowerCase() !== selected.toLowerCase()) {
+            // Opening a project reloads the window, which would interrupt the agent: ask.
+            const choice = await vscode.window.showInformationMessage(`The agent selected project ${path.basename(selected, '.rnrproj')}.`, 'Open Project');
+            if (choice) {
+                await projects.open(selected);
+            }
         }
     };
     // Only selections written after startup count; a file left by an earlier session must not override the user's project.
