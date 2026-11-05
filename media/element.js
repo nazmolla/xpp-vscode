@@ -2,6 +2,8 @@
 (function () {
     const vscode = acquireVsCodeApi();
     const treeEl = document.getElementById('tree');
+    treeEl.setAttribute('role', 'tree');
+    treeEl.setAttribute('aria-label', 'Element nodes');
     const propsEl = document.getElementById('properties');
     const errorEl = document.getElementById('error');
     const previewEl = document.getElementById('preview');
@@ -236,6 +238,9 @@
         const li = document.createElement('li');
         const row = document.createElement('div');
         row.className = 'row';
+        row.setAttribute('role', 'treeitem');
+        row.setAttribute('aria-level', String(depth + 1));
+        row.setAttribute('aria-selected', 'false');
         row.dataset.path = pathKey(node.path);
         row.dataset.kind = node.kind;
         if (node.own) row.classList.add('own');
@@ -282,7 +287,9 @@
 
         if (hasChildren) {
             const ul = document.createElement('ul');
+            ul.setAttribute('role', 'group');
             ul.hidden = collapsed.has(pathKey(node.path));
+            row.setAttribute('aria-expanded', String(!ul.hidden));
             shown.forEach(child => ul.appendChild(renderNode(child.node, depth + 1, child.parent)));
             li.appendChild(ul);
             toggle.addEventListener('click', e => {
@@ -372,6 +379,7 @@
             collapsed.add(key);
         }
         ul.hidden = collapsed.has(key);
+        row.setAttribute('aria-expanded', String(!ul.hidden));
         toggle.classList.toggle('codicon-chevron-right', ul.hidden);
         toggle.classList.toggle('codicon-chevron-down', !ul.hidden);
     }
@@ -382,9 +390,13 @@
         }
         if (selectedRow) {
             selectedRow.classList.remove('selected');
+            selectedRow.setAttribute('aria-selected', 'false');
+            selectedRow.tabIndex = -1;
         }
         selectedRow = row;
         row.classList.add('selected');
+        row.setAttribute('aria-selected', 'true');
+        row.tabIndex = 0;
         row.focus({ preventScroll: !!fromPreview });
         const node = row._node;
         selectedPath = node.path;
@@ -414,6 +426,18 @@
             send('select', { path: node.path, source: node.source || null });
         }
     }
+
+    // Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z) undo and redo property changes, except while typing in a field.
+    document.addEventListener('keydown', e => {
+        if (!(e.ctrlKey || e.metaKey) || ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+            return;
+        }
+        const key = e.key.toLowerCase();
+        if (key === 'z' || key === 'y') {
+            send(key === 'y' || e.shiftKey ? 'redo' : 'undo', {});
+            e.preventDefault();
+        }
+    });
 
     // Keyboard navigation in the tree.
     treeEl.addEventListener('keydown', e => {

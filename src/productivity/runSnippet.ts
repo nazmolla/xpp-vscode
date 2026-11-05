@@ -11,7 +11,7 @@ import { call, findExact, indent, ProductivityContext } from './common';
 const MainPattern = /\bstatic\s+void\s+main\s*\(\s*Args\s+\w+\s*\)/i;
 
 /**
- * X++: Run Snippet in Environment: puts the code of an untitled (or plain .xpp file) class with a main method into the
+ * F&O Studio: Run Snippet in Environment: puts the code of an untitled (or plain .xpp file) class with a main method into the
  * class <Model>ScratchRunner of the project's model, builds the project, optionally deploys, and runs it through
  * SysClassRunner in the browser. Without such a document, opens a new one from a template.
  */
@@ -110,5 +110,5 @@ async function openTemplate(): Promise<void> {
     ].join('\n');
     const document = await vscode.workspace.openTextDocument({ language: 'xpp', content });
     await vscode.window.showTextDocument(document);
-    vscode.window.showInformationMessage('Write the code to run in main, then run X++: Run Snippet in Environment again.');
+    vscode.window.showInformationMessage('Write the code to run in main, then run F&O Studio: Run Snippet in Environment again.');
 }

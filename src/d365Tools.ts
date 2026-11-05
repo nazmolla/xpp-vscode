@@ -320,7 +320,7 @@ async function createModel(server: XppServerClient, refreshTrees: () => void): P
         throw new Error(result.message);
     }
     refreshTrees();
-    vscode.window.showInformationMessage(`${result.message} Create a project for it with X++: Select D365FO Project, or add objects to it from the agent tools.`);
+    vscode.window.showInformationMessage(`${result.message} Create a project for it with F&O Studio: Create D365FO Project, or add objects to it from the agent tools.`);
 }
 
 async function chooseCustomModel(title: string, name?: string): Promise<string | undefined> {
@@ -734,7 +734,7 @@ async function menuItemForForm(server: XppServerClient, form: string): Promise<{
 async function exportProject(server: XppServerClient): Promise<void> {
     const projectFile = await findActiveProject();
     if (!projectFile) {
-        throw new Error('Select a D365FO project first (X++: Select D365FO Project).');
+        throw new Error('Select a D365FO project first (F&O Studio: Open D365FO Project).');
     }
     const project = await readProject(projectFile);
     const target = await vscode.window.showSaveDialog({

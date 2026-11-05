@@ -1,0 +1,234 @@
+// Data panel: a table's rows (Browse Data) or a SQL query's results. Every value is written with textContent.
+(function () {
+    const vscode = acquireVsCodeApi();
+    const $ = id => document.getElementById(id);
+    const el = (tag, props = {}, children = []) => {
+        const node = document.createElement(tag);
+        for (const [key, value] of Object.entries(props)) {
+            if (key === 'text') { node.textContent = value; }
+            else if (key === 'on') { for (const [event, handler] of Object.entries(value)) { node.addEventListener(event, handler); } }
+            else if (value !== undefined && value !== false) { node.setAttribute(key, value === true ? '' : value); }
+        }
+        for (const child of children) { if (child) { node.append(child); } }
+        return node;
+    };
+
+    const state = { mode: undefined, shape: undefined, filters: [], company: '', asOf: '', orderBy: '', descending: false, maxRows: 200, canWrite: false, running: false };
+    const RowChoices = [100, 200, 500, 1000, 5000];
+    const NumericTypes = /^(int|bigint|smallint|tinyint|decimal|numeric|float|real|money)$/i;
+
+    function send(message) { vscode.postMessage(message); }
+
+    function rowsSelect() {
+        const select = el('select', { 'aria-label': 'Maximum rows', on: { change: () => { state.maxRows = Number(select.value); } } },
+            RowChoices.map(n => el('option', { value: String(n), selected: n === state.maxRows, text: `${n} rows` })));
+        return select;
+    }
+
+    function renderToolbar() {
+        const bar = $('toolbar');
+        bar.replaceChildren();
+        const cancel = el('button', { id: 'cancel', disabled: !state.running, text: 'Cancel', on: { click: () => send({ type: 'cancel' }) } });
+        if (state.mode.kind === 'table') {
+            const shape = state.shape;
+            bar.append(el('span', { class: 'title', text: shape?.label && shape.label !== state.mode.table ? `${state.mode.table} (${shape.label})` : state.mode.table }));
+            if (!shape || shape.perCompany) {
+                bar.append(el('label', { text: 'Company ' }, [el('input', {
+                    class: 'company', value: state.company, placeholder: 'all', 'aria-label': 'Company (DataAreaId)',
+                    on: { change: e => { state.company = e.target.value.trim(); browse(); } },
+                })]));
+            }
+            if (shape && shape.validTimeState && shape.validTimeState !== 'None') {
+                bar.append(el('label', { text: 'As of ', title: 'Date-effective table: only the rows valid on this date (empty: all rows)' }, [el('input', {
+                    type: 'date', value: state.asOf, 'aria-label': 'As-of date',
+                    on: { change: e => { state.asOf = e.target.value; browse(); } },
+                })]));
+            }
+            bar.append(rowsSelect(), filterEditor(), el('button', { class: 'primary', text: 'Refresh', on: { click: browse } }), cancel,
+                el('button', { text: 'Open as SQL', title: 'Open this view as an editable SQL query', on: { click: () => send({ type: 'openAsQuery', sql: browseSql() }) } }));
+        } else {
+            const write = el('input', { type: 'checkbox', id: 'allowWrite', disabled: !state.canWrite });
+            bar.append(el('button', { class: 'primary', text: 'Run (Ctrl+Enter)', on: { click: runQuery } }), cancel, rowsSelect(),
+                el('button', { text: 'Explain Plan', title: 'Estimated plan of the SELECT (not run): costly steps, missing indexes, warnings', on: { click: () => send({ type: 'plan', sql: $('sql').value }) } }),
+                el('label', { class: 'write', title: state.canWrite ? 'Commit changes made by the batch (asks every time)' : 'Needs Writer credentials or a local database' }, [write, document.createTextNode(' Allow changes')]));
+        }
+        bar.append(el('span', { class: 'spacer' }), el('span', { class: 'target', id: 'target', text: state.targetText || '' }));
+    }
+
+    function filterEditor() {
+        const fields = (state.shape?.fields || []).map(f => f.name);
+        const column = el('select', { 'aria-label': 'Filter column' }, fields.map(name => el('option', { value: name, text: name })));
+        const operator = el('select', { 'aria-label': 'Filter operator' }, ['=', '<>', '<', '<=', '>', '>=', 'contains', 'startsWith'].map(op => el('option', { value: op, text: op })));
+        const value = el('input', { placeholder: 'value', 'aria-label': 'Filter value' });
+        const add = () => {
+            if (!column.value) { return; }
+            state.filters.push({ column: column.value, operator: operator.value, value: value.value });
+            value.value = '';
+            renderFilters();
+            browse();
+        };
+        value.addEventListener('keydown', e => { if (e.key === 'Enter') { add(); } });
+        return el('span', {}, [column, operator, value, el('button', { text: 'Add filter', on: { click: add } })]);
+    }
+
+    function renderFilters() {
+        const box = $('filters');
+        box.replaceChildren(...state.filters.map((f, i) => el('span', { class: 'chip' }, [
+            document.createTextNode(`${f.column} ${f.operator} ${f.value}`),
+            el('button', { title: 'Remove filter', 'aria-label': `Remove filter ${f.column}`, text: '×', on: { click: () => { state.filters.splice(i, 1); renderFilters(); browse(); } } }),
+        ])));
+        box.hidden = state.filters.length === 0;
+    }
+
+    function browse() {
+        send({ type: 'browse', request: {
+            table: state.mode.table, filters: state.filters, company: state.company || undefined, asOf: state.asOf || undefined,
+            orderBy: state.orderBy || undefined, descending: state.descending, maxRows: state.maxRows,
+        } });
+    }
+
+    function runQuery() {
+        send({ type: 'query', sql: $('sql').value, maxRows: state.maxRows, allowWrite: !!$('allowWrite')?.checked });
+    }
+
+    function sqlText(value) { return `'${String(value).replace(/'/g, "''")}'`; }
+    function sqlName(name) { return `[${name.replace(/]/g, ']]')}]`; }
+
+    function browseSql() {
+        const where = [];
+        if (state.company) { where.push(`DATAAREAID = ${sqlText(state.company.toLowerCase())}`); }
+        if (state.asOf) { where.push(`VALIDFROM <= ${sqlText(state.asOf)} AND VALIDTO >= ${sqlText(state.asOf)}`); }
+        for (const f of state.filters) {
+            if (f.operator === 'contains') { where.push(`${sqlName(f.column)} LIKE ${sqlText('%' + f.value + '%')}`); }
+            else if (f.operator === 'startsWith') { where.push(`${sqlName(f.column)} LIKE ${sqlText(f.value + '%')}`); }
+            else { where.push(`${sqlName(f.column)} ${f.operator} ${sqlText(f.value)}`); }
+        }
+        return `SELECT TOP (${state.maxRows}) *\nFROM ${sqlName(state.mode.table)}`
+            + (where.length ? `\nWHERE ${where.join('\n  AND ')}` : '')
+            + (state.orderBy ? `\nORDER BY ${sqlName(state.orderBy)}${state.descending ? ' DESC' : ''}` : '');
+    }
+
+    /** The metadata field behind a SQL column: same name, or an array element (FIELD2_). */
+    function fieldOf(column) {
+        const fields = state.shape?.fields || [];
+        const lower = column.toLowerCase();
+        return fields.find(f => f.name.toLowerCase() === lower)
+            || fields.find(f => f.name.toLowerCase() === lower.replace(/\d+_$/, ''));
+    }
+
+    function renderResult(result) {
+        const box = $('results');
+        box.replaceChildren();
+        result.resultSets.forEach((set, index) => box.append(renderSet(set, index)));
+        const parts = [`${result.elapsedMs} ms`];
+        if (result.committed && result.rowsAffected >= 0) { parts.push(`${result.rowsAffected} row(s) changed and committed`); }
+        if (!result.resultSets.length && !result.committed) { parts.push('no rows returned'); }
+        $('status').textContent = parts.join(' · ');
+        if (result.messages?.length) { box.append(el('pre', { class: 'messages', text: result.messages.join('\n') })); }
+    }
+
+    function renderSet(set, index) {
+        const browsing = state.mode.kind === 'table';
+        const header = el('div', { class: 'set-header' }, [
+            el('span', { text: `${set.rows.length}${set.truncated ? '+' : ''} row(s)${set.truncated ? ' (limit reached)' : ''}` }),
+            el('button', { text: 'Export CSV', on: { click: () => send({ type: 'export', index }) } }),
+        ]);
+        const fields = set.columns.map(c => browsing ? fieldOf(c.name) : undefined);
+        const head = el('tr', {}, set.columns.map((c, i) => {
+            const field = fields[i];
+            const sorted = browsing && state.orderBy.toLowerCase() === c.name.toLowerCase();
+            const th = el('th', {
+                class: browsing ? 'sortable' : undefined, scope: 'col',
+                title: [field?.label, field?.enumType ? `Enum ${field.enumType}` : c.type].filter(Boolean).join(' · '),
+                'aria-sort': sorted ? (state.descending ? 'descending' : 'ascending') : undefined,
+            }, [document.createTextNode(c.name), sorted ? el('span', { class: 'sort', text: state.descending ? '▼' : '▲' }) : null]);
+            if (browsing) {
+                th.tabIndex = 0;
+                const sort = () => {
+                    state.descending = sorted ? !state.descending : false;
+                    state.orderBy = c.name;
+                    browse();
+                };
+                th.addEventListener('click', sort);
+                th.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sort(); } });
+            }
+            return th;
+        }));
+        const body = el('tbody');
+        for (const row of set.rows) {
+            const tr = el('tr');
+            row.forEach((value, i) => tr.append(renderCell(value, set.columns[i], fields[i])));
+            body.append(tr);
+        }
+        return el('div', { class: 'set' }, [header, el('div', { class: 'grid' }, [el('table', {}, [el('thead', {}, [head]), body])])]);
+    }
+
+    function renderCell(value, column, field) {
+        if (value === null || value === undefined) { return el('td', { class: 'null', text: 'NULL' }); }
+        const text = String(value);
+        const enumInfo = field?.enumType ? state.shape.enums[field.enumType] : undefined;
+        const name = enumInfo?.values?.[text];
+        const td = name !== undefined
+            ? el('td', { class: 'enum', title: `${field.enumType}::${name}` }, [document.createTextNode(name), el('span', { class: 'raw', text: `(${text})` })])
+            : el('td', {
+                class: NumericTypes.test(column.type) ? 'num' : undefined,
+                title: enumInfo?.extensible ? `${field.enumType}: a value added by an enum extension (its number is assigned per environment)` : text.length > 60 ? text : undefined,
+                text,
+            });
+        td.addEventListener('dblclick', () => send({ type: 'copy', text }));
+        return td;
+    }
+
+    function setRunning(running) {
+        state.running = running;
+        const cancel = $('cancel');
+        if (cancel) { cancel.disabled = !running; }
+        if (running) {
+            $('status').textContent = 'Running…';
+            $('error').hidden = true;
+        }
+    }
+
+    window.addEventListener('message', event => {
+        const msg = event.data;
+        switch (msg.type) {
+            case 'init':
+                state.mode = msg.mode;
+                $('editor').hidden = msg.mode.kind !== 'query';
+                if (msg.mode.kind === 'query') {
+                    $('sql').value = msg.mode.sql || '';
+                    $('sql').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runQuery(); } });
+                    $('sql').focus();
+                }
+                renderToolbar();
+                break;
+            case 'shape':
+                state.shape = msg.shape;
+                renderToolbar();
+                break;
+            case 'target':
+                state.targetText = msg.text;
+                if (state.canWrite !== msg.canWrite) {
+                    state.canWrite = msg.canWrite;
+                    renderToolbar();
+                }
+                $('target').textContent = msg.text;
+                break;
+            case 'running':
+                setRunning(true);
+                break;
+            case 'result':
+                setRunning(false);
+                renderResult(msg.result);
+                break;
+            case 'error':
+                setRunning(false);
+                $('status').textContent = '';
+                $('error').textContent = msg.message;
+                $('error').hidden = false;
+                break;
+        }
+    });
+
+    send({ type: 'ready' });
+}());

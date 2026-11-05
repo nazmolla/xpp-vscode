@@ -54,11 +54,25 @@ export class XppNavigation implements vscode.DefinitionProvider, vscode.HoverPro
         const range = document.getWordRangeAtPosition(position);
         const type = symbol.objectType.replace(/^Ax/, '');
         if (!symbol.member) {
-            const text = new vscode.MarkdownString(`**${symbol.objectName}** ? ${type}${symbol.modelName ? ` in model \`${symbol.modelName}\`` : ''}${symbol.isCustom ? ' (yours)' : ''}`);
+            const text = new vscode.MarkdownString(`**${symbol.objectName}** · ${type}${symbol.modelName ? ` in model \`${symbol.modelName}\`` : ''}${symbol.isCustom ? ' (yours)' : ''}`);
+            const found = await this.server.bridge('find_object', { objectName: symbol.objectName, exactMatch: true, maxResults: 10 }).catch(() => undefined);
+            const label: string | undefined = (found?.matches as { objectType: string; label?: string }[] | undefined)?.find(m => m.objectType === symbol.objectType)?.label;
+            if (label && !label.startsWith('@')) {
+                text.appendMarkdown(`\n\n${label.replace(/[\\`*_[\]<>]/g, '\\$&')}`);
+            }
+            const link = (title: string, commandId: string, args: unknown[]) => `[${title}](command:${commandId}?${encodeURIComponent(JSON.stringify(args))})`;
+            const element = { item: { objectType: symbol.objectType, objectName: symbol.objectName } };
+            text.appendMarkdown('\n\n' + [
+                link('Open designer', 'xpp.openDesigner', [symbol.objectType, symbol.objectName]),
+                link('Find references', 'xpp.findReferences', [element]),
+                ...(symbol.objectType === 'AxTable' ? [link('Browse data', 'xpp.database.browseTable', [element])] : []),
+                ...(['AxClass', 'AxTable', 'AxForm'].includes(symbol.objectType) ? [link('Analyze performance', 'xpp.analyzePerformance', [element])] : []),
+            ].join(' · '));
+            text.isTrusted = { enabledCommands: ['xpp.openDesigner', 'xpp.findReferences', 'xpp.database.browseTable', 'xpp.analyzePerformance'] };
             return new vscode.Hover(text, range);
         }
         const found = await this.definition(symbol);
-        const md = new vscode.MarkdownString(`**${found.owner.objectName}.${symbol.member}** ? ${found.signature ? 'method of ' : ''}${found.owner.objectType.replace(/^Ax/, '')} ${found.owner.objectName}`);
+        const md = new vscode.MarkdownString(`**${found.owner.objectName}.${symbol.member}** · ${found.signature ? 'method of ' : ''}${found.owner.objectType.replace(/^Ax/, '')} ${found.owner.objectName}`);
         if (found.signature) {
             md.appendCodeblock(found.signature, 'xpp');
         }

@@ -8,8 +8,8 @@ export const BridgeActions = [
     'get_table_fields', 'get_element_tree', 'get_element_properties', 'set_element_property', 'get_node_types', 'add_element_node',
     'delete_element_node', 'rename_element_node', 'duplicate_element_node', 'move_element_node', 'duplicate_object', 'drop_on_node',
     'drop_on_property', 'get_element_method', 'set_element_method', 'get_overrides', 'get_model', 'create_model', 'update_model',
-    'list_packages', 'dump_element', 'export_project', 'inspect_project_package', 'import_project',
-    'where_used', 'list_tags', 'tag_references',
+    'list_packages', 'dump_element', 'export_project', 'inspect_project_package', 'import_project', 'table_data_shape', 'analyze_performance', 'extension_compatibility', 'best_practice', 'create_package', 'sync_tables',
+    'where_used', 'list_tags', 'tag_references', 'label_usage',
 ] as const;
 
 export type BridgeAction = typeof BridgeActions[number];

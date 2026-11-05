@@ -2,7 +2,7 @@
   "name": "xpp-vscode",
   "displayName": "F&O Studio for VS Code",
   "description": "A full Dynamics 365 Finance & Operations development environment in VS Code: Application Explorer, designers, X++ code, build, deploy, debugging, and AI agent tools.",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "publisher": "MNazmi",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -82,6 +82,30 @@
             }
           }
         }
+      },
+      {
+        "name": "xpp_query_data",
+        "displayName": "Query F&O data",
+        "toolReferenceName": "xppQueryData",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(database)",
+        "modelDescription": "Runs ONE read-only T-SQL SELECT (or WITH ... SELECT) against the business database (AxDB) of the active environment and returns tab-separated rows. Use it to look at actual data while investigating behaviour (why a record does not post, which setup a company has). Rules: SELECT only (no INSERT/UPDATE/DELETE/EXEC/INTO; the batch is rolled back anyway); one statement; SQL names are the table and field names (e.g. CUSTTABLE.ACCOUNTNUM); filter per company with DATAAREAID = 'usmf' (lower case); always add TOP or WHERE and select only the columns you need. Enum fields hold integers; RecId/RefRecId values come back as text. If it answers NO DATABASE ACCESS, ask the user to run 'F&O Studio: Request Database Credentials'.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "sql": {
+              "type": "string",
+              "description": "One SELECT statement."
+            },
+            "maxRows": {
+              "type": "number",
+              "description": "Rows to return, 1-500. Default 50."
+            }
+          },
+          "required": [
+            "sql"
+          ]
+        }
       }
     ],
     "breakpoints": [
@@ -150,6 +174,10 @@
         "extensions": [
           ".xpp"
         ],
+        "icon": {
+          "light": "./media/xpp-file.svg",
+          "dark": "./media/xpp-file.svg"
+        },
         "configuration": "./language-configuration.json"
       }
     ],
@@ -197,9 +225,139 @@
         {
           "id": "xpp.infolog",
           "name": "Infolog"
+        },
+        {
+          "id": "xpp.activity",
+          "name": "Copilot Activity",
+          "visibility": "collapsed"
         }
       ]
     },
+    "chatParticipants": [
+      {
+        "id": "xpp.fno",
+        "name": "fno",
+        "fullName": "F&O Studio",
+        "description": "Ask about Dynamics 365 F&O code; I read the actual metadata",
+        "isSticky": true,
+        "commands": [
+          { "name": "design", "description": "Technical design document from a requirement" },
+          { "name": "extend", "description": "How to extend standard behaviour (CoC, events, metadata extensions)" },
+          { "name": "explain", "description": "Explain an element, method or process" },
+          { "name": "review", "description": "Review my changes (best practice, performance, CoC, security)" },
+          { "name": "support", "description": "Investigate an error message or call stack" },
+          { "name": "performance", "description": "Find performance problems in an element or process" }
+        ]
+      }
+    ],
+    "taskDefinitions": [
+      {
+        "type": "xpp",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "buildProject",
+              "buildModel"
+            ],
+            "description": "buildProject reports the problems of the project's elements; buildModel those of the whole model."
+          },
+          "model": {
+            "type": "string",
+            "description": "Model to build. Defaults to the active project's model."
+          }
+        }
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "xpp.gettingStarted",
+        "title": "Get started with F&O Studio",
+        "description": "Connect to a Dynamics 365 Finance & Operations environment, open a project, find your way around, build, and let Copilot help.",
+        "steps": [
+          {
+            "id": "connect",
+            "title": "Connect to your environment",
+            "description": "A unified developer environment needs its metadata and cross-reference database on this machine; F&O Studio downloads and configures them the way Visual Studio does. On a cloud-hosted or VHD environment there is nothing to do.\n[Connect to Environment](command:xpp.connectEnvironment)\n[Select an Environment](command:xpp.selectEnvironment)",
+            "media": {
+              "image": "media/icon.png",
+              "altText": "F&O Studio"
+            },
+            "completionEvents": [
+              "onCommand:xpp.connectEnvironment",
+              "onCommand:xpp.selectEnvironment"
+            ]
+          },
+          {
+            "id": "project",
+            "title": "Open or create a D365FO project",
+            "description": "Projects (.rnrproj) are shared with Visual Studio. The project's model is where new elements go.\n[Open Project](command:xpp.selectProject)\n[Create Project](command:xpp.createProject)",
+            "media": {
+              "image": "media/icon.png",
+              "altText": "F&O Studio"
+            },
+            "completionEvents": [
+              "onCommand:xpp.selectProject",
+              "onCommand:xpp.createProject",
+              "onCommand:xpp.openRecentProject"
+            ]
+          },
+          {
+            "id": "explore",
+            "title": "Find an element",
+            "description": "The Application Explorer lists every model's elements. Open one by name, or browse by type or model.\n[Open Element](command:xpp.openObject)",
+            "media": {
+              "image": "media/icon.png",
+              "altText": "F&O Studio"
+            },
+            "completionEvents": [
+              "onCommand:xpp.openObject",
+              "onView:xpp.aot"
+            ]
+          },
+          {
+            "id": "build",
+            "title": "Build your project",
+            "description": "Builds with the same compiler as Visual Studio; errors and warnings go to the Problems view.\n[Build Project](command:xpp.buildProject)",
+            "media": {
+              "image": "media/icon.png",
+              "altText": "F&O Studio"
+            },
+            "completionEvents": [
+              "onCommand:xpp.buildProject",
+              "onCommand:xpp.build"
+            ]
+          },
+          {
+            "id": "data",
+            "title": "Look at the data",
+            "description": "Browse a table's rows with enum names and a company filter, or run a read-only SQL query. A unified environment's database needs temporary credentials, which F&O Studio requests for you.\n[Browse Table Data](command:xpp.database.browseTable)\n[New SQL Query](command:xpp.database.newQuery)",
+            "media": {
+              "image": "media/icon.png",
+              "altText": "F&O Studio"
+            },
+            "completionEvents": [
+              "onCommand:xpp.database.browseTable",
+              "onCommand:xpp.database.newQuery"
+            ]
+          },
+          {
+            "id": "copilot",
+            "title": "Ask Copilot",
+            "description": "Copilot's agent mode uses F&O Studio's tools to read, create and extend elements, find references, check security, build and test.\n[Open Chat](command:workbench.action.chat.open)",
+            "media": {
+              "markdown": "media/walkthrough/copilot.md"
+            },
+            "completionEvents": [
+              "onCommand:workbench.action.chat.open"
+            ]
+          }
+        ]
+      }
+    ],
     "viewsWelcome": [
       {
         "view": "xpp.aot",
@@ -220,776 +378,986 @@
       {
         "command": "xpp.openObject",
         "title": "Open Object…",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(search)"
       },
       {
         "command": "xpp.openDesigner",
         "title": "Open Designer",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(symbol-structure)"
       },
       {
         "command": "xpp.viewCode",
         "title": "View Code",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(code)"
       },
       {
         "command": "xpp.openFormDesigner",
         "title": "Open Form Layout…",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(layout)"
       },
       {
         "command": "xpp.aot.filter",
         "title": "Filter Application Explorer…",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(filter)"
       },
       {
         "command": "xpp.aot.clearFilter",
         "title": "Clear Filter",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(filter-filled)"
       },
       {
         "command": "xpp.aot.modelView",
         "title": "Model View",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(list-tree)"
       },
       {
         "command": "xpp.aot.classicView",
         "title": "Classic View",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(list-flat)"
       },
       {
         "command": "xpp.designer.new",
         "title": "New…",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.tools.createModel",
         "title": "Create Model…",
-        "category": "Dynamics 365"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.tools.updateModel",
         "title": "Update Model Parameters…",
-        "category": "Dynamics 365"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.tools.modelDependencies",
         "title": "View Model Dependencies…",
-        "category": "Dynamics 365"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.tools.createPackage",
         "title": "Create Deployment Package…",
-        "category": "Dynamics 365"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.tools.findLabels",
         "title": "Find Labels…",
-        "category": "Dynamics 365"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.tools.options",
         "title": "Options…",
-        "category": "Dynamics 365"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.debug.start",
         "title": "Launch Debugger",
-        "category": "Dynamics 365",
+        "category": "F&O Studio",
         "icon": "$(debug-start)"
       },
       {
         "command": "xpp.infolog.clear",
         "title": "Clear Infolog",
-        "category": "Dynamics 365",
+        "category": "F&O Studio",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "xpp.infolog.filter",
+        "title": "Filter Infolog",
+        "category": "F&O Studio",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "xpp.infolog.copy",
+        "title": "Copy Infolog",
+        "category": "F&O Studio",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "xpp.activity.showChanges",
+        "title": "View Changes",
+        "category": "F&O Studio",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "xpp.activity.clear",
+        "title": "Clear Copilot Activity",
+        "category": "F&O Studio",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "xpp.createTeamRules",
+        "title": "Create Team Rules for Copilot",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.bestPractice",
+        "title": "Run Best Practice Checks on Project",
+        "category": "F&O Studio",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "xpp.reviewChanges",
+        "title": "Review My Changes",
+        "category": "F&O Studio",
+        "icon": "$(git-pull-request)"
+      },
+      {
+        "command": "xpp.preDeployChecklist",
+        "title": "Pre-Deploy Checklist",
+        "category": "F&O Studio",
+        "icon": "$(tasklist)"
+      },
+      {
+        "command": "xpp.showUsageStatistics",
+        "title": "Show Usage Statistics",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.newSysOperationJob",
+        "title": "New Batch Job (SysOperation)…",
+        "category": "F&O Studio",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "xpp.newReport",
+        "title": "New Report…",
+        "category": "F&O Studio",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "xpp.newWorkflow",
+        "title": "New Approval Workflow…",
+        "category": "F&O Studio",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "xpp.newService",
+        "title": "New Custom Service…",
+        "category": "F&O Studio",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "xpp.translateMissingLabels",
+        "title": "Translate Missing Labels…",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.findUnusedLabels",
+        "title": "Find Unused Labels…",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.analyzeTrace",
+        "title": "Analyze Trace…",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.syncTables",
+        "title": "Synchronize Table(s) with the Database",
+        "category": "F&O Studio",
+        "icon": "$(database)"
+      },
+      {
+        "command": "xpp.showChangedElements",
+        "title": "Show Changed Elements",
+        "category": "F&O Studio",
+        "icon": "$(git-compare)"
       },
       {
         "command": "xpp.tools.exportProject",
         "title": "Export Project…",
-        "category": "Dynamics 365"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.tools.importProject",
         "title": "Import Project…",
-        "category": "Dynamics 365"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.tools.findTagReferences",
         "title": "Find Tag References…",
-        "category": "Dynamics 365"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.compare",
         "title": "Compare Code…",
-        "category": "Dynamics 365"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.compareMetadata",
         "title": "Compare Metadata…",
-        "category": "Dynamics 365"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.viewHierarchy",
         "title": "View Hierarchy",
-        "category": "Dynamics 365"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.viewReferences",
         "title": "View References",
-        "category": "Dynamics 365"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.viewErd",
         "title": "View Entity Relationship Diagram (ERD)",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "xpp.database.browseTable",
+        "title": "Browse Table Data",
+        "category": "F&O Studio",
+        "icon": "$(table)"
+      },
+      {
+        "command": "xpp.database.newQuery",
+        "title": "New SQL Query",
+        "category": "F&O Studio",
+        "icon": "$(database)"
+      },
+      {
+        "command": "xpp.database.requestCredentials",
+        "title": "Request Database Credentials",
+        "category": "F&O Studio",
+        "icon": "$(key)"
+      },
+      {
+        "command": "xpp.database.forgetCredentials",
+        "title": "Forget Database Credentials",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.database.testConnection",
+        "title": "Test Database Connection",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.database.copyConnection",
+        "title": "Copy Database Connection Detail",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.database.openSsms",
+        "title": "Open Database in SQL Server Management Studio",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.database.insights",
+        "title": "Database Performance Insights",
+        "category": "F&O Studio",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "xpp.database.menu",
+        "title": "Database",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.restartServer",
+        "title": "Restart X++ Server",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.analyzePerformance",
+        "title": "Analyze Performance",
+        "category": "F&O Studio",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "xpp.telemetryQueries",
+        "title": "Telemetry Queries (Application Insights KQL)",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.upgradeReadiness",
+        "title": "Upgrade Readiness (Obsolete API Uses)",
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.addToProject",
         "title": "Add to Project",
-        "category": "Dynamics 365",
+        "category": "F&O Studio",
         "icon": "$(add)"
       },
       {
         "command": "xpp.deleteObject",
         "title": "Delete",
-        "category": "Dynamics 365",
+        "category": "F&O Studio",
         "icon": "$(trash)"
       },
       {
         "command": "xpp.excludeFromProject",
         "title": "Exclude from Project",
-        "category": "Dynamics 365",
+        "category": "F&O Studio",
         "icon": "$(remove)"
       },
       {
         "command": "xpp.runTests",
         "title": "Run Tests",
-        "category": "Dynamics 365",
+        "category": "F&O Studio",
         "icon": "$(beaker)"
       },
       {
         "command": "xpp.createExtension",
         "title": "Create Extension",
-        "category": "Dynamics 365"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.createCodeExtension",
         "title": "Create Code Extension",
-        "category": "Dynamics 365"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.findReferences",
         "title": "Find References",
-        "category": "Dynamics 365"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.openInBrowser",
         "title": "Open in Browser",
-        "category": "Dynamics 365"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.openTableBrowser",
         "title": "Open Table Browser",
-        "category": "Dynamics 365"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.designer.newMethod",
         "title": "New Method…",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.designer.override",
         "title": "Override Method…",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.designer.openMethod",
         "title": "View Code",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.designer.delete",
         "title": "Delete",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.designer.copyEventHandler",
         "title": "Copy Event Handler Method",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.designer.findEventHandlers",
         "title": "Find Event Handlers",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.designer.rename",
         "title": "Rename…",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.designer.duplicate",
         "title": "Duplicate…",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.designer.moveUp",
         "title": "Move Up",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.designer.addElement",
         "title": "Add from Application Explorer…",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.designer.moveDown",
         "title": "Move Down",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.duplicateObject",
         "title": "Duplicate…",
-        "category": "Dynamics 365"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.copyName",
         "title": "Copy Name",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.copyReference",
         "title": "Copy X++ Reference",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.openDesignerToSide",
         "title": "Open to the Side",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.revealInAot",
         "title": "Locate in Application Explorer",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.viewHistory",
         "title": "View History",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(history)"
       },
       {
         "command": "xpp.openReference",
         "title": "Open Referenced Element",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.ExtendedDataType",
         "title": "Go to Extended Data Type",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.EnumType",
         "title": "Go to Enum",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.BaseEdt",
         "title": "Go to Base Extended Data Type",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.BaseTable",
         "title": "Go to Base Table",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.BaseObject",
         "title": "Go to Base Object",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.Table",
         "title": "Go to Table",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.RelatedTable",
         "title": "Go to Related Table",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.ReferenceTable",
         "title": "Go to Reference Table",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.MappingTable",
         "title": "Go to Mapping Table",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.PrimaryTable",
         "title": "Go to Primary Table",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.StagingTable",
         "title": "Go to Staging Table",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.MenuItem",
         "title": "Go to Menu Item",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.Form",
         "title": "Go to Form",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.Class",
         "title": "Go to Class",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.Report",
         "title": "Go to Report",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.Query",
         "title": "Go to Query",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.Part",
         "title": "Go to Part",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.Document",
         "title": "Go to Document Class",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.DocumentMenuItem",
         "title": "Go to Document Menu Item",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.ActionMenuItem",
         "title": "Go to Action Menu Item",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.SubmitToWorkflowMenuItem",
         "title": "Go to Submit Menu Item",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.ResubmitMenuItem",
         "title": "Go to Resubmit Menu Item",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.DelegateMenuItem",
         "title": "Go to Delegate Menu Item",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.CancelMenuItem",
         "title": "Go to Cancel Menu Item",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.FormRef",
         "title": "Go to Form Ref Menu Item",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.ListPageRef",
         "title": "Go to List Page Ref Menu Item",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.ReportRef",
         "title": "Go to Report Ref Menu Item",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.PreviewPartRef",
         "title": "Go to Preview Part Menu Item",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.HyperLinkMenuItem",
         "title": "Go to Hyperlink Menu Item",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.SourceEDT",
         "title": "Go to Source Extended Data Type",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.EnumTypeParameter",
         "title": "Go to Enum Type Parameter",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.Privilege",
         "title": "Go to Privilege",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.Duty",
         "title": "Go to Duty",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.Role",
         "title": "Go to Role",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.DataEntity",
         "title": "Go to Data Entity",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.Service",
         "title": "Go to Service",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.Menu",
         "title": "Go to Menu",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.Tile",
         "title": "Go to Tile",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.KPI",
         "title": "Go to KPI",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.WorkflowElement",
         "title": "Go to Workflow Element",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.WorkflowType",
         "title": "Go to Workflow Type",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.WorkflowCategory",
         "title": "Go to Workflow Category",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.ProviderClass",
         "title": "Go to Provider Class",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.PresenceClass",
         "title": "Go to Presence Class",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.ControlClass",
         "title": "Go to Control Class",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.InteractionClass",
         "title": "Go to Interaction Class",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.FeatureClass",
         "title": "Go to Feature Class",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.StartedEventHandler",
         "title": "Go to Started Event Handler",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.CompletedEventHandler",
         "title": "Go to Completed Event Handler",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.CanceledEventHandler",
         "title": "Go to Canceled Event Handler",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.WorkItemsCreatedEventHandler",
         "title": "Go to Work Items Created Event Handler",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.ConfigDataChangeEventHandler",
         "title": "Go to Config Data Change Event Handler",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.ExecutionEventHandler",
         "title": "Go to Execution Event Handler",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.EventHandler",
         "title": "Go to Event Handler",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.ConfigurationKey",
         "title": "Go to Configuration Key",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.CountryConfigurationKey",
         "title": "Go to Country Configuration Key",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.ParentKey",
         "title": "Go to Parent Configuration Key",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.LicenseCode",
         "title": "Go to License Code",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.Label",
         "title": "Go to Label",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.build",
         "title": "Build Model",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(tools)"
       },
       {
         "command": "xpp.buildProject",
         "title": "Build Project",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(wrench)"
       },
       {
         "command": "xpp.refreshProject",
         "title": "Refresh Project",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(refresh)"
       },
       {
         "command": "xpp.refreshAot",
         "title": "Refresh Application Explorer",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(refresh)"
       },
       {
         "command": "xpp.selectProject",
         "title": "Open D365FO Project…",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(project)"
       },
       {
         "command": "xpp.openRecentProject",
         "title": "Open Recent D365FO Project…",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(history)"
       },
       {
         "command": "xpp.openProject",
         "title": "Open D365FO Project",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.closeProject",
         "title": "Close D365FO Project",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(close)"
       },
       {
         "command": "xpp.createProject",
         "title": "Create D365FO Project?",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(new-folder)"
       },
       {
         "command": "xpp.selectEnvironment",
         "title": "Select Environment…",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(server-environment)"
       },
       {
         "command": "xpp.connectEnvironment",
         "title": "Connect to Environment…",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.checkEnvironment",
         "title": "Check Environment Connection",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.showEnvironment",
         "title": "Show Active Environment",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.pac.signIn",
         "title": "Sign In to Environment (pac)",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.pac.init",
         "title": "Initialize Deployment Solution (pac)",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.pac.deploy",
         "title": "Deploy Models to Environment (pac)",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.pac.dbSync",
         "title": "Synchronize Database (pac)",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.codeIntel.rebuildIndex",
         "title": "Rebuild Extension Index",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(refresh)"
       },
       {
         "command": "xpp.codeIntel.showExtensions",
         "title": "Show Extensions and Handlers?",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(extensions)"
       },
       {
         "command": "xpp.codeIntel.toggle",
         "title": "Toggle Code Intelligence Feature",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.searchCode",
         "title": "Search Code in All Packages",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(search-fuzzy)"
       },
       {
         "command": "xpp.findMessageSource",
         "title": "Find Message Source",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(search)"
       },
       {
         "command": "xpp.findExamples",
         "title": "Find Similar Standard Implementations",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(lightbulb)"
       },
       {
         "command": "xpp.addToPrivilege",
         "title": "Add to Privilege…",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.generateTests",
         "title": "Generate SysTest Class",
-        "category": "X++"
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.runSnippet",
         "title": "Run Snippet in Environment",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(play)"
       },
       {
         "command": "xpp.security.refresh",
         "title": "Refresh Security",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(refresh)"
       },
       {
         "command": "xpp.security.filter",
         "title": "Filter Roles…",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(filter)"
       },
       {
         "command": "xpp.security.clearFilter",
         "title": "Clear Role Filter",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(filter-filled)"
       },
       {
         "command": "xpp.security.analyzeLicense",
         "title": "Analyze License",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(credit-card)"
       },
       {
         "command": "xpp.security.whoCanAccess",
         "title": "Who Can Access",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(person)"
       },
       {
         "command": "xpp.security.findGaps",
         "title": "Find Security Gaps",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(checklist)"
       },
       {
         "command": "xpp.security.checkSod",
         "title": "Check Segregation of Duties",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(law)"
       },
       {
         "command": "xpp.security.report",
         "title": "Security Report…",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(file-text)"
       },
       {
         "command": "xpp.security.editSodRules",
         "title": "Edit Segregation of Duties Rules",
-        "category": "X++",
+        "category": "F&O Studio",
         "icon": "$(edit)"
       }
     ],
     "menus": {
+      "explorer/context": [
+        {
+          "command": "xpp.analyzeTrace",
+          "when": "resourceExtname == .etl",
+          "group": "navigation@20"
+        }
+      ],
       "view/title": [
+        {
+          "command": "xpp.bestPractice",
+          "when": "view == xpp.project && xpp.hasProject",
+          "group": "3_check@1"
+        },
+        {
+          "command": "xpp.reviewChanges",
+          "when": "view == xpp.project && xpp.hasProject",
+          "group": "3_check@2"
+        },
+        {
+          "command": "xpp.preDeployChecklist",
+          "when": "view == xpp.project && xpp.hasProject",
+          "group": "3_check@3"
+        },
+        {
+          "command": "xpp.infolog.filter",
+          "when": "view == xpp.infolog",
+          "group": "navigation@0"
+        },
+        {
+          "command": "xpp.infolog.copy",
+          "when": "view == xpp.infolog",
+          "group": "navigation@2"
+        },
+        {
+          "command": "xpp.activity.clear",
+          "when": "view == xpp.activity",
+          "group": "navigation@1"
+        },
         {
           "command": "xpp.infolog.clear",
           "when": "view == xpp.infolog",
@@ -1123,6 +1491,11 @@
       ],
       "view/item/context": [
         {
+          "command": "xpp.activity.showChanges",
+          "when": "view == xpp.activity && viewItem == xppActivityWrite",
+          "group": "inline"
+        },
+        {
           "command": "xpp.findMessageSource",
           "when": "view == xpp.infolog && viewItem == xppInfologEntry",
           "group": "inline"
@@ -1246,6 +1619,31 @@
           "command": "xpp.viewErd",
           "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\btable\\b/",
           "group": "4_refs@4"
+        },
+        {
+          "command": "xpp.database.browseTable",
+          "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\btable\\b/",
+          "group": "4_refs@5"
+        },
+        {
+          "command": "xpp.analyzePerformance",
+          "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\b(class|table|form)\\b/",
+          "group": "4_refs@6"
+        },
+        {
+          "command": "xpp.telemetryQueries",
+          "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\bform\\b/",
+          "group": "4_refs@7"
+        },
+        {
+          "command": "xpp.syncTables",
+          "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\btable\\b/ && xpp.localEnvironment",
+          "group": "5_data@1"
+        },
+        {
+          "command": "xpp.upgradeReadiness",
+          "when": "view == xpp.aot && viewItem == 'xppModel custom'",
+          "group": "4_refs@1"
         },
         {
           "command": "xpp.compare",
@@ -1810,6 +2208,11 @@
           "group": "0_4_refs@4"
         },
         {
+          "command": "xpp.database.browseTable",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\btable\\b/",
+          "group": "0_4_refs@4"
+        },
+        {
           "command": "xpp.findExamples",
           "when": "webviewId == 'xppElementDesigner' && xppRoot",
           "group": "0_4_refs@5"
@@ -1841,6 +2244,26 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "xpp.database.menu",
+          "when": "false"
+        },
+        {
+          "command": "xpp.aot.modelView",
+          "when": "false"
+        },
+        {
+          "command": "xpp.aot.classicView",
+          "when": "false"
+        },
+        {
+          "command": "xpp.aot.clearFilter",
+          "when": "false"
+        },
+        {
+          "command": "xpp.security.clearFilter",
+          "when": "false"
+        },
         {
           "command": "xpp.openProject",
           "when": "false"
@@ -2220,6 +2643,11 @@
           "command": "xpp.viewHistory",
           "when": "resourceScheme == xpp",
           "group": "navigation@11"
+        },
+        {
+          "command": "xpp.analyzePerformance",
+          "when": "resourceScheme == xpp",
+          "group": "navigation@12"
         }
       ]
     },
@@ -2251,7 +2679,7 @@
         "xpp.environmentUrl": {
           "type": "string",
           "default": "",
-          "description": "Dataverse URL of your default unified developer environment, e.g. https://yourorg.crm.dynamics.com. X++: Select Environment chooses another one per workspace."
+          "description": "Dataverse URL of your default unified developer environment, e.g. https://yourorg.crm.dynamics.com. F&O Studio: Select Environment chooses another one per workspace."
         },
         "xpp.auth.clientId": {
           "type": "string",
@@ -2278,7 +2706,7 @@
           "type": "string",
           "default": "",
           "scope": "machine",
-          "description": "Path to Microsoft.Dynamics.AX.DebuggerProxy.exe. Defaults to the FinOps tools installed by X++: Connect to Environment."
+          "description": "Path to Microsoft.Dynamics.AX.DebuggerProxy.exe. Defaults to the FinOps tools installed by F&O Studio: Connect to Environment."
         },
         "xpp.financeAndOperationsUrl": {
           "type": "string",
@@ -2380,10 +2808,20 @@
           ],
           "description": "Fields shown in each ERD table box."
         },
+        "xpp.usageStatistics": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Count which F&O Studio commands you run, on this machine only (nothing is sent anywhere). **Show Usage Statistics** lists the counts."
+        },
+        "xpp.git.baseBranch": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Branch your work is compared with (e.g. `main`): **Show Changed Elements**, **Review My Changes** and the change marks in the project view include what the current branch changed since it left this branch. Empty: only uncommitted changes."
+        },
         "xpp.security.sodRulesFile": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Segregation of duties rules (JSON: `Name`, `First`, `Second`, `Severity`, `Reason`; `First` and `Second` are duty names). Empty uses the built-in rules. **X++: Edit Segregation of Duties Rules** creates the file from the built-in rules. A relative path is under the first workspace folder."
+          "markdownDescription": "Segregation of duties rules (JSON: `Name`, `First`, `Second`, `Severity`, `Reason`; `First` and `Second` are duty names). Empty uses the built-in rules. **F&O Studio: Edit Segregation of Duties Rules** creates the file from the built-in rules. A relative path is under the first workspace folder."
         }
       }
     }

@@ -15,6 +15,8 @@ namespace XppVsCode.Server.MetaModel
         string ObjectModelName(string objectType, string objectName);
         XppProject ActiveProject { get; }
         Dictionary<string, AxTableField> EffectiveTableFields(string tableName);
+        /// <summary>Label text of "@File:Id" (en-US); other values unchanged.</summary>
+        string ResolveLabel(string value);
         /// <summary>Reloads the metadata API after models changed on disk.</summary>
         void ResetHost();
         void InvalidateCaches();
@@ -30,6 +32,7 @@ namespace XppVsCode.Server.MetaModel
         string IMetadataCore.ObjectModelName(string objectType, string objectName) => GetObjectModelName(objectType, objectName);
         XppProject IMetadataCore.ActiveProject => GetActiveProject();
         Dictionary<string, AxTableField> IMetadataCore.EffectiveTableFields(string tableName) => GetEffectiveTableFields(tableName);
+        string IMetadataCore.ResolveLabel(string value) => ResolveLabel(value);
         void IMetadataCore.ResetHost() => _host.Reset();
         void IMetadataCore.InvalidateCaches() => InvalidateCaches();
     }

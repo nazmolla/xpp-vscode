@@ -30,7 +30,7 @@ interface SearchOptions {
     last: string;
 }
 
-/** X++: Search Code in All Packages: text or regex over the code of every package, then a pick list of matching lines. */
+/** F&O Studio: Search Code in All Packages: text or regex over the code of every package, then a pick list of matching lines. */
 export async function searchCode(ctx: ProductivityContext, state: vscode.Memento): Promise<void> {
     const options = state.get<SearchOptions>(OptionsKey, { regex: false, caseSensitive: false, last: '' });
     const editor = vscode.window.activeTextEditor;

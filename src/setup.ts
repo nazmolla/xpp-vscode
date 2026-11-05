@@ -15,7 +15,7 @@ const LocalDb = '(LocalDB)\\MSSQLLocalDB';
 type Step = (message: string) => void;
 
 /**
- * X++: Connect to Environment — the same client setup Visual Studio's Power Platform Tools perform:
+ * F&O Studio: Connect to Environment — the same client setup Visual Studio's Power Platform Tools perform:
  * download system metadata, cross-reference database and FinOps tools, extract, restore, configure.
  */
 export async function connectEnvironment(context: vscode.ExtensionContext, log: vscode.OutputChannel): Promise<boolean> {
