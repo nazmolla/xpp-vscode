@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { existsSync } from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -135,13 +135,18 @@ export class PacCommands {
 
     /** Makes the environment's profile from Sign In active. */
     private selectProfile(url: string): Promise<boolean> {
-        // The name comes from a host name ([a-z0-9-]), so the command line needs no further quoting.
-        return new Promise(resolve => exec(`"${this.pac()}" auth select --name ${profileName(url)}`,
-            { windowsHide: true, timeout: 60_000 }, err => resolve(!err)));
+        const pac = this.pac();
+        const args = ['auth', 'select', '--name', profileName(url)];
+        const options = { windowsHide: true, timeout: 60_000 };
+        return new Promise(resolve => pac === 'pac' || /\.(cmd|bat)$/i.test(pac)
+            // pac from PATH may be a .cmd shim, which needs a shell; pac() has no quotes and the name is a host name ([a-z0-9-]).
+            ? exec(`"${pac}" ${args.join(' ')}`, options, err => resolve(!err))
+            : execFile(pac, args, options, err => resolve(!err)));
     }
 
     private pac(): string {
-        return vscode.workspace.getConfiguration('xpp').get<string>('pacPath') || 'pac';
+        const configured = vscode.workspace.getConfiguration('xpp').get<string>('pacPath') || 'pac';
+        return configured.includes('"') ? 'pac' : configured;
     }
 
     private workspaceRoot(): string | undefined {

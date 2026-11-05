@@ -6,6 +6,8 @@
     let languages = null;      // null = server default
     let editing = null;        // label ID being edited, '' for a new label
     let searchTimer;
+    // The label Go to Label opened: its row is marked (the search also shows other IDs containing it).
+    let highlight = document.body.dataset.search || '';
 
     const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const load = () => vscode.postMessage({ type: 'load', search: $('search').value, languages });
@@ -27,6 +29,8 @@
             rows.push(editing === e.id ? editRow(e, langs, false) : viewRow(e, langs));
         }
         $('labels').querySelector('tbody').innerHTML = rows.join('');
+        const marked = $('labels').querySelector('tr.highlight');
+        if (marked) marked.scrollIntoView({ block: 'center' });
         $('footer').textContent = data.entries.length < data.matches
             ? 'Showing ' + data.entries.length + ' of ' + data.matches + ' matching labels (' + data.total + ' in ' + data.language + '). Refine the search to see others.'
             : data.matches + ' label(s)' + (data.matches < data.total ? ' match (' + data.total + ' in ' + data.language + ')' : '') + '.';
@@ -34,7 +38,8 @@
 
     function viewRow(e, langs) {
         const id = esc(e.id);
-        return '<tr data-id="' + id + '"><td class="id">' + id + '</td>'
+        const marked = highlight && (e.id === highlight || e.id === '@' + highlight);
+        return '<tr data-id="' + id + '"' + (marked ? ' class="highlight"' : '') + '><td class="id">' + id + '</td>'
             + langs.map(l => '<td>' + (e.texts[l] === undefined ? '<span class="missing">(none)</span>' : esc(e.texts[l])) + '</td>').join('')
             + '<td class="comment">' + esc(e.comment) + '</td><td class="actions">'
             + '<button data-act="copy" title="Copy the reference to use in properties and code">Copy @ref</button>'
@@ -104,7 +109,9 @@
         const msg = ev.data;
         if (msg.type === 'data') { data = msg.data; showError(''); render(); }
         else if (msg.type === 'saved') { editing = null; load(); }
+        else if (msg.type === 'search') { highlight = msg.search; $('search').value = msg.search; load(); }
         else if (msg.type === 'error') showError(msg.message);
     });
+    $('search').value = document.body.dataset.search || '';
     load();
 }());

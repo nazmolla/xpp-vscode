@@ -43,7 +43,7 @@ namespace XppVsCode.Server
         private static void Run(DynamicsMetadataConfig config, string projectFile)
         {
             var bridge = new MetaModelBridge(new MetadataHost(config), new LabelStore(config), projectFile);
-            var client = new BridgeClient(new MetaModelBridgeServer(bridge));
+            var client = new BridgeClient(new MetaModelBridgeServer(bridge, bridge));
             new McpStdioServer(new ToolRouter(client), client, Version).Run();
         }
 

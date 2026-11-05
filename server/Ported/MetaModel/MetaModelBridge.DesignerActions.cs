@@ -298,15 +298,15 @@ namespace XppVsCode.Server.MetaModel
         private static string TypeLabel(Type type, Type baseType)
         {
             if (type == baseType)
-                return SplitWords(type.Name.StartsWith("Ax") ? type.Name.Substring(2) : type.Name);
+                return SplitWords(type.Name.StartsWith("Ax", StringComparison.Ordinal) ? type.Name.Substring(2) : type.Name);
             string name = type.Name;
             // AxTableFieldString under AxTableField -> "String"; AxFormStringControl under AxFormControl -> "String".
-            string prefix = baseType.Name.EndsWith("Control") ? baseType.Name.Substring(0, baseType.Name.Length - "Control".Length) : baseType.Name;
-            if (name.StartsWith(prefix) && name.Length > prefix.Length)
+            string prefix = baseType.Name.EndsWith("Control", StringComparison.Ordinal) ? baseType.Name.Substring(0, baseType.Name.Length - "Control".Length) : baseType.Name;
+            if (name.StartsWith(prefix, StringComparison.Ordinal) && name.Length > prefix.Length)
                 name = name.Substring(prefix.Length);
-            else if (name.StartsWith("Ax"))
+            else if (name.StartsWith("Ax", StringComparison.Ordinal))
                 name = name.Substring(2);
-            if (name.EndsWith("Control") && name.Length > "Control".Length)
+            if (name.EndsWith("Control", StringComparison.Ordinal) && name.Length > "Control".Length)
                 name = name.Substring(0, name.Length - "Control".Length);
             return SplitWords(name);
         }
@@ -366,8 +366,8 @@ namespace XppVsCode.Server.MetaModel
             foreach (string raw in (source ?? "").Replace("\r\n", "\n").Split('\n'))
             {
                 string line = raw.Trim();
-                if (line.Length == 0 || line.StartsWith("//") || line.StartsWith("[")) continue;
-                if (line.StartsWith("{")) break;
+                if (line.Length == 0 || line.StartsWith("//", StringComparison.Ordinal) || line.StartsWith("[", StringComparison.Ordinal)) continue;
+                if (line.StartsWith("{", StringComparison.Ordinal)) break;
                 lines.Add(line);
                 if (line.Contains("{")) break;
             }
@@ -432,9 +432,9 @@ namespace XppVsCode.Server.MetaModel
                 list = TableOverrides;
             else if (node is AxForm)
                 list = FormOverrides;
-            else if (typeName.StartsWith("AxFormDataSource") && typeName.EndsWith("Field"))
+            else if (typeName.StartsWith("AxFormDataSource", StringComparison.Ordinal) && typeName.EndsWith("Field", StringComparison.Ordinal))
                 list = DataFieldOverrides;
-            else if (typeName.StartsWith("AxFormDataSource"))
+            else if (typeName.StartsWith("AxFormDataSource", StringComparison.Ordinal))
                 list = DataSourceOverrides;
             else if (node is AxFormControl)
                 list = typeName.Contains("Button") ? ButtonOverrides : ControlOverrides;

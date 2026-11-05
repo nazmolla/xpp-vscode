@@ -211,7 +211,7 @@ ORDER BY (SELECT COUNT(*) FROM [References] r3 WHERE r3.TargetId = t.Id)",
                         set.Add(Path.GetFileName(model));
                 }
             }
-            catch { }
+            catch (Exception ex) { McpLogger.Log("Listing custom models failed: " + ex.Message); }
             return set;
         }
 
@@ -235,7 +235,7 @@ GROUP BY " + obj;
                     while (r.Read())
                     {
                         string module = r.IsDBNull(1) ? null : r.GetString(1);
-                        if (module != null && (custom.Contains(module) || (module.IndexOf("Test", StringComparison.OrdinalIgnoreCase) >= 0 && !recipe.Target.EndsWith("SysTestCase")))) continue;
+                        if (module != null && (custom.Contains(module) || (module.IndexOf("Test", StringComparison.OrdinalIgnoreCase) >= 0 && !recipe.Target.EndsWith("SysTestCase", StringComparison.Ordinal)))) continue;
                         candidates.Add(new KeyValuePair<string, string>(r.GetString(0), module));
                     }
             }
@@ -260,9 +260,9 @@ GROUP BY " + obj;
 
         // posting -> post, journals -> journal, created -> creat (still a substring of "create").
         private static string Stem(string w) =>
-            w.Length > 6 && w.EndsWith("ing") ? w.Substring(0, w.Length - 3)
-            : w.Length > 5 && w.EndsWith("ed") ? w.Substring(0, w.Length - 2)
-            : w.Length > 4 && w.EndsWith("s") && !w.EndsWith("ss") ? w.Substring(0, w.Length - 1)
+            w.Length > 6 && w.EndsWith("ing", StringComparison.Ordinal) ? w.Substring(0, w.Length - 3)
+            : w.Length > 5 && w.EndsWith("ed", StringComparison.Ordinal) ? w.Substring(0, w.Length - 2)
+            : w.Length > 4 && w.EndsWith("s", StringComparison.Ordinal) && !w.EndsWith("ss", StringComparison.Ordinal) ? w.Substring(0, w.Length - 1)
             : w;
 
         /// <summary>Free text: classes whose name (then method names) contain the most query words.</summary>
@@ -271,7 +271,7 @@ GROUP BY " + obj;
             var words = q.Split(' ').Where(w => w.Length >= 3 && !StopWords.Contains(w)).Select(Stem).Where(w => w.Length >= 3)
                 .Distinct().Take(5).ToList();
             if (words.Count == 0) return new List<Example>();
-            bool tests = words.Any(w => w.StartsWith("test"));
+            bool tests = words.Any(w => w.StartsWith("test", StringComparison.Ordinal));
             var args = words.Select((w, i) => ("@w" + i, (object)("%" + Like(w) + "%"))).ToArray();
             string all = string.Join(" AND ", words.Select((w, i) => "Path LIKE @w" + i));
             string any = string.Join(" OR ", words.Select((w, i) => "Path LIKE @w" + i));
@@ -325,7 +325,7 @@ GROUP BY " + obj;
                             _formPatterns = ((Dictionary<string, object>)cached["forms"]).ToDictionary(kv => kv.Key,
                                 kv => ((System.Collections.ArrayList)kv.Value).Cast<string>().ToList(), StringComparer.OrdinalIgnoreCase);
                     }
-                    catch { }
+                    catch (Exception ex) { McpLogger.Log("Reading the form pattern cache failed: " + ex.Message); }
                 }
                 if (_formPatterns == null)
                 {
@@ -348,7 +348,7 @@ GROUP BY " + obj;
                         Directory.CreateDirectory(Path.GetDirectoryName(cacheFile));
                         File.WriteAllText(cacheFile, serializer.Serialize(new Dictionary<string, object> { ["key"] = key, ["forms"] = _formPatterns }));
                     }
-                    catch { }
+                    catch (Exception ex) { McpLogger.Log("Writing the form pattern cache failed: " + ex.Message); }
                 }
             }
             if (!_formPatterns.TryGetValue(pattern, out var forms)) return new List<Example>();
@@ -410,7 +410,7 @@ GROUP BY " + obj;
                             }
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { McpLogger.Log("Reading the obsolete API cache failed: " + ex.Message); }
                     if (_obsoleteKey != key)
                     {
                         _obsolete = BuildObsolete(conn);
@@ -420,7 +420,7 @@ GROUP BY " + obj;
                             Directory.CreateDirectory(Path.GetDirectoryName(cacheFile));
                             File.WriteAllText(cacheFile, serializer.Serialize(new Dictionary<string, object> { ["key"] = key, ["items"] = _obsolete }));
                         }
-                        catch { }
+                        catch (Exception ex) { McpLogger.Log("Writing the obsolete API cache failed: " + ex.Message); }
                     }
                 }
                 return new Dictionary<string, object> { ["success"] = true, ["items"] = _obsolete };

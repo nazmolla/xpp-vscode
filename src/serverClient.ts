@@ -1,9 +1,10 @@
 import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import * as vscode from 'vscode';
+import { BridgeAction, BridgeResult } from './bridgeContract';
 import { readActiveEnvironment } from './environment';
 
 interface Pending {
-    resolve: (value: any) => void;
+    resolve: (value: unknown) => void;
     reject: (reason: Error) => void;
     timer: NodeJS.Timeout;
 }
@@ -28,7 +29,7 @@ export class XppServerClient implements vscode.Disposable {
     ) { }
 
     /** Calls a metadata bridge action and returns its JSON result. */
-    async bridge<T = any>(action: string, body: object = {}): Promise<T> {
+    async bridge<T = BridgeResult>(action: BridgeAction, body: object = {}): Promise<T> {
         await this.ensureStarted();
         const raw = await this.request('xpp/bridge', { action, body });
         const result = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -36,7 +37,7 @@ export class XppServerClient implements vscode.Disposable {
     }
 
     /** Calls a language-service action (xpp/lang) and returns its JSON result. */
-    async lang<T = any>(action: string, body: object = {}): Promise<T> {
+    async lang<T = BridgeResult>(action: string, body: object = {}): Promise<T> {
         await this.ensureStarted();
         const raw = await this.request('xpp/lang', { action, body });
         return (typeof raw === 'string' ? JSON.parse(raw) : raw) as T;
@@ -45,7 +46,7 @@ export class XppServerClient implements vscode.Disposable {
     /** Calls an MCP tool and returns its text output. */
     async tool(name: string, args: object): Promise<{ text: string; isError: boolean }> {
         await this.ensureStarted();
-        const result = await this.request('tools/call', { name, arguments: args });
+        const result = await this.request('tools/call', { name, arguments: args }) as { content?: { text?: string }[]; isError?: boolean } | undefined;
         return { text: result?.content?.[0]?.text ?? '', isError: !!result?.isError };
     }
 
@@ -101,7 +102,7 @@ export class XppServerClient implements vscode.Disposable {
         await this.request('initialize', { protocolVersion: '2025-06-18', clientInfo: { name: 'xpp-vscode', version: '0' } });
     }
 
-    private request(method: string, params: object): Promise<any> {
+    private request(method: string, params: object): Promise<unknown> {
         const child = this.process;
         if (!child) {
             return Promise.reject(new Error('X++ server is not running.'));
@@ -126,18 +127,18 @@ export class XppServerClient implements vscode.Disposable {
             if (!line) {
                 continue;
             }
-            let message: any;
+            let message: { id?: number; result?: unknown; error?: { message: string } };
             try {
                 message = JSON.parse(line);
             } catch {
                 this.log.appendLine(`Unreadable server output: ${line.slice(0, 200)}`);
                 continue;
             }
-            const pending = this.pending.get(message.id);
+            const pending = message.id === undefined ? undefined : this.pending.get(message.id);
             if (!pending) {
                 continue;
             }
-            this.pending.delete(message.id);
+            this.pending.delete(message.id!);
             clearTimeout(pending.timer);
             if (message.error) {
                 pending.reject(new Error(message.error.message));

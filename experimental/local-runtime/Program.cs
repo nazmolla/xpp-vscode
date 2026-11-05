@@ -17,7 +17,7 @@ internal static class Program
 {
     private sealed class TraceListener : System.Diagnostics.Tracing.EventListener
     {
-        private readonly StreamWriter writer = new StreamWriter(@"C:\XppLocalRuntime\runner.events.txt", false) { AutoFlush = true };
+        private readonly StreamWriter writer = new StreamWriter(Path.Combine(Path.GetTempPath(), "XppLocalRuntime.runner.events.txt"), false) { AutoFlush = true };
 
         protected override void OnEventSourceCreated(System.Diagnostics.Tracing.EventSource source)
         {

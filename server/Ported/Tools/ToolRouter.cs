@@ -723,10 +723,10 @@ namespace XppVsCode.Server.Tools
             foreach (string raw in source.Replace("\r", "").Split('\n'))
             {
                 string line = raw.Trim();
-                if (sig.Length == 0 && (line.Length == 0 || line.StartsWith("//") || line.StartsWith("[")
-                    || line.StartsWith("/*") || line.StartsWith("*")))
+                if (sig.Length == 0 && (line.Length == 0 || line.StartsWith("//", StringComparison.Ordinal) || line.StartsWith("[", StringComparison.Ordinal)
+                    || line.StartsWith("/*", StringComparison.Ordinal) || line.StartsWith("*", StringComparison.Ordinal)))
                     continue;
-                if (line.StartsWith("{")) break;
+                if (line.StartsWith("{", StringComparison.Ordinal)) break;
                 sig.Append(sig.Length > 0 ? " " : "").Append(line);
                 foreach (char c in line)
                 {
@@ -864,12 +864,12 @@ namespace XppVsCode.Server.Tools
             var sections = new System.Collections.Generic.List<ReadSection>();
             foreach (string line in lines)
             {
-                if (line.StartsWith("=== ") && line.EndsWith(" ==="))
+                if (line.StartsWith("=== ", StringComparison.Ordinal) && line.EndsWith(" ===", StringComparison.Ordinal))
                 {
                     string title = line.Substring(4, line.Length - 8);
                     string key = new string(title.Split('(')[0].Where(char.IsLetter).ToArray()).ToLowerInvariant();
                     if (key == "metadatatypedmetadata") key = "typedmetadata";
-                    if (key.StartsWith("entityfields")) key = "entityfields";
+                    if (key.StartsWith("entityfields", StringComparison.Ordinal)) key = "entityfields";
                     sections.Add(new ReadSection { Title = title, Key = key, Body = "" });
                 }
                 else if (sections.Count == 0) header.AppendLine(line);
@@ -886,7 +886,7 @@ namespace XppVsCode.Server.Tools
             string Describe(ReadSection sec)
             {
                 string body = sec.Body.Trim();
-                int items = body.StartsWith("[") ? CountTopLevelObjects(body) : -1;
+                int items = body.StartsWith("[", StringComparison.Ordinal) ? CountTopLevelObjects(body) : -1;
                 return sec.Key + " (" + sec.Title + "): " + body.Length + " chars" + (items >= 0 ? ", " + items + " item(s)" : "");
             }
 
@@ -906,8 +906,8 @@ namespace XppVsCode.Server.Tools
                 return sb.ToString().TrimEnd();
             }
 
-            var unknown = requested.Where(r => !sections.Any(x => x.Key == r || x.Key.StartsWith(r))).ToList();
-            foreach (var sec in sections.Where(x => requested.Any(r => x.Key == r || x.Key.StartsWith(r))))
+            var unknown = requested.Where(r => !sections.Any(x => x.Key == r || x.Key.StartsWith(r, StringComparison.Ordinal))).ToList();
+            foreach (var sec in sections.Where(x => requested.Any(r => x.Key == r || x.Key.StartsWith(r, StringComparison.Ordinal))))
                 sb.AppendLine().AppendLine("=== " + sec.Title + " ===").Append(sec.Body.TrimEnd()).AppendLine();
             if (unknown.Count > 0)
                 sb.AppendLine().AppendLine("Not in this object's output: " + string.Join(", ", unknown) + ". Available sections: "

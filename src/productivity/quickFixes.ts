@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { CodeExtensionFunctions } from '../aot';
+import { BridgeResult } from '../bridgeContract';
 import { objectUri, parseObjectUri, XppScheme } from '../codeView';
 import { addCreatedToProject, listLabelFiles, targetModel } from '../d365Tools';
 import { XppDocumentSelector } from '../navigation';
@@ -265,7 +266,7 @@ export class XppQuickFixes implements vscode.CodeActionProvider {
         const stubs: string[] = [];
         const problems: string[] = [];
         for (const name of interfaces) {
-            const result = await this.ctx.server.bridge('type_members', { objectType: 'AxClass', objectName: name }).catch(err => ({ success: false, message: (err as Error).message }));
+            const result = await this.ctx.server.bridge('type_members', { objectType: 'AxClass', objectName: name }).catch((err): BridgeResult => ({ success: false, message: (err as Error).message }));
             if (!result?.success) {
                 problems.push(`${name}: ${result?.message ?? 'not found'}`);
                 continue;

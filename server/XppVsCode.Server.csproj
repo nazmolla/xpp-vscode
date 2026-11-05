@@ -8,6 +8,7 @@
     <RootNamespace>XppVsCode.Server</RootNamespace>
     <AssemblyName>XppVsCode.Server</AssemblyName>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
   </PropertyGroup>
 
   <!-- D365FO assemblies come from the user's PackagesLocalDirectory\bin at runtime; never redistributed. -->
@@ -21,6 +22,10 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="XppVsCode.Server.Tests" />
   </ItemGroup>
 
   <ItemGroup>

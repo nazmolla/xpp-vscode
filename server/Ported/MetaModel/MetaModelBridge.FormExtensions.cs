@@ -149,7 +149,7 @@ namespace XppVsCode.Server.MetaModel
             }
             catch (Exception ex)
             {
-                return new FormLayoutResult { Message = "Form layout failed: " + ex.Message };
+                return new FormLayoutResult { Message = "Form layout failed: " + Cause(ex) };
             }
         }
 

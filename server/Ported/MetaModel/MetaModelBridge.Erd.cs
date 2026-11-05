@@ -144,7 +144,7 @@ namespace XppVsCode.Server.MetaModel
                             return map;
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { LogIgnored("Reading the relation index cache", ex); }
                 }
 
                 fromCache = false;
@@ -170,7 +170,7 @@ namespace XppVsCode.Server.MetaModel
                         ["key"] = key, ["incoming"] = result.ToDictionary(kv => kv.Key, kv => kv.Value.ToList()),
                     }));
                 }
-                catch { }
+                catch (Exception ex) { LogIgnored("Writing the relation index cache", ex); }
                 _relationIndex = result; _relationIndexKey = key;
                 return result;
             }

@@ -46,6 +46,7 @@ namespace XppVsCode.Server.MetaModel
         {
             _objectModelNameCache.Clear();
             _elementCacheKey = null;
+            _typeNames.Clear();
         }
 
         private IMetaModelService MetaService => _host.MetaService;
@@ -185,7 +186,7 @@ namespace XppVsCode.Server.MetaModel
             }
             catch (Exception ex)
             {
-                return Fail("Create failed: " + ex.Message);
+                return Fail("Create failed: " + Cause(ex));
             }
         }
 
@@ -542,7 +543,7 @@ namespace XppVsCode.Server.MetaModel
             }
             catch (Exception ex)
             {
-                return new ReadObjectResult { Message = "Read failed: " + ex.Message };
+                return new ReadObjectResult { Message = "Read failed: " + Cause(ex) };
             }
         }
 
@@ -702,7 +703,7 @@ namespace XppVsCode.Server.MetaModel
             // Polymorphic members (menu elements, controls, fields): name the concrete type so its extra properties make sense.
             if (declaredType != null && declaredType != t)
                 dict["$type"] = t.Name;
-            foreach (var prop in t.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            foreach (var prop in PublicProperties(t))
             {
                 if (!prop.CanRead || prop.GetIndexParameters().Length > 0) continue;
                 if (prop.Name == "Parent" && !(value is AxMenuExtensionElement)) continue;
@@ -789,7 +790,7 @@ namespace XppVsCode.Server.MetaModel
 
             object target = Activator.CreateInstance(targetUnderlying);
             var srcType = source.GetType();
-            foreach (var tp in targetUnderlying.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            foreach (var tp in PublicProperties(targetUnderlying))
             {
                 if (!tp.CanRead || tp.GetIndexParameters().Length > 0) continue;
 
@@ -1206,8 +1207,8 @@ namespace XppVsCode.Server.MetaModel
                 return;
             }
 
-            string expText = Convert.ToString(expected);
-            string actText = Convert.ToString(actual);
+            string expText = Convert.ToString(expected, System.Globalization.CultureInfo.InvariantCulture);
+            string actText = Convert.ToString(actual, System.Globalization.CultureInfo.InvariantCulture);
             if (!string.Equals(expText, actText, StringComparison.OrdinalIgnoreCase))
                 mismatches.Add(path + ": expected '" + expText + "', actual '" + actText + "'");
         }
@@ -1514,7 +1515,7 @@ namespace XppVsCode.Server.MetaModel
                 {
                     Success = false,
                     ObjectType = objectType,
-                    Message = "Schema generation failed: " + ex.Message
+                    Message = "Schema generation failed: " + Cause(ex)
                 };
             }
         }
@@ -1635,7 +1636,7 @@ namespace XppVsCode.Server.MetaModel
             }
 
             var properties = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            foreach (var prop in underlying.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            foreach (var prop in PublicProperties(underlying))
             {
                 if (!prop.CanRead || prop.GetIndexParameters().Length > 0) continue;
                 // Read-only scalars (e.g. AxEnum.HelpText, an alias of Help) cannot be set by create/update.
@@ -1754,7 +1755,7 @@ namespace XppVsCode.Server.MetaModel
             }
             catch (Exception ex)
             {
-                return new ModelInfoResult { Message = "Model info failed: " + ex.Message };
+                return new ModelInfoResult { Message = "Model info failed: " + Cause(ex) };
             }
         }
 
@@ -1776,7 +1777,7 @@ namespace XppVsCode.Server.MetaModel
                     });
                 }
             }
-            catch { }
+            catch (Exception ex) { LogIgnored("Listing models", ex); }
 
             return models;
         }
@@ -1815,7 +1816,7 @@ namespace XppVsCode.Server.MetaModel
             }
             catch (Exception ex)
             {
-                return new LabelResult { Message = "Label read failed: " + ex.Message };
+                return new LabelResult { Message = "Label read failed: " + Cause(ex) };
             }
         }
 
@@ -1846,7 +1847,7 @@ namespace XppVsCode.Server.MetaModel
             }
             catch (Exception ex)
             {
-                return Fail("Label create failed: " + ex.Message);
+                return Fail("Label create failed: " + Cause(ex));
             }
         }
 
@@ -1997,7 +1998,7 @@ namespace XppVsCode.Server.MetaModel
             }
             catch (Exception ex)
             {
-                return Fail("Add to project failed: " + ex.Message);
+                return Fail("Add to project failed: " + Cause(ex));
             }
         }
 
@@ -2049,7 +2050,7 @@ namespace XppVsCode.Server.MetaModel
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { LogIgnored("Reading the active project's model", ex); }
 
             return info;
         }
@@ -2390,7 +2391,7 @@ namespace XppVsCode.Server.MetaModel
             }
             catch (Exception ex)
             {
-                return Fail("ApplyTypedMetadata failed for AxTable '" + req.ObjectName + "': " + ex.Message);
+                return Fail("ApplyTypedMetadata failed for AxTable '" + req.ObjectName + "': " + Cause(ex));
             }
             MetaService.UpdateTable(tbl, saveInfo);
             return Ok("Updated AxTable '" + req.ObjectName + "'.");
@@ -2512,7 +2513,7 @@ namespace XppVsCode.Server.MetaModel
         // Simple metadata types (menu items, services, tiles, configuration keys, ...): MetaService.Get<X>/Update<X> by reflection.
         private MetaModelResult UpdateGenericByTypedApi(UpdateObjectRequest req)
         {
-            string core = req.ObjectType.StartsWith("Ax") ? req.ObjectType.Substring(2) : req.ObjectType;
+            string core = req.ObjectType.StartsWith("Ax", StringComparison.Ordinal) ? req.ObjectType.Substring(2) : req.ObjectType;
             Type metaType = ResolveMetadataType(req.ObjectType);
             var svcType = MetaService.GetType();
             var getter = svcType.GetMethod("Get" + core, new[] { typeof(string) });
@@ -2901,7 +2902,7 @@ namespace XppVsCode.Server.MetaModel
                         value = kvp.Value;
                     else if (propType == typeof(bool))
                         value = "true".Equals(kvp.Value, StringComparison.OrdinalIgnoreCase)
-                             || "1".Equals(kvp.Value) || "yes".Equals(kvp.Value, StringComparison.OrdinalIgnoreCase);
+                             || "1".Equals(kvp.Value, StringComparison.Ordinal) || "yes".Equals(kvp.Value, StringComparison.OrdinalIgnoreCase);
                     else if (propType == typeof(int))
                         value = int.Parse(kvp.Value);
                     else if (propType == typeof(long))
@@ -3466,7 +3467,7 @@ namespace XppVsCode.Server.MetaModel
             if (simple != null) return simple;
 
             if (targetType == typeof(string))
-                return Convert.ToString(input);
+                return Convert.ToString(input, System.Globalization.CultureInfo.InvariantCulture);
 
             if (input is string text)
             {
@@ -3681,26 +3682,26 @@ namespace XppVsCode.Server.MetaModel
                 if (input == null) return null;
                 Type nt = Nullable.GetUnderlyingType(targetType) ?? targetType;
 
-                if (nt == typeof(string)) return Convert.ToString(input);
+                if (nt == typeof(string)) return Convert.ToString(input, System.Globalization.CultureInfo.InvariantCulture);
                 if (nt.IsEnum)
                 {
                     if (input is string es)
                         return Enum.Parse(nt, es, true);
-                    return Enum.ToObject(nt, Convert.ToInt32(input));
+                    return Enum.ToObject(nt, Convert.ToInt32(input, System.Globalization.CultureInfo.InvariantCulture));
                 }
                 if (nt == typeof(bool))
                 {
                     if (input is string bs)
                     {
-                        if ("1".Equals(bs) || "yes".Equals(bs, StringComparison.OrdinalIgnoreCase)) return true;
-                        if ("0".Equals(bs) || "no".Equals(bs, StringComparison.OrdinalIgnoreCase)) return false;
+                        if ("1".Equals(bs, StringComparison.Ordinal) || "yes".Equals(bs, StringComparison.OrdinalIgnoreCase)) return true;
+                        if ("0".Equals(bs, StringComparison.Ordinal) || "no".Equals(bs, StringComparison.OrdinalIgnoreCase)) return false;
                     }
-                    return Convert.ToBoolean(input);
+                    return Convert.ToBoolean(input, System.Globalization.CultureInfo.InvariantCulture);
                 }
                 if (nt == typeof(Guid))
-                    return Guid.Parse(Convert.ToString(input));
+                    return Guid.Parse(Convert.ToString(input, System.Globalization.CultureInfo.InvariantCulture));
                 if (nt == typeof(DateTime))
-                    return DateTime.Parse(Convert.ToString(input));
+                    return DateTime.Parse(Convert.ToString(input, System.Globalization.CultureInfo.InvariantCulture), System.Globalization.CultureInfo.InvariantCulture);
 
                 return Convert.ChangeType(input, nt, System.Globalization.CultureInfo.InvariantCulture);
             }
@@ -4022,7 +4023,7 @@ namespace XppVsCode.Server.MetaModel
             foreach (var f in fields)
             {
                 string fieldType = f.GetType().Name;
-                if (fieldType.StartsWith("AxTableField"))
+                if (fieldType.StartsWith("AxTableField", StringComparison.Ordinal))
                     fieldType = fieldType.Substring("AxTableField".Length);
                 var dto = new FieldDto { Name = f.Name, FieldType = fieldType, Label = f.Label };
                 var edtProp = f.GetType().GetProperty("ExtendedDataType");
@@ -4336,7 +4337,7 @@ namespace XppVsCode.Server.MetaModel
         {
             if (string.IsNullOrEmpty(value)) return value;
             string trimmed = value.Trim();
-            if (trimmed.StartsWith("<![CDATA[") && trimmed.EndsWith("]]>"))
+            if (trimmed.StartsWith("<![CDATA[", StringComparison.Ordinal) && trimmed.EndsWith("]]>", StringComparison.Ordinal))
                 return trimmed.Substring(9, trimmed.Length - 12);
             return value;
         }

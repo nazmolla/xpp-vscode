@@ -374,7 +374,7 @@ namespace XppVsCode.Server.Tools
                     kv.Value["handlers"] = _index.HandlersOf(objectPath + "/Methods/" + kv.Key, false).Count;
                 }
                 // The other way round: this class is an extension or a handler class.
-                if (objectPath.StartsWith("/Classes/"))
+                if (objectPath.StartsWith("/Classes/", StringComparison.Ordinal))
                 {
                     var info = _index.ExtensionClassInfo(name);
                     if (info != null) extends = Element(info.Target, "Extended element", null);

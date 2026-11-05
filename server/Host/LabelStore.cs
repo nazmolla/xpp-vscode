@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using XppVsCode.Server.MetaModel;
 
 namespace XppVsCode.Server.Host
@@ -20,6 +21,7 @@ namespace XppVsCode.Server.Host
 
         public string FindLabelFile(string labelFileId, string language)
         {
+            if (!IsLabelFileId(labelFileId) || (language != null && !IsLanguage(language))) return null;
             string fileName = labelFileId + "." + (language ?? DefaultLanguage) + ".label.txt";
             string relative = Path.Combine("AxLabelFile", "LabelResources", language ?? DefaultLanguage, fileName);
 
@@ -40,10 +42,15 @@ namespace XppVsCode.Server.Host
 
         public bool IsWritable(string path) => _config.IsCustomPath(path);
 
+        // Label file IDs and languages become file names.
+        internal static bool IsLabelFileId(string id) => !string.IsNullOrEmpty(id) && Regex.IsMatch(id, @"^[A-Za-z0-9_]+$");
+        internal static bool IsLanguage(string language) => !string.IsNullOrEmpty(language) && Regex.IsMatch(language, @"^[A-Za-z]{2,3}(-[A-Za-z0-9]+)*$");
+
         /// <summary>Every language of a label file ID: language to the label text file (the first root that has it).</summary>
         public SortedDictionary<string, string> FindLanguages(string labelFileId)
         {
             var result = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (!IsLabelFileId(labelFileId)) return result;
             string suffix = ".label.txt";
             foreach (string root in Roots())
             {
@@ -77,7 +84,7 @@ namespace XppVsCode.Server.Host
                 return true;
             }
             lines[at] = IdOf(lines[at]) + "=" + text.Replace("\r", " ").Replace("\n", " ");
-            bool hasComment = at + 1 < lines.Count && lines[at + 1].StartsWith(" ;");
+            bool hasComment = at + 1 < lines.Count && lines[at + 1].StartsWith(" ;", StringComparison.Ordinal);
             if (comment != null)
             {
                 if (string.IsNullOrWhiteSpace(comment)) { if (hasComment) lines.RemoveAt(at + 1); }
@@ -94,7 +101,7 @@ namespace XppVsCode.Server.Host
             var lines = File.ReadAllLines(path, Encoding.UTF8).ToList();
             int at = lines.FindIndex(l => string.Equals(IdOf(l), labelId, StringComparison.OrdinalIgnoreCase));
             if (at < 0) return false;
-            int count = at + 1 < lines.Count && lines[at + 1].StartsWith(" ;") ? 2 : 1;
+            int count = at + 1 < lines.Count && lines[at + 1].StartsWith(" ;", StringComparison.Ordinal) ? 2 : 1;
             lines.RemoveRange(at, count);
             File.WriteAllLines(path, lines, new UTF8Encoding(true));
             return true;
@@ -171,7 +178,7 @@ namespace XppVsCode.Server.Host
             LabelEntry current = null;
             foreach (string line in lines)
             {
-                if (line.StartsWith(" ;"))
+                if (line.StartsWith(" ;", StringComparison.Ordinal))
                 {
                     if (current != null) current.Comment = line.Substring(2);
                     continue;
