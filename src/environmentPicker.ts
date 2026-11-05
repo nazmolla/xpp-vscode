@@ -8,7 +8,7 @@ import { resolveDataverseUrl, validateDataverseUrl, normalizeDataverseUrl } from
 
 type EnvironmentItem = vscode.QuickPickItem & { env?: EnvironmentConfig; action?: 'connect' | 'default' };
 
-/** X++: Select Environment — switches this workspace to another environment connected on this machine. */
+/** F&O Studio: Select Environment — switches this workspace to another environment connected on this machine. */
 export async function selectEnvironment(): Promise<void> {
     const current = selectedEnvironmentUrl();
     const currentOrg = current ? orgName(current) : undefined;

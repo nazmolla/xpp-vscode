@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Text;
+using XppVsCode.Server.Host;
 using XppVsCode.Server.Tools;
 
 namespace XppVsCode.Server
@@ -15,14 +16,35 @@ namespace XppVsCode.Server
         private readonly BridgeClient _bridge;
         private readonly string _version;
         private readonly string _instructions;
+        private readonly DataQueryService _data;
         private CodeIntel _codeIntel;
 
-        public McpStdioServer(ToolRouter router, BridgeClient bridge, string version)
+        public McpStdioServer(ToolRouter router, BridgeClient bridge, string version, DataQueryService data = null, string rulesFile = null)
         {
             _router = router;
             _bridge = bridge;
             _version = version;
-            _instructions = LoadInstructions();
+            _data = data;
+            _instructions = LoadInstructions() + TeamRules(rulesFile);
+        }
+
+        private const int MaxRulesChars = 20000;
+
+        /// <summary>The team's own rules (.xpp/agent-rules.md), added after the built-in instructions so they refine them.</summary>
+        private static string TeamRules(string file)
+        {
+            if (string.IsNullOrEmpty(file) || !File.Exists(file)) return "";
+            try
+            {
+                string text = File.ReadAllText(file);
+                if (text.Length > MaxRulesChars) text = text.Substring(0, MaxRulesChars);
+                return "\n\n== TEAM RULES (from " + Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(file))) + "/.xpp/agent-rules.md; follow them where they are stricter than the rules above) ==\n\n" + text;
+            }
+            catch (IOException ex)
+            {
+                Log.Write("Team rules not read: " + ex.Message);
+                return "";
+            }
         }
 
         public void Run()
@@ -49,12 +71,16 @@ namespace XppVsCode.Server
             "xpp_search_code", "xpp_find_examples", "xpp_find_references", "xpp_search_docs", "xpp_read_object", "xpp_find_object",
             "xpp_list_objects", "xpp_list_model_objects", "xpp_get_form_layout", "xpp_read_label", "xpp_get_model_info",
             "xpp_list_models", "xpp_get_environment", "xpp_get_object_type_schema", "xpp_list_project_items", "xpp_validate_object", "xpp_analyze_security",
-            "xpp_find_message_source", "xpp_get_guide",
+            "xpp_find_message_source", "xpp_get_guide", "xpp_analyze_performance", "xpp_find_deprecations", "xpp_analyze_trace",
         };
 
-        private static bool IsParallelRead(string json) =>
-            JsonHelpers.ExtractJsonString(json, "method") == "tools/call"
-            && ParallelTools.Contains(JsonHelpers.ExtractNestedString(json, "params", "name") ?? "");
+        private static bool IsParallelRead(string json)
+        {
+            string method = JsonHelpers.ExtractJsonString(json, "method");
+            // Database queries and trace analysis can run for minutes; they never touch the metadata API.
+            return method == "xpp/data" || method == "xpp/trace"
+                || method == "tools/call" && ParallelTools.Contains(JsonHelpers.ExtractNestedString(json, "params", "name") ?? "");
+        }
 
         private readonly object _outputLock = new object();
 
@@ -106,6 +132,8 @@ namespace XppVsCode.Server
                         return JsonHelpers.BuildResult(idToken, _router.TagsJson(body));
                     if (action == "tag_references")
                         return JsonHelpers.BuildResult(idToken, _router.TagReferencesJson(body));
+                    if (action == "label_usage")
+                        return JsonHelpers.BuildResult(idToken, _router.LabelUsageJson(body));
                     return JsonHelpers.BuildResult(idToken, _bridge.Call(action, body));
                 case "xpp/lang":
                     // Language features of the VS Code extension (its own server process): raw JSON results.
@@ -113,6 +141,16 @@ namespace XppVsCode.Server
                     _codeIntel = _codeIntel ?? new CodeIntel(_router.XRef, _bridge);
                     return JsonHelpers.BuildResult(idToken, _codeIntel.Handle(JsonHelpers.ExtractJsonString(langParams, "action"),
                         JsonHelpers.ExtractNestedObject(langParams, "body") ?? "{}"));
+                case "xpp/data":
+                    // Only the extension's own server processes serve business data; the MCP server Copilot starts does not.
+                    if (_data == null)
+                        return JsonHelpers.BuildError(idToken, -32601, "Method not found: " + method);
+                    string dataParams = JsonHelpers.ExtractNestedObject(json, "params") ?? "{}";
+                    return JsonHelpers.BuildResult(idToken, _data.Handle(JsonHelpers.ExtractJsonString(dataParams, "action"),
+                        JsonHelpers.ExtractNestedObject(dataParams, "body") ?? "{}"));
+                case "xpp/trace":
+                    string traceParams = JsonHelpers.ExtractNestedObject(json, "params") ?? "{}";
+                    return JsonHelpers.BuildResult(idToken, Host.TraceService.AnalyzeJson(JsonHelpers.ExtractNestedObject(traceParams, "body") ?? "{}"));
                 default:
                     return JsonHelpers.BuildError(idToken, -32601, "Method not found: " + method);
             }

@@ -101,6 +101,7 @@ export class LabelEditor {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="${media('labelEditor.css')}" rel="stylesheet">
+<link href="${media('a11y.css')}" rel="stylesheet">
 </head>
 <body data-search="${search.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`)}">
 <div id="toolbar">

@@ -51,6 +51,8 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
                 type: DebugType, request: 'attach', name: 'Attach to Dynamics 365 (unified developer environment)',
             })),
             vscode.commands.registerCommand('xpp.infolog.clear', () => this.infolog.clear()),
+            vscode.commands.registerCommand('xpp.infolog.filter', () => this.infolog.pickFilter()),
+            vscode.commands.registerCommand('xpp.infolog.copy', () => this.infolog.copy()),
         );
     }
 
@@ -70,7 +72,7 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
             progress.report({ message: 'signing in' });
             const dataverseSetting = selectedEnvironmentUrl();
             if (!dataverseSetting) {
-                vscode.window.showErrorMessage('Select the environment first: X++: Select Environment.');
+                vscode.window.showErrorMessage('Select the environment first: F&O Studio: Select Environment.');
                 return undefined;
             }
             const dataverseUrl = await resolveDataverseUrl(dataverseSetting);
@@ -113,7 +115,7 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
         const pending = this.pending;
         this.pending = undefined;
         if (!pending) {
-            throw new Error('Start X++ debugging from the Run and Debug view or X++: Start Debugging.');
+            throw new Error('Start X++ debugging from the Run and Debug view or F&O Studio: Launch Debugger.');
         }
         // The same arguments Visual Studio passes in its VSDbgLaunch.json; a free port so a Visual Studio session or a
         // leftover proxy on the default 5119 does not stop the proxy.
@@ -279,7 +281,7 @@ class ProxyDebugAdapter implements vscode.DebugAdapter {
             this.sent.fire({ type: 'event', seq: 0, event: 'terminated', body: {} } as vscode.DebugProtocolMessage);
             return;
         }
-        const hint = 'Check that the sign-in is current (X++: Connect to Environment), that the environment allows debugging, and that no firewall or proxy blocks wss://<environment>/___sidecar.';
+        const hint = 'Check that the sign-in is current (F&O Studio: Connect to Environment), that the environment allows debugging, and that no firewall or proxy blocks wss://<environment>/___sidecar.';
         // stderr already went to the output channel as it arrived.
         this.log.appendLine(`${reason}\n${hint}`);
         const detail = this.stderr.trim();
@@ -322,7 +324,7 @@ async function findDebuggerProxy(applicationVersion?: string): Promise<string> {
     }
     const found = candidates.find(c => existsSync(c));
     if (!found) {
-        throw new Error('Microsoft.Dynamics.AX.DebuggerProxy.exe was not found. Run X++: Connect to Environment, or set xpp.debuggerProxyPath.');
+        throw new Error('Microsoft.Dynamics.AX.DebuggerProxy.exe was not found. Run F&O Studio: Connect to Environment, or set xpp.debuggerProxyPath.');
     }
     return found;
 }
@@ -342,11 +344,13 @@ function decodeXml(text: string): string {
     return text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, '\'').replace(/&amp;/g, '&');
 }
 
-/** The Infolog window: messages raised by the code being debugged. */
+/** The Infolog window: messages raised by the code being debugged, filterable by severity and text. */
 export class InfologProvider implements vscode.TreeDataProvider<InfologEntry> {
     private readonly changed = new vscode.EventEmitter<void>();
     readonly onDidChangeTreeData = this.changed.event;
     private readonly entries: InfologEntry[] = [];
+    private kinds = new Set(['Error', 'Warning', 'Info']);
+    private text = '';
 
     add(entry: InfologEntry): void {
         this.entries.unshift(entry);
@@ -356,6 +360,31 @@ export class InfologProvider implements vscode.TreeDataProvider<InfologEntry> {
     clear(): void {
         this.entries.length = 0;
         this.changed.fire();
+    }
+
+    async pickFilter(): Promise<void> {
+        const picked = await vscode.window.showQuickPick(['Error', 'Warning', 'Info'].map(k => ({ label: k, picked: this.kinds.has(k) })),
+            { title: 'Infolog: show', canPickMany: true });
+        if (!picked) {
+            return;
+        }
+        const text = await vscode.window.showInputBox({ title: 'Infolog: text filter', prompt: 'Only messages containing this text (empty: all)', value: this.text });
+        if (text === undefined) {
+            return;
+        }
+        this.kinds = new Set(picked.map(p => p.label));
+        this.text = text.trim().toLowerCase();
+        this.changed.fire();
+    }
+
+    async copy(): Promise<void> {
+        await vscode.env.clipboard.writeText(this.visible().map(e => `${e.time.toLocaleTimeString()} ${e.kind}: ${e.message}`).join('\n'));
+        vscode.window.setStatusBarMessage('Infolog copied', 3000);
+    }
+
+    private visible(): InfologEntry[] {
+        const kind = (k: string) => k === 'Error' || k === 'Warning' ? k : 'Info';
+        return this.entries.filter(e => this.kinds.has(kind(e.kind)) && (!this.text || e.message.toLowerCase().includes(this.text)));
     }
 
     getTreeItem(entry: InfologEntry): vscode.TreeItem {
@@ -368,6 +397,6 @@ export class InfologProvider implements vscode.TreeDataProvider<InfologEntry> {
     }
 
     getChildren(): InfologEntry[] {
-        return this.entries;
+        return this.visible();
     }
 }
