@@ -37,7 +37,7 @@ Target environments: unified developer environments (UDE, Power Platform hosted)
 - `node scripts/check-bridge-actions.js` checks `src/bridgeContract.ts` against the server's actions; add new bridge actions to both. Write actions are authorized centrally (`IWritePolicy`, `EditActions`/`CreateActions` in `MetaModelBridgeServer`): add new write actions there.
 - Open review findings and their status: `docs/review-findings.md`.
 - Extension-host smoke tests: `node scripts/run-smoke.js [suite ...]` (set `XPP_TEST_WORKSPACE` to the TestProj folder; `projectSmoke` runs once without it, then with the workspace file named in `%TEMP%\xpp-project-workspace.txt`). Prints PASS/FAIL per check.
-- The README is the short Marketplace page; the full feature list is `docs/FEATURES.md` (update both when adding features).
+- The Marketplace overview is `docs/FEATURES.md` (What's new at the top, then features, requirements, settings); `npm run package` / `npm run publish` pass it as `--readme-path`, and its images resolve to `docs/images` on GitHub, so push before publishing. README.md is the GitHub page. Keep screenshots few and cropped; review every image before using it.
 - Wizards (`src/scaffolding/`): element builders are vscode-free; `node scripts/scaffold-test.js <exe> <config> testcust` creates every wizard's elements, builds the model (must compile without errors or warnings in them) and deletes them again.
 - Trace analysis: `node scripts/trace-test.js <exe> <config> <file.etl>`.
 - Backlog and status of all planned work: `docs/ROADMAP.md`.

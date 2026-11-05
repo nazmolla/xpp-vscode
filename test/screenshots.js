@@ -39,7 +39,13 @@ async function expandTree(view, steps) {
 }
 
 async function step(name, fn) {
+    const only = (process.env.XPP_SHOTS_ONLY || '').split(',').filter(s => s);
+    if (only.length && !only.includes(name)) {
+        return;
+    }
     try {
+        // Editor shots show the editor only; the Application Explorer shot keeps its side bar.
+        await vscode.commands.executeCommand(name === 'aot' ? 'workbench.view.extension.xpp' : 'workbench.action.closeSidebar');
         await fn();
     } catch (err) {
         log('step ' + name + ' failed: ' + (err && err.stack || err));
@@ -66,71 +72,37 @@ async function run() {
     });
     await vscode.commands.executeCommand('xpp.aot.clearFilter');
 
-    // 2. Table designer.
-    await step('table-designer', async () => {
-        await vscode.commands.executeCommand('xpp.openDesigner', 'AxTable', 'CustGroup');
-        await shot('table-designer', 7000);
-        await closeEditors();
-    });
-
-    // 3. Form designer with the rendered preview.
+    // 2. Form designer with the rendered preview.
     await step('form-designer', async () => {
         await vscode.commands.executeCommand('xpp.openDesigner', 'AxForm', 'CustGroup');
         await shot('form-designer', 9000);
         await closeEditors();
     });
 
-    // 4. Code view with code lens (references, overrides, Chain of Command classes).
-    let doc;
-    await step('code', async () => {
-        doc = await vscode.workspace.openTextDocument(objectUri('AxClass', 'SalesFormLetter'));
+    // 3. Chain of Command and handlers of a method (Peek Implementations).
+    await step('implementations', async () => {
+        const doc = await vscode.workspace.openTextDocument(objectUri('AxClass', 'SalesFormLetter'));
         const editor = await vscode.window.showTextDocument(doc);
-        const i = doc.getText().search(/\bvoid\s+run\s*\(\s*\)/);
-        const pos = doc.positionAt(Math.max(0, i));
+        const def = doc.getText().search(/\bvoid\s+run\s*\(\s*\)/);
+        const pos = doc.positionAt(doc.getText().indexOf('run', def + 4));
         editor.selection = new vscode.Selection(pos, pos);
         editor.revealRange(new vscode.Range(pos.translate(-3), pos.translate(25)), vscode.TextEditorRevealType.AtTop);
-        await shot('code', 9000);
-    });
-
-    // 5. Chain of Command and handlers of a method (Peek Implementations).
-    await step('implementations', async () => {
-        const def = doc.getText().search(/\bvoid\s+run\s*\(\s*\)/);
-        const i = doc.getText().indexOf('run', def + 4);
-        const pos = doc.positionAt(i);
-        vscode.window.activeTextEditor.selection = new vscode.Selection(pos, pos);
+        await sleep(9000);
         await vscode.commands.executeCommand('editor.action.peekImplementation');
         await shot('implementations', 7000);
         await vscode.commands.executeCommand('closeReferenceSearch');
         await closeEditors();
     });
 
-    // 6. Completion on a table buffer (fields, methods, methods added by extensions).
-    await step('completion', async () => {
-        const text = 'class DemoCompletion\n{\n    public void demo()\n    {\n        CustTable custTable = CustTable::find(\'US-001\');\n        custTable.\n    }\n}\n';
-        const untitled = await vscode.workspace.openTextDocument({ language: 'xpp', content: text });
-        const editor = await vscode.window.showTextDocument(untitled);
-        const pos = untitled.positionAt(text.indexOf('custTable.\n') + 'custTable.'.length);
-        editor.selection = new vscode.Selection(pos, pos);
-        await sleep(2000);
-        await vscode.commands.executeCommand('editor.action.triggerSuggest');
-        await shot('completion', 5000);
-        await vscode.commands.executeCommand('hideSuggestWidget');
-        await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
-    });
-
-    // 7. Entity relationship diagram.
-    await step('erd', async () => {
-        await vscode.commands.executeCommand('xpp.viewErd', { objectType: 'AxTable', entry: { name: 'CustGroup' } });
-        await shot('erd', 9000);
-        await closeEditors();
-    });
-
-    // 8. View references (clickable).
-    await step('references', async () => {
-        await vscode.commands.executeCommand('xpp.viewReferences', { objectType: 'AxTable', entry: { name: 'CustGroup' } });
-        await shot('references', 7000);
-        await closeEditors();
-    });
+    // 4. Trace analysis of a performance trace (.etl), when one is in the repository folder.
+    const trace = fs.readdirSync(path.join(__dirname, '..')).find(f => f.toLowerCase().endsWith('.etl'));
+    if (trace) {
+        await step('trace', async () => {
+            await vscode.commands.executeCommand('xpp.analyzeTrace', vscode.Uri.file(path.join(__dirname, '..', trace)));
+            await shot('trace', 8000);
+            await closeEditors();
+        });
+    }
 
     fs.writeFileSync(path.join(dir, 'step.txt'), 'finished');
     log('finished');
