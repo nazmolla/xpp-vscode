@@ -11,5 +11,6 @@ scripts/**
 .vscode/**
 experimental/**
 test/**
+XvsTestModel/**
 docs/**
 .vscode-test/**
