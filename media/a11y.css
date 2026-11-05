@@ -1,0 +1,9 @@
+/* Shared by every F&O Studio webview: visible keyboard focus, high contrast borders, reduced motion. */
+:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+body.vscode-high-contrast button, body.vscode-high-contrast input, body.vscode-high-contrast select, body.vscode-high-contrast textarea,
+body.vscode-high-contrast-light button, body.vscode-high-contrast-light input, body.vscode-high-contrast-light select, body.vscode-high-contrast-light textarea {
+    border: 1px solid var(--vscode-contrastBorder);
+}
+body.vscode-high-contrast .selected, body.vscode-high-contrast-light .selected { outline: 1px dashed var(--vscode-contrastActiveBorder); outline-offset: -1px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

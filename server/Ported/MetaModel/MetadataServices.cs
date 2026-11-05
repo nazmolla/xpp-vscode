@@ -68,6 +68,9 @@ namespace XppVsCode.Server.MetaModel
     public interface IBuildService
     {
         string BuildJson(string modelName, bool projectOnly, bool syncDatabase);
+        string BestPracticeJson(string modelName, bool projectOnly);
+        string PackageJson(string[] modelNames, string version);
+        string SyncTablesJson(string[] tables);
     }
 
     /// <summary>Models and packages.</summary>
@@ -107,6 +110,24 @@ namespace XppVsCode.Server.MetaModel
         string IncomingRelationsJson(string tableName, bool force);
     }
 
+    /// <summary>How a table's rows read in F&O: labels, enum value names, per-company and date-effective flags.</summary>
+    public interface ITableDataShape
+    {
+        string TableDataShapeJson(string tableName);
+    }
+
+    /// <summary>Static performance findings in an element's code.</summary>
+    public interface IPerformanceAnalysis
+    {
+        string AnalyzePerformanceJson(string objectType, string objectName);
+    }
+
+    /// <summary>A model's extensions (Chain of Command, event handlers, metadata extensions) checked against the installed code.</summary>
+    public interface IExtensionCompatibility
+    {
+        string ExtensionCompatibilityJson(string modelName);
+    }
+
     /// <summary>The services the request dispatcher routes to (composed in Program).</summary>
     public sealed class BridgeServices
     {
@@ -119,6 +140,9 @@ namespace XppVsCode.Server.MetaModel
         public ILabelService Labels { get; set; }
         public IProjectPackageService Packages { get; set; }
         public ITableRelations Relations { get; set; }
+        public ITableDataShape DataShape { get; set; }
+        public IPerformanceAnalysis Performance { get; set; }
+        public IExtensionCompatibility Compatibility { get; set; }
         public IWritePolicy Policy { get; set; }
     }
 }

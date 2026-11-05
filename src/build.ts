@@ -14,13 +14,53 @@ function inScope(d: CompilerDiagnostic, scope: Set<string>): boolean {
     return !target || scope.has(`${target.objectType}/${target.objectName}`.toLowerCase());
 }
 
+export interface BuildResult {
+    model: string;
+    ok: boolean;
+    errors: number;
+    warnings: number;
+    projectOnly: boolean;
+    time: Date;
+}
+
 export class XppBuilder {
     private readonly diagnostics = vscode.languages.createDiagnosticCollection('xpp');
+    private readonly bestPracticeDiagnostics = vscode.languages.createDiagnosticCollection('xpp-bp');
+    private readonly finished = new vscode.EventEmitter<BuildResult>();
+    readonly onDidFinish = this.finished.event;
 
     constructor(private readonly output: vscode.OutputChannel) { }
 
     dispose(): void {
         this.diagnostics.dispose();
+        this.bestPracticeDiagnostics.dispose();
+        this.finished.dispose();
+    }
+
+    /**
+     * Runs the best-practice rules (xppbp, as Visual Studio's "Run best practice checks") on a model, or only reports those
+     * of the given project items; the warnings go to the Problems view. Returns the number of warnings and errors.
+     */
+    async bestPractice(model: string, token?: vscode.CancellationToken, projectItems?: { objectType: string; objectName: string }[]): Promise<{ errors: number; warnings: number } | undefined> {
+        const env = await readActiveEnvironment();
+        const logDir = path.join(env.modelStoreFolder, model, 'BuildLogs');
+        await fs.mkdir(logDir, { recursive: true });
+        const xmlLog = path.join(logDir, `Dynamics.AX.${model}.xppbp.xml`);
+        await fs.rm(xmlLog, { force: true });
+        this.output.show(true);
+        this.output.appendLine(`=== Best practice checks ${model} (${new Date().toLocaleTimeString()}) ===`);
+        // Custom metadata as the source, the reference packages for everything the model uses.
+        await this.run(path.join(env.binDirectory, 'xppbp.exe'), [
+            `-metadata=${env.modelStoreFolder}`, `-packagesRoot=${env.frameworkDirectory}`, `-module=${model}`, `-model=${model}`, '-all', `-xmlLog=${xmlLog}`,
+        ], token);
+        if (token?.isCancellationRequested || !existsSync(xmlLog)) {
+            return undefined;
+        }
+        const scope = projectItems ? new Set(projectItems.map(i => `${i.objectType}/${i.objectName}`.toLowerCase())) : undefined;
+        const found = (await this.publish(xmlLog, scope, this.bestPracticeDiagnostics)).filter(d => !scope || inScope(d, scope));
+        const errors = found.filter(d => ['error', 'fatal'].includes(d.severity.toLowerCase())).length;
+        this.output.appendLine(`=== ${model}: ${errors} best practice error(s), ${found.length - errors} warning(s) ===`);
+        return { errors, warnings: found.length - errors };
     }
 
     /** projectItems limits the reported diagnostics to those objects; xppc always compiles the whole package. */
@@ -51,6 +91,7 @@ export class XppBuilder {
             ], token);
             if (!ok) {
                 this.output.appendLine('Label compilation failed.');
+                this.finished.fire({ model, ok: false, errors: 1, warnings: 0, projectOnly: !!projectItems, time: new Date() });
                 return false;
             }
         }
@@ -90,6 +131,7 @@ export class XppBuilder {
         const ok = compiled && !all.some(isBlocking) && assemblyWritten;
         const reason = !compiled ? ' (xppc exited with an error)' : !assemblyWritten && errors === 0 ? ' (no assembly was produced)' : '';
         this.output.appendLine(`=== ${model}${scope ? ' (project items)' : ''}: ${ok ? 'BUILD SUCCEEDED' : 'BUILD FAILED' + reason} - ${errors} error(s), ${found.length - errors} warning(s) ===`);
+        this.finished.fire({ model, ok, errors, warnings: found.length - errors, projectOnly: !!scope, time: new Date() });
         return ok;
     }
 
@@ -133,7 +175,7 @@ export class XppBuilder {
     }
 
     /** Shows compiler diagnostics in the Problems view, on the object's code view where possible. */
-    private async publish(xmlLog: string, scope?: Set<string>): Promise<CompilerDiagnostic[]> {
+    private async publish(xmlLog: string, scope?: Set<string>, collection = this.diagnostics): Promise<CompilerDiagnostic[]> {
         const xml = await fs.readFile(xmlLog, 'utf8');
         const found = parseDiagnostics(xml);
         const byUri = new Map<string, { uri: vscode.Uri; items: vscode.Diagnostic[] }>();
@@ -161,9 +203,9 @@ export class XppBuilder {
             byUri.set(uri.toString(), entry);
         }
 
-        this.diagnostics.clear();
+        collection.clear();
         for (const { uri, items } of byUri.values()) {
-            this.diagnostics.set(uri, items);
+            collection.set(uri, items);
         }
         for (const d of found) {
             this.output.appendLine(`${d.severity}: ${d.path}${d.line ? `(${d.line},${d.column})` : ''}: ${d.message}`);

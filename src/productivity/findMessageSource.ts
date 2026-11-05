@@ -31,7 +31,7 @@ interface TraceResult {
 }
 
 /**
- * X++: Find Message Source: paste an error, warning or info message (values included); the labels whose text matches
+ * F&O Studio: Find Message Source: paste an error, warning or info message (values included); the labels whose text matches
  * (placeholders match any value) and the code that uses them, then the line opens.
  */
 export async function findMessageSource(ctx: ProductivityContext, entry?: { message?: string }): Promise<void> {

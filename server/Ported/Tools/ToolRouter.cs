@@ -35,6 +35,28 @@ namespace XppVsCode.Server.Tools
 
         public string TagReferencesJson(string body) => _xref.TagReferencesJson(JsonHelpers.ExtractJsonString(body, "tag"), 1000);
 
+        /// <summary>The label IDs of a label file that the cross-reference database records a use of.</summary>
+        public string LabelUsageJson(string body)
+        {
+            var json = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+            string file = JsonHelpers.ExtractJsonString(body, "labelFileId");
+            if (string.IsNullOrWhiteSpace(file) || !System.Text.RegularExpressions.Regex.IsMatch(file, @"^\w+$"))
+                return json.Serialize(new Dictionary<string, object> { ["success"] = false, ["message"] = "labelFileId is required." });
+            using (var conn = _xref.TryOpen(out string problem))
+            {
+                if (conn == null)
+                    return json.Serialize(new Dictionary<string, object> { ["success"] = false, ["message"] = "The cross-reference database is not available: " + problem });
+                var used = new List<string>();
+                using (var cmd = new System.Data.SqlClient.SqlCommand("SELECT t.Path FROM Names t WHERE t.Path LIKE @p AND EXISTS (SELECT 1 FROM [References] r WHERE r.TargetId = t.Id)", conn) { CommandTimeout = 120 })
+                {
+                    cmd.Parameters.AddWithValue("@p", "/Labels/@" + file + ":%");
+                    using (var r = cmd.ExecuteReader())
+                        while (r.Read()) used.Add(r.GetString(0).Substring(("/Labels/@" + file + ":").Length));
+                }
+                return json.Serialize(new Dictionary<string, object> { ["success"] = true, ["used"] = used });
+            }
+        }
+
         // Above this total method source size, reads return signatures only unless methodNames is given.
         private const int MaxInlineMethodSourceChars = 40000;
 
@@ -58,7 +80,7 @@ namespace XppVsCode.Server.Tools
           ""objectType"": {
             ""type"": ""string"",
             ""description"": ""The D365FO object type to create."",
-            ""enum"": [""AxClass"", ""AxTable"", ""AxView"", ""AxDataEntityView"", ""AxEdt"", ""AxEnum"", ""AxForm"", ""AxTile"", ""AxMenu"", ""AxMenuItemDisplay"", ""AxMenuItemOutput"", ""AxMenuItemAction"", ""AxQuery"", ""AxSecurityPrivilege"", ""AxSecurityDuty"", ""AxSecurityRole"", ""AxService"", ""AxServiceGroup"", ""AxConfigurationKey"", ""AxTableExtension"", ""AxEnumExtension"", ""AxEdtExtension"", ""AxFormExtension"", ""AxDataEntityViewExtension"", ""AxSecurityDutyExtension"", ""AxSecurityRoleExtension"", ""AxLabelFile"", ""AxMenuExtension"", ""AxCompositeDataEntityView""]
+            ""enum"": [""AxClass"", ""AxTable"", ""AxView"", ""AxDataEntityView"", ""AxEdt"", ""AxEnum"", ""AxForm"", ""AxTile"", ""AxMenu"", ""AxMenuItemDisplay"", ""AxMenuItemOutput"", ""AxMenuItemAction"", ""AxQuery"", ""AxSecurityPrivilege"", ""AxSecurityDuty"", ""AxSecurityRole"", ""AxService"", ""AxServiceGroup"", ""AxConfigurationKey"", ""AxTableExtension"", ""AxEnumExtension"", ""AxEdtExtension"", ""AxFormExtension"", ""AxDataEntityViewExtension"", ""AxSecurityDutyExtension"", ""AxSecurityRoleExtension"", ""AxLabelFile"", ""AxMenuExtension"", ""AxCompositeDataEntityView"", ""AxWorkflowCategory"", ""AxWorkflowTemplate"", ""AxWorkflowApproval"", ""AxReport""]
           },
           ""objectName"": { ""type"": ""string"", ""description"": ""Name of the object. Must follow the model's naming prefix convention."" },
           ""typedMetadata"": { ""type"": ""object"", ""description"": ""Full strongly-typed metadata graph for the target object type. Preferred for complete metadata writes across all object types."" },
@@ -456,6 +478,76 @@ namespace XppVsCode.Server.Tools
       }
     },
     {
+      ""name"": ""xpp_package"",
+      ""description"": ""Creates a deployable package (.zip) of custom models with the same script Visual Studio's Create Deployment Package runs, from their last build (run xpp_build first). Returns the package path. Only call it when the user asked for a package; it does not deploy anything."",
+      ""inputSchema"": {
+        ""type"": ""object"",
+        ""properties"": {
+          ""modelNames"": { ""type"": ""array"", ""items"": { ""type"": ""string"" }, ""description"": ""Custom models to package. Defaults to the active project's model."" },
+          ""version"": { ""type"": ""string"", ""description"": ""Package version, e.g. 1.0.0.0 (default)."" }
+        },
+        ""required"": []
+      }
+    },
+    {
+      ""name"": ""xpp_diff_changes"",
+      ""description"": ""Lists the elements of your models that changed in Git: uncommitted changes, and with baseBranch also what the current branch changed since it left that branch (added, modified, deleted, renamed). Use it to review or summarize a change set (pull request description, code review), then read the elements with xpp_read_object and check them with xpp_check_best_practice and xpp_analyze_performance."",
+      ""inputSchema"": {
+        ""type"": ""object"",
+        ""properties"": {
+          ""baseBranch"": { ""type"": ""string"", ""description"": ""Branch to compare with, e.g. main. Omit for uncommitted changes only."" }
+        },
+        ""required"": []
+      }
+    },
+    {
+      ""name"": ""xpp_check_best_practice"",
+      ""description"": ""Runs the X++ best-practice rules (xppbp, the checks Visual Studio runs and the ones partner code reviews use) on a custom model and returns every warning and error with element, member, line, rule moniker and message. scope=project reports only the active project's elements. Run it after creating or changing code, next to xpp_build, and fix what it reports or say why a warning stays. Takes a minute or more."",
+      ""inputSchema"": {
+        ""type"": ""object"",
+        ""properties"": {
+          ""modelName"": { ""type"": ""string"", ""description"": ""Model to check. Defaults to the active project's model."" },
+          ""scope"": { ""type"": ""string"", ""enum"": [""model"", ""project""], ""description"": ""Default model."" }
+        },
+        ""required"": []
+      }
+    },
+    {
+      ""name"": ""xpp_find_deprecations"",
+      ""description"": ""Upgrade readiness of a model: (1) every place its code uses a class, table or method marked [SysObsolete], with the attribute's message (often the replacement to use) and whether it is marked as an error (it will stop compiling), read from the cross-reference database; (2) its extensions checked against the installed application: Chain of Command wrappers whose target method is gone, changed its signature (static, return type, parameters) or is no longer wrappable (private, final, Wrappable/Hookable(false), internal); event handlers whose class, method, delegate or table is gone; table, form and enum extensions whose base element, fields, field groups or controls are gone. Run it after installing a new version (or on the version you upgrade to) and before building."",
+      ""inputSchema"": {
+        ""type"": ""object"",
+        ""properties"": {
+          ""modelName"": { ""type"": ""string"", ""description"": ""The model to check (its package's code is read)."" }
+        },
+        ""required"": [""modelName""]
+      }
+    },
+    {
+      ""name"": ""xpp_analyze_trace"",
+      ""description"": ""Analyzes a performance trace (.etl) taken in the web client (Settings > Trace) or with the trace tools: the slowest requests (each web request or batch task) with their hot call path, methods by exclusive time with their SQL, SQL statements by total time with the X++ method that ran them, and pauses where a request logged nothing (waits, JIT, garbage collection). Use it to find where time goes in a scenario before changing code; then read the methods it names. Times include the tracing overhead."",
+      ""inputSchema"": {
+        ""type"": ""object"",
+        ""properties"": {
+          ""path"": { ""type"": ""string"", ""description"": ""Full path of the .etl file."" },
+          ""minRequestMs"": { ""type"": ""number"", ""description"": ""Ignore requests shorter than this. Default 50."" }
+        },
+        ""required"": [""path""]
+      }
+    },
+    {
+      ""name"": ""xpp_analyze_performance"",
+      ""description"": ""Static performance review of the X++ methods of a class, table or form (no environment needed): queries and row-by-row insert/update/delete inside loops, select firstonly inside while select (use a join or exists join), while select of every field, select forupdate without a write, unbalanced ttsbegin/ttscommit, crossCompany queries, and insert_recordset/update_recordset/delete_from that quietly run row by row because the table overrides insert/update/delete, has delete actions or is date-effective. Each finding gives the method, line, why it is slow and the fix. Findings are heuristics: confirm before changing code. Database log and alerts, which also force row-by-row, are environment setup and are not checked."",
+      ""inputSchema"": {
+        ""type"": ""object"",
+        ""properties"": {
+          ""objectType"": { ""type"": ""string"", ""enum"": [""AxClass"", ""AxTable"", ""AxForm""] },
+          ""objectName"": { ""type"": ""string"" }
+        },
+        ""required"": [""objectType"", ""objectName""]
+      }
+    },
+    {
       ""name"": ""xpp_get_object_type_schema"",
       ""description"": ""Returns a generated JSON schema for a D365FO metadata object type based on reflective type inspection. Use this to discover full strongly-typed typedMetadata shape for create/update/validate payloads."",
       ""inputSchema"": {
@@ -474,6 +566,21 @@ namespace XppVsCode.Server.Tools
         public string HandleToolCall(string idToken, string json)
         {
             string toolName = JsonHelpers.ExtractNestedString(json, "params", "name");
+            if (!Host.ActivityLog.Enabled)
+                return DispatchTool(idToken, json, toolName);
+            string args = JsonHelpers.ExtractToolArgumentsObject(json);
+            string objectType = JsonHelpers.ExtractJsonString(args ?? "{}", "objectType");
+            string objectName = JsonHelpers.ExtractJsonString(args ?? "{}", "objectName");
+            string snapshot = Host.ActivityLog.IsWrite(toolName) ? Host.ActivityLog.Snapshot(objectType, objectName) : null;
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            string response = DispatchTool(idToken, json, toolName);
+            bool failed = response == null || response.Contains("\"isError\":true") || response.Contains("\"error\":{");
+            Host.ActivityLog.Write(toolName, args, watch.ElapsedMilliseconds, !failed, objectType, objectName, snapshot);
+            return response;
+        }
+
+        private string DispatchTool(string idToken, string json, string toolName)
+        {
             McpLogger.Log("tools/call name=" + (toolName ?? "<null>"));
 
             switch (toolName)
@@ -506,6 +613,13 @@ namespace XppVsCode.Server.Tools
                 case "xpp_remove_from_project": return DelegateToBridge(idToken, json, "remove_from_project");
                 case "xpp_select_project": return DelegateToBridge(idToken, json, "select_project");
                 case "xpp_build": return DelegateToBridge(idToken, json, "build");
+                case "xpp_check_best_practice": return DelegateToBridge(idToken, json, "best_practice");
+                case "xpp_package": return DelegateToBridge(idToken, json, "create_package");
+                case "xpp_diff_changes": return JsonHelpers.BuildToolResult(idToken,
+                    ChangedElementsReport.Report(JsonHelpers.ExtractArgString(JsonHelpers.ExtractToolArgumentsObject(json), "baseBranch")));
+                case "xpp_analyze_performance": return HandleAnalyzePerformance(idToken, json);
+                case "xpp_find_deprecations": return HandleFindDeprecations(idToken, json);
+                case "xpp_analyze_trace": return HandleAnalyzeTrace(idToken, json);
 
                 // ── Local-only tools ──
                 case "xpp_search_docs": return _docSearch.Handle(idToken, json);
@@ -514,6 +628,72 @@ namespace XppVsCode.Server.Tools
                 default:
                     return JsonHelpers.BuildError(idToken, -32602, "Unknown tool: " + toolName);
             }
+        }
+
+        private static string HandleAnalyzeTrace(string idToken, string json)
+        {
+            string args = JsonHelpers.ExtractToolArgumentsObject(json);
+            string min = JsonHelpers.ExtractJsonValueToken(args, "minRequestMs");
+            double minRequestMs = double.TryParse(min, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : 50;
+            try
+            {
+                return JsonHelpers.BuildToolResult(idToken, Host.TraceService.AnalyzeText(JsonHelpers.ExtractArgString(args, "path"), minRequestMs));
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is System.IO.IOException || ex is InvalidOperationException || ex is System.ComponentModel.Win32Exception || ex is UnauthorizedAccessException)
+            {
+                return JsonHelpers.BuildToolResult(idToken, ex.Message, isError: true);
+            }
+        }
+
+        private string HandleFindDeprecations(string idToken, string json)
+        {
+            string model = JsonHelpers.ExtractArgString(JsonHelpers.ExtractToolArgumentsObject(json), "modelName");
+            if (string.IsNullOrWhiteSpace(model))
+                return JsonHelpers.BuildToolResult(idToken, "Pass modelName.", isError: true);
+            // The cross-reference database groups code by package; a model's package usually has its name.
+            string body = new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(new Dictionary<string, string> { ["modelName"] = model });
+            string info = _bridge.IsAvailable() ? _bridge.Call("get_model_info", body) : null;
+            string package = (info == null ? null : JsonHelpers.ExtractJsonString(info, "package") ?? JsonHelpers.ExtractJsonString(info, "Package")) ?? model;
+            string report = new DeprecationReport(_xref, Examples).Report(package);
+            if (_bridge.IsAvailable())
+                report += "\n\n" + CompatibilityText(_bridge.Call("extension_compatibility", body));
+            return JsonHelpers.BuildToolResult(idToken, report);
+        }
+
+        /// <summary>Readable extension compatibility findings (Chain of Command, handlers, metadata extensions).</summary>
+        internal static string CompatibilityText(string resultJson)
+        {
+            var result = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue }.Deserialize<Dictionary<string, object>>(resultJson);
+            if (!(result.TryGetValue("success", out object ok) && ok is bool success && success))
+                return "Extension compatibility: " + (result.TryGetValue("message", out object m) ? m : "not checked") + ".";
+            var findings = ((System.Collections.ArrayList)result["findings"]).Cast<Dictionary<string, object>>().ToList();
+            var sb = new StringBuilder();
+            sb.Append("Extension compatibility: ").Append(result["wrappers"]).Append(" Chain of Command wrapper(s), ").Append(result["handlers"])
+                .Append(" event handler(s) and ").Append(result["extensions"]).Append(" metadata extension(s) checked against the installed code; ")
+                .Append(findings.Count == 0 ? "no problems found." : findings.Count + " finding(s):");
+            foreach (var f in findings.Take(300))
+                sb.Append("\n- ").Append(f["severity"]).Append(" ").Append(f["rule"]).Append(": ").Append(f["objectName"])
+                    .Append(f["member"] is string member && member.Length > 0 ? "." + member : "").Append(": ").Append(f["message"]);
+            return sb.ToString();
+        }
+
+        private string HandleAnalyzePerformance(string idToken, string json)
+        {
+            string args = JsonHelpers.ExtractToolArgumentsObject(json);
+            if (!_bridge.IsAvailable())
+                return JsonHelpers.BuildToolResult(idToken, "MetaModel bridge is not available.", isError: true);
+            var result = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue }
+                .Deserialize<Dictionary<string, object>>(_bridge.Call("analyze_performance", args));
+            if (!(result.TryGetValue("success", out object ok) && ok is bool success && success))
+                return JsonHelpers.BuildToolResult(idToken, result.TryGetValue("message", out object m) ? m as string : "Analysis failed.", isError: true);
+            var findings = (result["findings"] as System.Collections.ArrayList ?? new System.Collections.ArrayList()).OfType<Dictionary<string, object>>().ToList();
+            var sb = new StringBuilder();
+            sb.Append(result["objectName"]).Append(": ").Append(findings.Count).Append(" performance finding(s) in ").Append(result["methods"]).Append(" method(s).");
+            foreach (var f in findings.Take(100))
+                sb.Append("\n- [").Append(f["severity"]).Append("] ").Append(f["rule"]).Append(" in ").Append(f["method"]).Append(" line ").Append(f["line"])
+                  .Append(": ").Append(f["message"]).Append(" Fix: ").Append(f["fix"]);
+            if (findings.Count > 100) sb.Append("\n... ").Append(findings.Count - 100).Append(" more.");
+            return JsonHelpers.BuildToolResult(idToken, sb.ToString());
         }
 
         private string DelegateToBridge(string idToken, string json, string action, Func<string, string> postText = null)
@@ -1112,7 +1292,6 @@ namespace XppVsCode.Server.Tools
         private static string SecurityText(string op, Dictionary<string, object> r)
         {
             var sb = new StringBuilder();
-            System.Collections.IEnumerable List(string key) => r.TryGetValue(key, out object v) ? v as System.Collections.IEnumerable : null;
             switch (op)
             {
                 case "license":
