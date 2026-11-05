@@ -1,0 +1,4 @@
+[*.cs]
+# Comparisons of names and markup are ordinal (review finding A10).
+dotnet_diagnostic.CA1310.severity = warning
+dotnet_diagnostic.CA1307.severity = warning

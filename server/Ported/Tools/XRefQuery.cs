@@ -547,7 +547,7 @@ namespace XppVsCode.Server.Tools
                         if (System.IO.Directory.Exists(System.IO.Path.Combine(dir, "Descriptor")))
                             set.Add(System.IO.Path.GetFileName(dir));
             }
-            catch { }
+            catch (Exception ex) { McpLogger.Log("Listing packages failed: " + ex.Message); }
             return _loadedPackages = set;
         }
 

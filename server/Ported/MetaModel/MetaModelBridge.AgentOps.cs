@@ -32,7 +32,7 @@ namespace XppVsCode.Server.MetaModel
             providerType = null;
             var provider = MetadataProvider;
             if (provider == null || string.IsNullOrEmpty(objectType)) return null;
-            foreach (var prop in typeof(IMetadataProvider).GetProperties())
+            foreach (var prop in typeof(IMetadataProvider).GetProperties().Where(p => p.GetIndexParameters().Length == 0))
             {
                 var read = FindProviderMethod(prop.PropertyType, "Read", typeof(string));
                 if (read == null || !string.Equals(read.ReturnType.Name, objectType, StringComparison.OrdinalIgnoreCase)) continue;
@@ -54,6 +54,107 @@ namespace XppVsCode.Server.MetaModel
             object sub = SubProvider(objectType, out Type type);
             var exists = sub == null ? null : FindProviderMethod(type, "Exists", typeof(string));
             return exists != null && (bool)exists.Invoke(sub, new object[] { objectName });
+        }
+
+        // X++ type names: a class, table, view, entity, map, enum or EDT can't share a name with any other of these.
+        private static readonly string[] TypeNamespace = { "AxClass", "AxTable", "AxView", "AxDataEntityView", "AxMap", "AxEnum", "AxEdt" };
+
+        /// <summary>
+        /// Visual Studio's Duplicate: a copy of any element under a new name in one of your models. The class declaration
+        /// (classes, tables, forms, queries, views, entities) is renamed with it; references to the original stay as they are.
+        /// Extensions keep their base element: CustTable.MyExt duplicates as CustTable.&lt;other suffix&gt;.
+        /// </summary>
+        public string DuplicateObjectJson(string objectType, string objectName, string newName, string modelName)
+        {
+            var json = new JavaScriptSerializer();
+            string baseType = BaseTypeOfExtension(objectType);
+            string pattern = baseType != null
+                ? "^" + System.Text.RegularExpressions.Regex.Escape(objectName.Split('.')[0]) + @"\.[A-Za-z_][A-Za-z0-9_]*$"
+                : @"^[A-Za-z_][A-Za-z0-9_]*$";
+            if (string.IsNullOrWhiteSpace(newName) || !System.Text.RegularExpressions.Regex.IsMatch(newName, pattern))
+                return json.Serialize(Failure("'" + newName + "' is not a valid name" + (baseType != null ? " (use " + objectName.Split('.')[0] + ".<Suffix>)." : ".")));
+            string clash = (TypeNamespace.Contains(objectType) ? TypeNamespace : new[] { objectType }).FirstOrDefault(t => ObjectExists(t, newName));
+            if (clash != null)
+                return json.Serialize(Failure(clash + " '" + newName + "' already exists."));
+            if (!IsCustomModel(modelName))
+                return json.Serialize(Failure("'" + modelName + "' is not one of your models."));
+            object source = ReadViaMetadataProvider(objectType, objectName, out _);
+            if (source == null)
+                return json.Serialize(Failure(objectType + " '" + objectName + "' not found."));
+
+            // The provider may hand out its cached instance: change a copy.
+            object copy = CloneMetadata(source, out string error);
+            if (copy == null)
+                return json.Serialize(Failure(error));
+            copy.GetType().GetProperty("Name")?.SetValue(copy, newName);
+            RenameClassDeclaration(copy, objectName, newName);
+            string note = copy is AxDataEntityView entity ? SeparateEntityNames(entity, newName) : "";
+
+            object sub = SubProvider(objectType, out Type providerType);
+            var create = sub == null ? null : FindProviderMethod(providerType, "Create", copy.GetType(), typeof(ModelSaveInfo));
+            if (create == null)
+                return json.Serialize(Failure("Duplicating " + objectType + " is not supported."));
+            var saveInfo = GetModelSaveInfo(modelName);
+            if (saveInfo == null)
+                return json.Serialize(Failure("Cannot resolve model '" + modelName + "'."));
+            try
+            {
+                create.Invoke(sub, new[] { copy, saveInfo });
+            }
+            catch (System.Reflection.TargetInvocationException ex)
+            {
+                return json.Serialize(Failure("Save failed: " + (ex.InnerException?.Message ?? ex.Message)));
+            }
+            _host.Reset();
+            InvalidateCaches();
+            return json.Serialize(new Dictionary<string, object> { ["success"] = true, ["message"] = "Created " + newName + " in " + modelName + " as a copy of " + objectName + "." + note });
+        }
+
+        /// <summary>Public names must be unique and the staging table belongs to the original: the copy gets its own.</summary>
+        private static string SeparateEntityNames(AxDataEntityView entity, string newName)
+        {
+            var notes = new List<string>();
+            string originalPublic = entity.PublicEntityName;
+            if (!string.IsNullOrEmpty(entity.PublicEntityName))
+            {
+                entity.PublicEntityName = newName;
+                notes.Add("PublicEntityName " + newName);
+            }
+            if (!string.IsNullOrEmpty(entity.PublicCollectionName))
+            {
+                // CustomerGroup/CustomerGroups becomes NewName/NewNames: keep the original's plural form.
+                entity.PublicCollectionName = !string.IsNullOrEmpty(originalPublic) && entity.PublicCollectionName.StartsWith(originalPublic, StringComparison.Ordinal)
+                    ? newName + entity.PublicCollectionName.Substring(originalPublic.Length)
+                    : newName + "s";
+                notes.Add("PublicCollectionName " + entity.PublicCollectionName);
+            }
+            string note = notes.Count > 0 ? " Set " + string.Join(", ", notes) + "." : "";
+            if (!string.IsNullOrEmpty(entity.DataManagementStagingTable))
+            {
+                entity.DataManagementStagingTable = "";
+                note += " The staging table was cleared: generate one for the copy (Regenerate staging table) before using it in data management.";
+            }
+            return note;
+        }
+
+        // Declarations live in Declaration (classes, tables, views), SourceCode.Declaration (forms) or a classDeclaration method (forms, queries).
+        private static void RenameClassDeclaration(object element, string oldName, string newName)
+        {
+            var pattern = new System.Text.RegularExpressions.Regex(@"\bclass\s+" + System.Text.RegularExpressions.Regex.Escape(oldName) + @"\b",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            string Rename(string text) => text == null ? null : pattern.Replace(text, "class " + newName, 1);
+
+            foreach (object holder in new[] { element, element.GetType().GetProperty("SourceCode")?.GetValue(element) })
+            {
+                var declaration = holder?.GetType().GetProperty("Declaration");
+                if (declaration != null && declaration.CanWrite && declaration.PropertyType == typeof(string))
+                    declaration.SetValue(holder, Rename(declaration.GetValue(holder) as string));
+            }
+            if (element.GetType().GetProperty("Methods")?.GetValue(element) is IEnumerable methods)
+            {
+                foreach (var method in methods.OfType<AxMethod>().Where(m => string.Equals(m.Name, "classDeclaration", StringComparison.OrdinalIgnoreCase)))
+                    method.Source = Rename(method.Source);
+            }
         }
 
         private string ModelOf(string objectType, string objectName)
@@ -123,7 +224,7 @@ namespace XppVsCode.Server.MetaModel
 
         private string ObsoleteBaseWarning(string objectType, string objectName)
         {
-            if (!objectType.EndsWith("Extension") || objectName.IndexOf('.') <= 0) return "";
+            if (!objectType.EndsWith("Extension", StringComparison.Ordinal) || objectName.IndexOf('.') <= 0) return "";
             string baseType = objectType.Substring(0, objectType.Length - "Extension".Length);
             string baseName = objectName.Substring(0, objectName.IndexOf('.'));
             object baseObject = ReadViaMetadataProvider(baseType, baseName, out _);
@@ -256,7 +357,7 @@ namespace XppVsCode.Server.MetaModel
             string[] dirs;
             try { dirs = Directory.GetDirectories(folder); }
             catch { yield break; }
-            foreach (string d in dirs.Where(d => !Path.GetFileName(d).StartsWith(".") && !Path.GetFileName(d).Equals("bin", StringComparison.OrdinalIgnoreCase)
+            foreach (string d in dirs.Where(d => !Path.GetFileName(d).StartsWith(".", StringComparison.Ordinal) && !Path.GetFileName(d).Equals("bin", StringComparison.OrdinalIgnoreCase)
                 && !Path.GetFileName(d).Equals("obj", StringComparison.OrdinalIgnoreCase) && !Path.GetFileName(d).Equals("node_modules", StringComparison.OrdinalIgnoreCase)))
                 foreach (string f in FindProjectFiles(d, depth - 1)) yield return f;
         }
@@ -279,7 +380,7 @@ namespace XppVsCode.Server.MetaModel
                 Directory.CreateDirectory(Path.GetDirectoryName(ActiveProjectStateFile));
                 File.WriteAllText(ActiveProjectStateFile, _projectFile);
             }
-            catch { }
+            catch (Exception ex) { LogIgnored("Saving the active project", ex); }
 
             return json.Serialize(new Dictionary<string, object>
             {
@@ -515,7 +616,7 @@ namespace XppVsCode.Server.MetaModel
                     var id = System.Xml.Linq.XDocument.Load(descriptor).Root?.Elements().FirstOrDefault(e => e.Name.LocalName == "Id");
                     if (id != null && long.TryParse(id.Value, out long value)) return value;
                 }
-                catch { }
+                catch (Exception ex) { LogIgnored("Reading model descriptor " + descriptor, ex); }
             }
             return null;
         }

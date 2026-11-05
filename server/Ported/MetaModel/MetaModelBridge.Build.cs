@@ -179,7 +179,7 @@ namespace XppVsCode.Server.MetaModel
                 var segments = (d.Path ?? "").Replace("dynamics://", "").Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
                 if (segments.Length >= 2)
                 {
-                    d.ObjectType = segments[0].StartsWith("Ax") ? segments[0] : "Ax" + segments[0];
+                    d.ObjectType = segments[0].StartsWith("Ax", StringComparison.Ordinal) ? segments[0] : "Ax" + segments[0];
                     d.ObjectName = segments[1];
                     if (segments.Length >= 4 && segments[segments.Length - 2].Equals("Method", StringComparison.OrdinalIgnoreCase))
                         d.Member = segments[segments.Length - 1];

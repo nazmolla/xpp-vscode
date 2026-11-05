@@ -33,6 +33,9 @@ Target environments: unified developer environments (UDE, Power Platform hosted)
 - `npm install`, then `npm run build` (= `build:server` + `compile`).
 - `scripts/build-server.ps1` finds `PackagesLocalDirectory\bin` from the active configuration and passes it as `D365BinPath`.
 - `scripts/smoke-test.ps1` starts the server over stdio with `TestProj.rnrproj` and runs 16 read-only tool calls with a timeout; all must PASS. Run it after every server change.
+- `node scripts/security-probes.js` (DAST: ownership, traversal, SQL, regex, URL allow-list, protocol) must report every probe PASS after server changes. Probes on standard objects must carry a payload that fails before saving; never point a write probe at a real standard object.
+- `node scripts/check-bridge-actions.js` checks `src/bridgeContract.ts` against the server's actions; add new bridge actions to both. Write actions are authorized centrally (`IWritePolicy`, `EditActions`/`CreateActions` in `MetaModelBridgeServer`): add new write actions there.
+- Open review findings and their status: `docs/review-findings.md`.
 - Test environment on this machine: config `org2f1d2adc___10.0.2790.83.json`, custom model `testcust` in `C:\CustomXppMetadata2vxeu0wu.5pd`, test project `C:\Users\Mohamed Nazmi\source\repos\TestProj\TestProj.rnrproj`, XRef DB `(LocalDB)\MSSQLLocalDB` / `XRef_org2f1d2adc100279083`.
 - Testing tips: always run the server with a timeout (Process + `WaitForExit(ms)`); never leave a stdio session waiting. PowerShell reports `git push` progress as an error even when it succeeds.
 

@@ -9,11 +9,15 @@ import { XppServerClient } from './serverClient';
 export class LabelEditor {
     private static readonly panels = new Map<string, LabelEditor>();
 
-    static open(context: vscode.ExtensionContext, server: XppServerClient, labelFile: string, showProperties: () => void): void {
+    /** Opens the label file, on the labels matching search when given (Go to Label). */
+    static open(context: vscode.ExtensionContext, server: XppServerClient, labelFile: string, showProperties: () => void, search = ''): void {
         const key = labelFile.toLowerCase();
         const existing = LabelEditor.panels.get(key);
         if (existing) {
             existing.panel.reveal();
+            if (search) {
+                void existing.panel.webview.postMessage({ type: 'search', search });
+            }
             return;
         }
         const panel = vscode.window.createWebviewPanel('xppLabelEditor', `${labelFile} [Label file]`, vscode.ViewColumn.Active, {
@@ -21,7 +25,7 @@ export class LabelEditor {
             retainContextWhenHidden: true,
             localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media')],
         });
-        LabelEditor.panels.set(key, new LabelEditor(context, server, labelFile, panel, showProperties));
+        LabelEditor.panels.set(key, new LabelEditor(context, server, labelFile, panel, showProperties, search));
         panel.onDidDispose(() => LabelEditor.panels.delete(key));
     }
 
@@ -31,8 +35,9 @@ export class LabelEditor {
         private readonly labelFile: string,
         private readonly panel: vscode.WebviewPanel,
         private readonly showProperties: () => void,
+        search: string,
     ) {
-        panel.webview.html = this.html(context, panel.webview);
+        panel.webview.html = this.html(context, panel.webview, search);
         panel.webview.onDidReceiveMessage(msg => void this.onMessage(msg));
     }
 
@@ -55,7 +60,7 @@ export class LabelEditor {
                     if (!result?.success) {
                         throw new Error(result?.message ?? 'Save failed.');
                     }
-                    vscode.window.setStatusBarMessage(result.message, 5000);
+                    vscode.window.setStatusBarMessage(result.message ?? '', 5000);
                     await this.panel.webview.postMessage({ type: 'saved', labelId: msg.labelId });
                     return;
                 }
@@ -69,7 +74,7 @@ export class LabelEditor {
                     if (!result?.success) {
                         throw new Error(result?.message ?? 'Delete failed.');
                     }
-                    vscode.window.setStatusBarMessage(result.message, 5000);
+                    vscode.window.setStatusBarMessage(result.message ?? '', 5000);
                     await this.panel.webview.postMessage({ type: 'saved' });
                     return;
                 }
@@ -86,7 +91,7 @@ export class LabelEditor {
         }
     }
 
-    private html(context: vscode.ExtensionContext, webview: vscode.Webview): string {
+    private html(context: vscode.ExtensionContext, webview: vscode.Webview, search: string): string {
         const nonce = randomBytes(16).toString('base64');
         const media = (file: string) => webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'media', file));
         return `<!DOCTYPE html>
@@ -97,7 +102,7 @@ export class LabelEditor {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="${media('labelEditor.css')}" rel="stylesheet">
 </head>
-<body>
+<body data-search="${search.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`)}">
 <div id="toolbar">
   <span id="title"></span>
   <span id="badge"></span>

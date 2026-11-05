@@ -1,4 +1,4 @@
-param([string]$Configuration = 'Release')
+param([string]$Configuration = 'Release', [switch]$Test)
 $ErrorActionPreference = 'Stop'
 
 function Get-ConfigFramework([string]$path) {
@@ -30,3 +30,8 @@ Write-Host "Using $bin"
 $root = Split-Path $PSScriptRoot -Parent
 dotnet build (Join-Path $root 'server\XppVsCode.Server.csproj') -c $Configuration -o (Join-Path $root 'server\bin') "-p:D365BinPath=$bin" -nologo -v:minimal
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+if ($Test) {
+    dotnet test (Join-Path $root 'test\server\XppVsCode.Server.Tests.csproj') -c $Configuration "-p:D365BinPath=$bin" -nologo -v:minimal
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}

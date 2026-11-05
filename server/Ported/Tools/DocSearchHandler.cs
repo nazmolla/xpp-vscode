@@ -31,8 +31,7 @@ namespace XppVsCode.Server.Tools
                 string fetchUrl;
                 if (!string.IsNullOrEmpty(url))
                 {
-                    if (!url.StartsWith("https://learn.microsoft.com", StringComparison.OrdinalIgnoreCase)
-                        && !url.StartsWith("https://docs.microsoft.com", StringComparison.OrdinalIgnoreCase))
+                    if (!IsLearnUrl(url))
                         return JsonHelpers.BuildToolResult(idToken,
                             "Only Microsoft Learn URLs are allowed (https://learn.microsoft.com/...). "
                             + "Use 'query' parameter to search instead.", isError: true);
@@ -290,23 +289,57 @@ namespace XppVsCode.Server.Tools
             return null;
         }
 
+        internal static bool IsLearnUrl(string url) =>
+            Uri.TryCreate(url, UriKind.Absolute, out Uri uri)
+            && uri.Scheme == Uri.UriSchemeHttps
+            && uri.IsDefaultPort
+            && string.IsNullOrEmpty(uri.UserInfo)
+            && (uri.Host.Equals("learn.microsoft.com", StringComparison.OrdinalIgnoreCase)
+                || uri.Host.Equals("docs.microsoft.com", StringComparison.OrdinalIgnoreCase));
+
+        private sealed class NoRedirectWebClient : WebClient
+        {
+            protected override WebRequest GetWebRequest(Uri address)
+            {
+                var request = base.GetWebRequest(address);
+                if (request is HttpWebRequest http) http.AllowAutoRedirect = false;
+                return request;
+            }
+        }
+
         private static string FetchAndExtractPage(string url, int maxLen)
         {
             try
             {
-                using (var client = new WebClient())
+                using (var client = new NoRedirectWebClient())
                 {
                     client.Encoding = Encoding.UTF8;
-                    client.Headers.Add("User-Agent", "XppCopilotCompanion/1.0 (MCP docs tool)");
-                    // Learn serves the article as markdown on request: no navigation chrome, code blocks kept.
-                    client.Headers.Add("Accept", "text/markdown, text/html;q=0.5");
-                    string body = client.DownloadString(url);
+                    string body = null;
+                    for (int hop = 0; hop < 5 && body == null; hop++)
+                    {
+                        if (!IsLearnUrl(url))
+                        {
+                            McpLogger.Log("FetchAndExtractPage refused " + url);
+                            return null;
+                        }
+                        client.Headers.Clear();
+                        client.Headers.Add("User-Agent", "XppCopilotCompanion/1.0 (MCP docs tool)");
+                        // Learn serves the article as markdown on request: no navigation chrome, code blocks kept.
+                        client.Headers.Add("Accept", "text/markdown, text/html;q=0.5");
+                        string page = client.DownloadString(url);
+                        string location = client.ResponseHeaders?["Location"];
+                        if (string.IsNullOrEmpty(location))
+                            body = page;
+                        else
+                            url = new Uri(new Uri(url), location).AbsoluteUri;
+                    }
+                    if (body == null) return null;
 
                     string extracted;
                     if ((client.ResponseHeaders?["Content-Type"] ?? "").IndexOf("markdown", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         extracted = body;
-                        if (extracted.StartsWith("---"))
+                        if (extracted.StartsWith("---", StringComparison.Ordinal))
                         {
                             int end = extracted.IndexOf("\n---", 3, StringComparison.Ordinal);
                             if (end > 0) extracted = extracted.Substring(extracted.IndexOf('\n', end + 1) + 1);

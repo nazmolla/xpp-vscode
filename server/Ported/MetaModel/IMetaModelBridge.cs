@@ -36,6 +36,12 @@ namespace XppVsCode.Server.MetaModel
         string GetNodeTypesJson(string objectType, string objectName, string[] path);
         string AddElementNodeJson(string objectType, string objectName, string[] collectionPath, string typeName, string name, Dictionary<string, string> properties);
         string DeleteElementNodeJson(string objectType, string objectName, string[] path);
+        string RenameElementNodeJson(string objectType, string objectName, string[] path, string newName);
+        string DuplicateElementNodeJson(string objectType, string objectName, string[] path, string newName);
+        string MoveElementNodeJson(string objectType, string objectName, string[] path, int offset);
+        string DuplicateObjectJson(string objectType, string objectName, string newName, string modelName);
+        string DropOnNodeJson(string objectType, string objectName, string[] path, bool onBaseNode, string sourceType, string sourceName, string[] sourcePath);
+        string DropOnPropertyJson(string objectType, string objectName, string[] path, string property, string sourceType, string sourceName);
         string GetElementMethodJson(string objectType, string objectName, string[] path);
         string SetElementMethodJson(string objectType, string objectName, string[] nodePath, string originalName, string source);
         string GetOverridesJson(string objectType, string objectName, string[] nodePath);

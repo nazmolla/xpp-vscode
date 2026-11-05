@@ -28,9 +28,27 @@ namespace XppVsCode.Server.MetaModel
             catch { }
         }
 
-        public MetaModelBridgeServer(IMetaModelBridge bridge)
+        public MetaModelBridgeServer(IMetaModelBridge bridge, IWritePolicy policy)
         {
             _bridge = bridge ?? throw new ArgumentNullException(nameof(bridge));
+            _policy = policy ?? throw new ArgumentNullException(nameof(policy));
+        }
+
+        private readonly IWritePolicy _policy;
+
+        // Actions that change an existing object (objectType/objectName) and actions that create objects in a model (modelName).
+        private static readonly HashSet<string> EditActions = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "update_object", "delete_object", "set_element_property", "add_element_node", "delete_element_node", "rename_element_node",
+            "duplicate_element_node", "move_element_node", "drop_on_node", "drop_on_property", "set_element_method",
+        };
+        private static readonly HashSet<string> CreateActions = new HashSet<string>(StringComparer.Ordinal) { "create_object", "duplicate_object" };
+
+        private string WriteDenial(string action, string body)
+        {
+            if (EditActions.Contains(action) && !"true".Equals(ExtractJsonString(body, "checkOnly"), StringComparison.OrdinalIgnoreCase))
+                return _policy.EditDenial(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
+            return CreateActions.Contains(action) ? _policy.TargetModelDenial(ExtractJsonString(body, "modelName")) : null;
         }
 
         public string Dispatch(string action, string body)
@@ -45,13 +63,16 @@ namespace XppVsCode.Server.MetaModel
                 catch (Exception ex)
                 {
                     BridgeLog("Dispatch " + action + " failed: " + ex);
-                    return "{\"success\":false,\"message\":\"" + EscapeJson(ex.Message) + "\"}";
+                    return "{\"success\":false,\"message\":\"" + EscapeJson(MetaModelBridge.Cause(ex)) + "\"}";
                 }
             }
         }
 
         private string DispatchOnMainThread(string action, string body)
         {
+            string denial = WriteDenial(action, body);
+            if (denial != null)
+                return SerializeResult(new MetaModelResult { Success = false, Message = denial });
             switch (action)
             {
                 case "create_object":
@@ -134,6 +155,25 @@ namespace XppVsCode.Server.MetaModel
                         ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "typeName"), ExtractJsonString(body, "name"), ExtractJsonObject(body, "properties"));
                 case "delete_element_node":
                     return _bridge.DeleteElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"), ExtractJsonStringArray(body, "path"));
+                case "rename_element_node":
+                    return _bridge.RenameElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                        ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "newName"));
+                case "duplicate_element_node":
+                    return _bridge.DuplicateElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                        ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "newName"));
+                case "move_element_node":
+                    return _bridge.MoveElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                        ExtractJsonStringArray(body, "path"), int.TryParse(ExtractJsonString(body, "offset"), out int moveOffset) ? moveOffset : 0);
+                case "duplicate_object":
+                    return _bridge.DuplicateObjectJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                        ExtractJsonString(body, "newName"), ExtractJsonString(body, "modelName"));
+                case "drop_on_node":
+                    return _bridge.DropOnNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                        ExtractJsonStringArray(body, "path"), "true".Equals(ExtractJsonString(body, "onBaseNode"), StringComparison.OrdinalIgnoreCase),
+                        ExtractJsonString(body, "sourceType"), ExtractJsonString(body, "sourceName"), ExtractJsonStringArray(body, "sourcePath"));
+                case "drop_on_property":
+                    return _bridge.DropOnPropertyJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                        ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "property"), ExtractJsonString(body, "sourceType"), ExtractJsonString(body, "sourceName"));
                 case "get_element_method":
                     return _bridge.GetElementMethodJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"), ExtractJsonStringArray(body, "path"));
                 case "set_element_method":
@@ -1062,7 +1102,7 @@ namespace XppVsCode.Server.MetaModel
         {
             if (string.IsNullOrEmpty(value)) return null;
             string t = value.TrimStart();
-            if (t.StartsWith("<![CDATA[") || t.StartsWith("<?") || t.StartsWith("<Ax"))
+            if (t.StartsWith("<![CDATA[", StringComparison.Ordinal) || t.StartsWith("<?", StringComparison.Ordinal) || t.StartsWith("<Ax", StringComparison.Ordinal))
                 return "ERROR: The '" + paramName + "' parameter contains markup. " + FormattedContentRejectionMessage;
             return null;
         }
@@ -1098,7 +1138,7 @@ namespace XppVsCode.Server.MetaModel
 
             // Reject formatted markup — this app is JSON-only
             string trimmed = metadataStr.TrimStart();
-            if (trimmed.StartsWith("<"))
+            if (trimmed.StartsWith("<", StringComparison.Ordinal))
             {
                 BridgeLog("REJECTED formatted markup in metadata — app is JSON-only");
                 return "ERROR: Formatted markup is not supported. You MUST use the strongly-typed JSON parameters "
@@ -1151,7 +1191,7 @@ namespace XppVsCode.Server.MetaModel
             }
 
             string trimmed = metadataStr.TrimStart();
-            if (trimmed.StartsWith("<"))
+            if (trimmed.StartsWith("<", StringComparison.Ordinal))
             {
                 BridgeLog("REJECTED formatted markup in metadata (update) — app is JSON-only");
                 return "ERROR: Formatted markup is not supported. You MUST use the strongly-typed JSON parameters "
@@ -2025,12 +2065,7 @@ namespace XppVsCode.Server.MetaModel
             return result.Count > 0 ? result.ToArray() : null;
         }
 
-        private static string EscapeJson(string s)
-        {
-            if (s == null) return "";
-            return s.Replace("\\", "\\\\").Replace("\"", "\\\"")
-                    .Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t");
-        }
+        private static string EscapeJson(string s) => XppVsCode.Server.Tools.JsonHelpers.EscapeJsonString(s);
 
     }
 }
