@@ -42,8 +42,22 @@ namespace XppVsCode.Server
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void Run(DynamicsMetadataConfig config, string projectFile)
         {
-            var bridge = new MetaModelBridge(new MetadataHost(config), new LabelStore(config), projectFile);
-            var client = new BridgeClient(new MetaModelBridgeServer(bridge, bridge));
+            var labels = new LabelStore(config);
+            var bridge = new MetaModelBridge(new MetadataHost(config), labels, projectFile);
+            var services = new BridgeServices
+            {
+                Objects = bridge,
+                Discovery = bridge,
+                Designer = bridge,
+                Projects = bridge,
+                Builds = new BuildService(bridge),
+                Policy = bridge,
+                Models = new ModelService(bridge),
+                Labels = new LabelService(bridge, labels),
+                Packages = new ProjectPackageService(bridge),
+                Relations = new TableRelationsService(bridge),
+            };
+            var client = new BridgeClient(new MetaModelBridgeServer(services));
             new McpStdioServer(new ToolRouter(client), client, Version).Run();
         }
 

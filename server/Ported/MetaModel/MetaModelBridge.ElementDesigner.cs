@@ -525,7 +525,7 @@ namespace XppVsCode.Server.MetaModel
         private static string SplitWords(string name)
             => System.Text.RegularExpressions.Regex.Replace(name, "(?<=[a-z])(?=[A-Z])", " ");
 
-        private static Dictionary<string, object> Failure(string message)
+        internal static Dictionary<string, object> Failure(string message)
             => new Dictionary<string, object> { ["success"] = false, ["message"] = message };
     }
 }

@@ -604,7 +604,7 @@ namespace XppVsCode.Server.MetaModel
 
         // ── Model descriptor ──
 
-        private static long? DescriptorModelId(ModelInfo model)
+        internal static long? DescriptorModelId(ModelInfo model)
         {
             var config = DynamicsConfigurationReader.ReadActiveConfiguration();
             foreach (string root in config.MetadataRoots())

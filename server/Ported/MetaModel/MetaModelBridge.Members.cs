@@ -115,7 +115,7 @@ namespace XppVsCode.Server.MetaModel
                 AddMember(members, seen, m[0], m[1], m[0] == "field" ? m[2] : null, false, "Common", m[0] == "method" ? m[2] : null);
         }
 
-        private static string FieldTypeName(AxTableField field)
+        internal static string FieldTypeName(AxTableField field)
         {
             string edt = field.GetType().GetProperty("ExtendedDataType")?.GetValue(field) as string;
             if (!string.IsNullOrEmpty(edt)) return edt;
