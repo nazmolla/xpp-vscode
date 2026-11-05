@@ -3,10 +3,10 @@ import { promises as fs } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { readActiveEnvironment, selectedEnvironmentUrl } from './environment';
+import { Dataverse } from './dataverse';
+import { readActiveEnvironment } from './environment';
 import { findActiveProject, readProject } from './project';
 import { XppServerClient } from './serverClient';
-import { getDataverseToken, httpFetch, resolveDataverseUrl } from './ude';
 
 /**
  * Runs X++ SysTest tests on the unified developer environment's cloud runtime, the way Visual Studio's Test Explorer
@@ -32,7 +32,7 @@ export interface TestOutcome {
     duration?: string;
 }
 
-interface DiscoveredTest {
+export interface DiscoveredTest {
     className: string;
     method: string;
 }
@@ -42,7 +42,7 @@ function escapeXml(text: string): string {
 }
 
 /** X++ test classes extend SysTestCase (directly or through a base); test methods start with "test" or carry [SysTestMethod]. */
-async function discoverTests(server: XppServerClient, request: TestRunRequest, log: (line: string) => void): Promise<DiscoveredTest[]> {
+export async function discoverTests(server: XppServerClient, request: TestRunRequest, log: (line: string) => void): Promise<DiscoveredTest[]> {
     let classes = request.classes ?? [];
     if (classes.length === 0) {
         const project = await readProject();
@@ -104,34 +104,6 @@ function buildSuite(assemblyPath: string, tests: DiscoveredTest[]): string {
         '  <TestFramework>xpptest</TestFramework>',
         '</TestSuite>',
     ].join('\r\n');
-}
-
-class Dataverse {
-    constructor(private readonly api: string, private readonly token: string) {}
-
-    async send(method: string, url: string, body?: any, headers: Record<string, string> = {}): Promise<Response> {
-        const response = await httpFetch(url.startsWith('http') ? url : `${this.api}/${url}`, {
-            method,
-            headers: {
-                Authorization: `Bearer ${this.token}`,
-                Accept: 'application/json',
-                'OData-MaxVersion': '4.0',
-                'OData-Version': '4.0',
-                ...(body !== undefined && !(body instanceof Uint8Array) ? { 'Content-Type': 'application/json' } : {}),
-                ...headers,
-            },
-            body: body === undefined ? undefined : body instanceof Uint8Array ? body : JSON.stringify(body),
-        });
-        if (!response.ok) {
-            throw new Error(`${method} ${url} returned ${response.status}: ${(await response.text()).slice(0, 600)}`);
-        }
-        return response;
-    }
-
-    async json(method: string, url: string, body?: any, headers: Record<string, string> = {}): Promise<any> {
-        const text = await (await this.send(method, url, body, headers)).text();
-        return text ? JSON.parse(text) : {};
-    }
 }
 
 function formatted(record: any, field: string): string {
@@ -207,12 +179,8 @@ export async function runTests(server: XppServerClient, request: TestRunRequest,
         return { summary: 'No tests found. Test classes must extend SysTestCase (or a subclass) and test methods must be public and start with "test" or carry [SysTestMethod].', results: [] };
     }
 
-    const environmentUrl = selectedEnvironmentUrl();
-    if (!environmentUrl) {
-        throw new Error('No environment selected. Run "X++: Connect to Environment" or "X++: Select Environment" first.');
-    }
-    const dataverseUrl = await resolveDataverseUrl(environmentUrl);
-    const dv = new Dataverse(`${dataverseUrl}/api/data/v9.2`, await getDataverseToken(dataverseUrl));
+    const dv = await Dataverse.forSelectedEnvironment();
+    const dataverseUrl = dv.url;
 
     const runtimeRoot = env.runtimePackagesDirectory ?? env.frameworkDirectory;
     const assemblyPath = path.join(runtimeRoot, model, 'bin', `Dynamics.AX.${model}.dll`);

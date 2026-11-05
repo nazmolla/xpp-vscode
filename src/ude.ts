@@ -177,7 +177,7 @@ export async function resolveDataverseUrl(input: string): Promise<string> {
     return `https://${host}`;
 }
 
-/** X++: Check Environment Connection — sign in and run every read-only step of the setup. */
+/** F&O Studio: Check Environment Connection — sign in and run every read-only step of the setup. */
 export async function checkEnvironmentConnection(log: vscode.OutputChannel): Promise<void> {
     const input = await vscode.window.showInputBox({
         title: 'Dataverse environment URL',

@@ -20,6 +20,9 @@ namespace XppVsCode.Server.MetaModel
         private readonly ILabelService _labels;
         private readonly IProjectPackageService _packages;
         private readonly ITableRelations _relations;
+        private readonly ITableDataShape _dataShape;
+        private readonly IPerformanceAnalysis _performance;
+        private readonly IExtensionCompatibility _compatibility;
         private readonly object _gate = new object();
 
         private static readonly string BridgeLogPath =
@@ -48,6 +51,9 @@ namespace XppVsCode.Server.MetaModel
             _labels = services.Labels ?? throw new ArgumentNullException(nameof(services.Labels));
             _packages = services.Packages ?? throw new ArgumentNullException(nameof(services.Packages));
             _relations = services.Relations ?? throw new ArgumentNullException(nameof(services.Relations));
+            _dataShape = services.DataShape ?? throw new ArgumentNullException(nameof(services.DataShape));
+            _performance = services.Performance ?? throw new ArgumentNullException(nameof(services.Performance));
+            _compatibility = services.Compatibility ?? throw new ArgumentNullException(nameof(services.Compatibility));
             _policy = services.Policy ?? throw new ArgumentNullException(nameof(services.Policy));
         }
 
@@ -131,6 +137,19 @@ namespace XppVsCode.Server.MetaModel
                     return _relations.TableErdJson(XppVsCode.Server.Tools.JsonHelpers.ExtractJsonStringArray(body, "tables"));
                 case "incoming_relations":
                     return _relations.IncomingRelationsJson(ExtractJsonString(body, "table"), "true".Equals(ExtractJsonString(body, "force"), StringComparison.OrdinalIgnoreCase));
+                case "table_data_shape":
+                    return _dataShape.TableDataShapeJson(ExtractJsonString(body, "table"));
+                case "best_practice":
+                    return _builds.BestPracticeJson(ExtractJsonString(body, "modelName"),
+                        string.Equals(ExtractJsonString(body, "scope"), "project", StringComparison.OrdinalIgnoreCase));
+                case "create_package":
+                    return _builds.PackageJson(XppVsCode.Server.Tools.JsonHelpers.ExtractJsonStringArray(body, "modelNames"), ExtractJsonString(body, "version"));
+                case "sync_tables":
+                    return _builds.SyncTablesJson(XppVsCode.Server.Tools.JsonHelpers.ExtractJsonStringArray(body, "tables"));
+                case "analyze_performance":
+                    return _performance.AnalyzePerformanceJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
+                case "extension_compatibility":
+                    return _compatibility.ExtensionCompatibilityJson(ExtractJsonString(body, "modelName"));
                 case "type_members":
                     return _discovery.TypeMembersJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
                 case "label_file_entries":

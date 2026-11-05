@@ -227,6 +227,7 @@ export class FormDesigner {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
 <link rel="stylesheet" href="${previewStyle}">
 <link rel="stylesheet" href="${style}">
+<link rel="stylesheet" href="${webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'media', 'a11y.css'))}">
 <title>Form designer</title>
 </head>
 <body>

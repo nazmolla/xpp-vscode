@@ -13,7 +13,7 @@ interface Example {
 }
 
 /**
- * X++: Find Similar Standard Implementations: standard elements that do what an element does (same base class,
+ * F&O Studio: Find Similar Standard Implementations: standard elements that do what an element does (same base class,
  * interfaces, patterns) or what a free-text query describes, e.g. "batch job with contract".
  */
 export async function findExamples(ctx: ProductivityContext, arg?: TreeArg): Promise<void> {

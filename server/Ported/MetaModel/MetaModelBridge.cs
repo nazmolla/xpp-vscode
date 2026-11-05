@@ -147,6 +147,10 @@ namespace XppVsCode.Server.MetaModel
                     case "AxLabelFile":      result = CreateLabelFile(request, saveInfo); break;
                     case "AxMenuExtension":  result = CreateMenuExtension(request, saveInfo); break;
                     case "AxCompositeDataEntityView": result = CreateCompositeDataEntityView(request, saveInfo); break;
+                    case "AxWorkflowCategory":
+                    case "AxWorkflowApproval":
+                    case "AxWorkflowTemplate":
+                    case "AxReport":         result = CreateViaProvider(request, saveInfo); break;
 
                     default:
                         result = Fail("Unsupported object type: " + request.ObjectType); break;
@@ -1982,6 +1986,21 @@ namespace XppVsCode.Server.MetaModel
             ApplyTypedMetadata(key, req);
             MetaService.CreateConfigurationKey(key, saveInfo);
             return Ok("Created AxConfigurationKey '" + req.ObjectName + "'.");
+        }
+
+        /// <summary>Workflow categories, types and approvals and reports: built from typedMetadata/properties, saved by their provider's Create.</summary>
+        private MetaModelResult CreateViaProvider(CreateObjectRequest req, ModelSaveInfo saveInfo)
+        {
+            Type type = ResolveMetadataType(req.ObjectType);
+            object sub = SubProvider(req.ObjectType, out Type providerType);
+            var create = sub == null || type == null ? null : FindProviderMethod(providerType, "Create", type, typeof(ModelSaveInfo));
+            if (create == null) return Fail("The metadata API can't create " + req.ObjectType + ".");
+            object element = Activator.CreateInstance(type);
+            type.GetProperty("Name")?.SetValue(element, req.ObjectName);
+            ApplyTypedMetadata(element, req);
+            type.GetProperty("Name")?.SetValue(element, req.ObjectName);
+            create.Invoke(sub, new[] { element, saveInfo });
+            return Ok("Created " + req.ObjectType + " '" + req.ObjectName + "'.");
         }
 
         // ── Private helpers: Extension operations ──

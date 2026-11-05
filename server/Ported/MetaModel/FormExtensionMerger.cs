@@ -120,7 +120,7 @@ namespace XppVsCode.Server.MetaModel
             return -1;
         }
 
-        private static void Collect(AxFormControl control, Action<string> collect)
+        internal static void Collect(AxFormControl control, Action<string> collect)
         {
             if (control == null) return;
             collect(control.Name);

@@ -351,6 +351,8 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode>
         item.contextValue = elementContextValue(objectType, true);
         item.iconPath = new vscode.ThemeIcon(iconFor(objectType));
         item.command = elementOpenCommand(objectType, objectName);
+        // Lets Git change decorations (ChangeDecorations) mark the item.
+        item.resourceUri = objectUri(objectType, objectName);
         return item;
     }
 

@@ -42,6 +42,116 @@ namespace XppVsCode.Server.MetaModel
             public string Path;
         }
 
+        /// <summary>The best-practice rules (xppbp) on a custom model; projectOnly reports only the active project's elements.</summary>
+        public string BestPracticeJson(string modelName, bool projectOnly)
+        {
+            var json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+            var config = DynamicsConfigurationReader.ReadActiveConfiguration();
+            var project = GetActiveProject();
+            if (string.IsNullOrWhiteSpace(modelName)) modelName = project?.ModelName;
+            if (string.IsNullOrWhiteSpace(modelName))
+                return json.Serialize(Failure("Pass modelName, or select a project with xpp_select_project."));
+            var model = MetaService.GetModel(modelName);
+            if (model == null || !IsCustomModel(model.Name))
+                return json.Serialize(Failure("Model '" + modelName + "' is not one of your custom models."));
+            if (projectOnly && project == null)
+                return json.Serialize(Failure("scope 'project' needs an active project (xpp_select_project)."));
+
+            string logDir = Path.Combine(config.CustomMetadataFolder, model.Module, "BuildLogs");
+            Directory.CreateDirectory(logDir);
+            string xmlLog = Path.Combine(logDir, "Dynamics.AX." + model.Module + ".xppbp.xml");
+            if (File.Exists(xmlLog)) File.Delete(xmlLog);
+            var log = new StringBuilder();
+            var timer = Stopwatch.StartNew();
+            // Custom metadata as the source and the reference packages for what it uses (verified: other combinations fail to load).
+            int exit = RunTool(Path.Combine(config.FrameworkDirectory, "bin", "xppbp.exe"), new[]
+            {
+                "-metadata=" + config.CustomMetadataFolder, "-packagesRoot=" + config.FrameworkDirectory,
+                "-module=" + model.Module, "-model=" + model.Name, "-all", "-xmlLog=" + xmlLog,
+            }, log);
+            if (!File.Exists(xmlLog))
+                return json.Serialize(Failure("The best-practice checker wrote no results (exit " + exit + ").\n" + Tail(log.ToString(), 2000)));
+
+            HashSet<string> projectKeys = projectOnly
+                ? new HashSet<string>(project.GetItems().Select(i => i.ObjectType + "/" + i.Name), StringComparer.OrdinalIgnoreCase) : null;
+            var reported = ParseBuildDiagnostics(xmlLog).Where(d => projectKeys == null || d.ObjectType == null || projectKeys.Contains(d.ObjectType + "/" + d.ObjectName)).ToList();
+            int errors = reported.Count(d => IsBlocking(d.Severity));
+            var text = new StringBuilder();
+            text.Append("BEST PRACTICE: ").Append(model.Name).Append(projectOnly ? " (project " + project.Caption + " only)" : "")
+                .Append(" in ").Append((int)timer.Elapsed.TotalSeconds).Append("s - ").Append(errors).Append(" error(s), ")
+                .Append(reported.Count - errors).AppendLine(" warning(s).");
+            foreach (var d in reported.OrderBy(d => IsBlocking(d.Severity) ? 0 : 1).Take(MaxReportedDiagnostics))
+                text.AppendLine(FormatDiagnostic(d));
+            if (reported.Count > MaxReportedDiagnostics)
+                text.AppendLine("... " + (reported.Count - MaxReportedDiagnostics) + " more.");
+            return json.Serialize(new Dictionary<string, object> { ["success"] = true, ["message"] = text.ToString() });
+        }
+
+        /// <summary>A deployable package of custom models, with the script Visual Studio runs (RunPackageCreationAll.ps1).</summary>
+        public string PackageJson(string[] modelNames, string version)
+        {
+            var json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+            var config = DynamicsConfigurationReader.ReadActiveConfiguration();
+            if (string.IsNullOrWhiteSpace(version)) version = "1.0.0.0";
+            if (!Regex.IsMatch(version, @"^\d+(\.\d+){3}$"))
+                return json.Serialize(Failure("version must look like 1.0.0.0."));
+            var names = (modelNames ?? new string[0]).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+            if (names.Count == 0 && GetActiveProject()?.ModelName is string projectModel) names.Add(projectModel);
+            if (names.Count == 0) return json.Serialize(Failure("Pass modelNames, or select a project."));
+            var packages = new List<string>();
+            foreach (string name in names)
+            {
+                var model = MetaService.GetModel(name);
+                if (model == null || !IsCustomModel(model.Name))
+                    return json.Serialize(Failure("Model '" + name + "' is not one of your custom models."));
+                if (!packages.Contains(model.Module, StringComparer.OrdinalIgnoreCase)) packages.Add(model.Module);
+            }
+            string bin = Path.Combine(config.FrameworkDirectory, "bin");
+            string output = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "XppVsCode", "packages", DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+            Directory.CreateDirectory(output);
+            string Q(string s) => "'" + s.Replace("'", "''") + "'";
+            // Names come from the metadata API and the version is validated, so the command line holds no free text.
+            string command = "& " + Q(Path.Combine(bin, "RunPackageCreationAll.ps1")) + " -packageNames @(" + string.Join(",", packages.Select(Q)) + ")"
+                + " -metadataDir " + Q(config.CustomMetadataFolder) + " -modelDir " + Q(config.CustomMetadataFolder) + " -binDir " + Q(bin)
+                + " -packageVersion " + Q(version) + " -outputDir " + Q(output);
+            var log = new StringBuilder();
+            int exit = RunTool(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"),
+                new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command }, log);
+            var zips = Directory.GetFiles(output, "*.zip", SearchOption.AllDirectories);
+            return json.Serialize(new Dictionary<string, object>
+            {
+                ["success"] = exit == 0 && zips.Length > 0,
+                ["message"] = (exit == 0 && zips.Length > 0 ? "PACKAGE CREATED: " + string.Join(", ", zips) : "PACKAGE FAILED (exit " + exit + ").")
+                    + " Packages: " + string.Join(", ", packages) + ", version " + version + ". Build the models first; the package contains their last build.\n" + Tail(log.ToString(), 2500),
+            });
+        }
+
+        /// <summary>Synchronizes only the given tables (SyncEngine partiallist) on a cloud-hosted or VHD environment.</summary>
+        public string SyncTablesJson(string[] tables)
+        {
+            var json = new JavaScriptSerializer();
+            var config = DynamicsConfigurationReader.ReadActiveConfiguration();
+            if (config.IsUnifiedDeveloperEnvironment)
+                return json.Serialize(Failure("Unified developer environments synchronize the database when the package is deployed; there is no local database to synchronize."));
+            var names = (tables ?? new string[0]).Select(t => MetaService.GetTable(t?.Trim() ?? "")?.Name).ToList();
+            if (names.Count == 0 || names.Any(n => n == null))
+                return json.Serialize(Failure("Pass existing table names."));
+            if (string.IsNullOrEmpty(config.DatabaseServer) || string.IsNullOrEmpty(config.BusinessDatabaseName))
+                return json.Serialize(Failure("The configuration names no database server/business database."));
+            var log = new StringBuilder();
+            string connection = "Data Source=" + config.DatabaseServer + ";Initial Catalog=" + config.BusinessDatabaseName + ";Integrated Security=True;Enlist=True;Application Name=SyncEngine";
+            int exit = RunTool(Path.Combine(config.FrameworkDirectory, "bin", "SyncEngine.exe"), new[]
+            {
+                "-syncmode=partiallist", "-synclist=" + string.Join(",", names),
+                "-metadatabinaries=" + config.FrameworkDirectory, "-connect=" + connection, "-fallbacktonative=False",
+            }, log);
+            return json.Serialize(new Dictionary<string, object>
+            {
+                ["success"] = exit == 0,
+                ["message"] = (exit == 0 ? "Synchronized " : "Synchronization FAILED (exit " + exit + ") for ") + string.Join(", ", names) + ".\n" + Tail(log.ToString(), 2000),
+            });
+        }
+
         public string BuildJson(string modelName, bool projectOnly, bool syncDatabase)
         {
             var json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };

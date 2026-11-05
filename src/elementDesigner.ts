@@ -165,6 +165,9 @@ export class ElementDesigner {
                 return this.loadProperties(message.path, message.source ?? undefined);
             case 'setProperty':
                 return this.setProperty(message.path, message.property, message.value);
+            case 'undo':
+            case 'redo':
+                return this.undoRedo(message.command);
             case 'openMethod':
                 return this.openMethod(message.path);
             case 'copyEventHandler':
@@ -432,15 +435,43 @@ export class ElementDesigner {
         this.post({ type: 'properties', path, data: result });
     }
 
-    private async setProperty(path: string[], property: string, value: string): Promise<void> {
+    private async setProperty(path: string[], property: string, value: string, record = true): Promise<void> {
+        const before = record ? await this.propertyValue(path, property) : undefined;
         const result = await this.server.bridge('set_element_property', { objectType: this.objectType, objectName: this.objectName, path, property, value });
         if (!result.success) {
             this.post({ type: 'error', message: result.message });
-        } else if (this.objectType === 'AxForm') {
-            await this.changed(path);
-            return;
+        } else {
+            if (record && before !== undefined && before !== value) {
+                this.undoStack.push({ path, property, before, after: value });
+                this.redoStack.length = 0;
+            }
+            if (this.objectType === 'AxForm') {
+                await this.changed(path);
+                return;
+            }
         }
         await this.loadProperties(path);
+    }
+
+    /** Property changes are saved at once; undo and redo set the previous (next) value again, also saved at once. */
+    private readonly undoStack: { path: string[]; property: string; before: string; after: string }[] = [];
+    private readonly redoStack: { path: string[]; property: string; before: string; after: string }[] = [];
+
+    private async undoRedo(direction: 'undo' | 'redo'): Promise<void> {
+        const change = (direction === 'undo' ? this.undoStack : this.redoStack).pop();
+        if (!change) {
+            vscode.window.setStatusBarMessage(`Nothing to ${direction}`, 2000);
+            return;
+        }
+        (direction === 'undo' ? this.redoStack : this.undoStack).push(change);
+        await this.setProperty(change.path, change.property, direction === 'undo' ? change.before : change.after, false);
+        vscode.window.setStatusBarMessage(`${direction === 'undo' ? 'Undid' : 'Redid'} ${change.property}`, 3000);
+    }
+
+    private async propertyValue(path: string[], property: string): Promise<string | undefined> {
+        const result = await this.server.bridge('get_element_properties', { objectType: this.objectType, objectName: this.objectName, path }).catch(() => undefined);
+        const value = (result?.properties as { name: string; value: string }[] | undefined)?.find(p => p.name === property)?.value;
+        return typeof value === 'string' ? value : undefined;
     }
 
     /** The element's own methods open in its code view; methods of other nodes open on their own. */
@@ -526,6 +557,7 @@ export class ElementDesigner {
 <link href="${media('codicons/codicon.css')}" rel="stylesheet">
 <link href="${media('formPreview.css')}" rel="stylesheet">
 <link href="${media('element.css')}" rel="stylesheet">
+<link href="${media('a11y.css')}" rel="stylesheet">
 </head>
 <body>
 <div id="toolbar">
