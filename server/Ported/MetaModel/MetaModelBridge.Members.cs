@@ -115,7 +115,7 @@ namespace XppVsCode.Server.MetaModel
                 AddMember(members, seen, m[0], m[1], m[0] == "field" ? m[2] : null, false, "Common", m[0] == "method" ? m[2] : null);
         }
 
-        private static string FieldTypeName(AxTableField field)
+        internal static string FieldTypeName(AxTableField field)
         {
             string edt = field.GetType().GetProperty("ExtendedDataType")?.GetValue(field) as string;
             if (!string.IsNullOrEmpty(edt)) return edt;
@@ -146,9 +146,9 @@ namespace XppVsCode.Server.MetaModel
             foreach (string raw in source.Replace("\r", "").Split('\n'))
             {
                 string line = raw.Trim();
-                if (sig.Length == 0 && (line.Length == 0 || line.StartsWith("//") || line.StartsWith("[") || line.StartsWith("/*") || line.StartsWith("*")))
+                if (sig.Length == 0 && (line.Length == 0 || line.StartsWith("//", StringComparison.Ordinal) || line.StartsWith("[", StringComparison.Ordinal) || line.StartsWith("/*", StringComparison.Ordinal) || line.StartsWith("*", StringComparison.Ordinal)))
                     continue;
-                if (line.StartsWith("{")) break;
+                if (line.StartsWith("{", StringComparison.Ordinal)) break;
                 sig.Append(sig.Length > 0 ? " " : "").Append(line);
                 foreach (char c in line)
                 {
@@ -164,7 +164,7 @@ namespace XppVsCode.Server.MetaModel
         private static string DocCommentOf(string source)
         {
             if (string.IsNullOrEmpty(source)) return null;
-            var lines = source.Replace("\r", "").Split('\n').Select(l => l.Trim()).TakeWhile(l => l.Length == 0 || l.StartsWith("///")).Where(l => l.StartsWith("///"));
+            var lines = source.Replace("\r", "").Split('\n').Select(l => l.Trim()).TakeWhile(l => l.Length == 0 || l.StartsWith("///", StringComparison.Ordinal)).Where(l => l.StartsWith("///", StringComparison.Ordinal));
             string text = string.Join(" ", lines.Select(l => l.Substring(3).Trim()));
             text = Regex.Replace(text, @"<[^>]+>", " ");
             return Regex.Replace(text, @"\s+", " ").Trim();

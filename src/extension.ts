@@ -4,18 +4,22 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { AotTreeProvider } from './aot';
 import { XppBuilder } from './build';
-import { objectUri, XppCodeFileSystem, XppScheme } from './codeView';
+import { XppReferenceLinks } from './codeLinks';
+import { ElementDragAndDrop, ElementDropIntoCode, ElementsMime } from './dragAndDrop';
+import { objectUri, parseObjectUri, XppCodeFileSystem, XppScheme } from './codeView';
 import { FormDesigner } from './designer';
 import { registerTools } from './d365Tools';
 import { XppDebugger } from './debug';
-import { DesignerNodeContext, ElementDesigner } from './elementDesigner';
+import { DesignerNodeContext, DesignerServices, ElementDesigner } from './elementDesigner';
 import { LabelEditor } from './labelEditor';
 import { initEnvironmentSelection, onDidChangeEnvironment, readActiveEnvironment } from './environment';
 import { EnvironmentStatus, selectEnvironment } from './environmentPicker';
+import { registerGoTo } from './goTo';
+import { registerHistory } from './history';
 import { registerMcpProvider } from './mcpProvider';
 import { openObject, XppDocumentSelector, XppNavigation } from './navigation';
 import { PacCommands } from './pac';
-import { createProject, findActiveProject, ProjectTreeProvider, readProject, selectProject, syncWorkspaceFolders } from './project';
+import { createProject, findActiveProject, ProjectTreeProvider, ProjectWorkspaces, readProject } from './project';
 import { XppServerClient } from './serverClient';
 import { connectEnvironment } from './setup';
 import { registerTests } from './tests';
@@ -38,17 +42,23 @@ export function activate(context: vscode.ExtensionContext): void {
     const navigation = new XppNavigation(server);
     const pac = new PacCommands();
     const environment = new EnvironmentStatus();
+    const dragAndDrop = new ElementDragAndDrop(server, () => projectTree.refresh());
+    const designers: DesignerServices = { context, server, drags: dragAndDrop };
+    const projects = new ProjectWorkspaces(context);
+    void projects.migrateUserSetting().catch(err => log.appendLine('Project setting: ' + (err as Error).message));
     context.subscriptions.push(log, buildOutput, server, languageServer, builder, environment);
 
     registerMcpProvider(context, log);
 
     context.subscriptions.push(
         vscode.workspace.registerFileSystemProvider(XppScheme, codeFs, { isCaseSensitive: false }),
-        projectTree.view = vscode.window.createTreeView('xpp.project', { treeDataProvider: projectTree }),
-        aotTree.view = vscode.window.createTreeView('xpp.aot', { treeDataProvider: aotTree, showCollapseAll: true }),
+        projectTree.view = vscode.window.createTreeView<Parameters<typeof projectTree.getTreeItem>[0]>('xpp.project', { treeDataProvider: projectTree, dragAndDropController: dragAndDrop, canSelectMany: true }),
+        aotTree.view = vscode.window.createTreeView<Parameters<typeof aotTree.getTreeItem>[0]>('xpp.aot', { treeDataProvider: aotTree, showCollapseAll: true, dragAndDropController: dragAndDrop, canSelectMany: true }),
+        vscode.languages.registerDocumentDropEditProvider(XppDocumentSelector, new ElementDropIntoCode(), { dropMimeTypes: [ElementsMime, 'text/uri-list'] }),
         vscode.languages.registerDefinitionProvider(XppDocumentSelector, navigation),
         vscode.languages.registerReferenceProvider(XppDocumentSelector, navigation),
         vscode.languages.registerHoverProvider(XppDocumentSelector, navigation),
+        vscode.languages.registerDocumentLinkProvider(XppDocumentSelector, new XppReferenceLinks()),
         vscode.workspace.onDidSaveTextDocument(doc => {
             if (doc.fileName.endsWith('.rnrproj')) {
                 projectTree.refresh();
@@ -59,8 +69,6 @@ export function activate(context: vscode.ExtensionContext): void {
                 server.restart();
                 languageServer.restart();
                 projectTree.refresh();
-                // U7: the workspace follows the selected or created project (project folder + model folder).
-                void syncWorkspaceFolders().catch(err => log.appendLine('Workspace folders: ' + (err as Error).message));
             }
         }),
         onDidChangeEnvironment(() => {
@@ -105,14 +113,28 @@ export function activate(context: vscode.ExtensionContext): void {
     });
     command('xpp.refreshProject', () => projectTree.refresh());
     command('xpp.refreshAot', () => aotTree.refresh());
-    command('xpp.openDesigner', async (arg?: string | ElementRef, name?: string) => {
-        const element = typeof arg === 'string' ? { objectType: arg, objectName: name ?? '' } : elementOf(arg);
+    command('xpp.openDesigner', async (arg?: string | ElementRef | vscode.Uri, name?: string, labelId?: string) => {
+        const element = elementFromArg(arg, name);
         if (element?.objectName && element.objectType === 'AxLabelFile') {
             // U8: a label file opens on its labels; its properties are one click away.
             LabelEditor.open(context, server, element.objectName,
-                () => ElementDesigner.open(context, server, element.objectType, element.objectName));
+                () => ElementDesigner.open(designers, element.objectType, element.objectName), labelId);
         } else if (element?.objectName) {
-            ElementDesigner.open(context, server, element.objectType, element.objectName);
+            ElementDesigner.open(designers, element.objectType, element.objectName);
+        }
+    });
+    command('xpp.openDesignerToSide', async (arg?: ElementRef) => {
+        const element = elementOf(arg);
+        if (element?.objectType === 'AxClass') {
+            await vscode.window.showTextDocument(objectUri(element.objectType, element.objectName), { viewColumn: vscode.ViewColumn.Beside });
+        } else if (element) {
+            ElementDesigner.open(designers, element.objectType, element.objectName, vscode.ViewColumn.Beside);
+        }
+    });
+    command('xpp.revealInAot', async (arg?: ElementRef | vscode.Uri) => {
+        const element = elementFromArg(arg);
+        if (element && !await aotTree.reveal(element.objectType, element.objectName)) {
+            vscode.window.showInformationMessage(`${element.objectName} is not in the Application Explorer.`);
         }
     });
     command('xpp.viewCode', async (arg?: ElementRef) => {
@@ -156,10 +178,25 @@ export function activate(context: vscode.ExtensionContext): void {
     command('xpp.designer.openMethod', (node: DesignerNodeContext) => ElementDesigner.runAction('openMethod', node));
     command('xpp.designer.copyEventHandler', (node: DesignerNodeContext) => ElementDesigner.runAction('copyEventHandler', node));
     command('xpp.designer.findEventHandlers', (node: DesignerNodeContext) => ElementDesigner.runAction('findEventHandlers', node));
+    command('xpp.designer.rename', (node: DesignerNodeContext) => ElementDesigner.runAction('rename', node));
+    command('xpp.designer.duplicate', (node: DesignerNodeContext) => ElementDesigner.runAction('duplicate', node));
+    command('xpp.designer.moveUp', (node: DesignerNodeContext) => ElementDesigner.runAction('moveUp', node));
+    command('xpp.designer.moveDown', (node: DesignerNodeContext) => ElementDesigner.runAction('moveDown', node));
+    command('xpp.designer.addElement', (node: DesignerNodeContext) => ElementDesigner.runAction('addElement', node));
+    registerGoTo(command, server);
+    registerHistory(context, server, command);
     context.subscriptions.push(ElementDesigner.onDidChange.event(e => codeFs.refresh(objectUri(e.objectType, e.objectName))));
     void vscode.commands.executeCommand('setContext', 'xpp.aot.modelView', false);
-    command('xpp.selectProject', () => selectProject());
-    command('xpp.createProject', () => createProject());
+    command('xpp.selectProject', () => projects.select());
+    command('xpp.openRecentProject', () => projects.openRecent());
+    command('xpp.openProject', (file?: string) => file ? projects.open(file) : projects.select());
+    command('xpp.closeProject', () => projects.close());
+    command('xpp.createProject', async () => {
+        const file = await createProject();
+        if (file) {
+            await projects.open(file);
+        }
+    });
     command('xpp.build', async () => {
         const project = await readProject();
         await vscode.window.withProgress(
@@ -183,7 +220,7 @@ export function activate(context: vscode.ExtensionContext): void {
             });
     });
     registerTests(context, server);
-    followAgentProjectSelection(context);
+    followAgentProjectSelection(context, projects);
     command('xpp.pac.init', () => pac.initSolution());
     command('xpp.pac.signIn', () => pac.signIn());
     command('xpp.pac.deploy', () => pac.deploy());
@@ -192,8 +229,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void { }
 
-/** The MCP server writes the project an agent selected (xpp_select_project); the views follow it through xpp.project. */
-function followAgentProjectSelection(context: vscode.ExtensionContext): void {
+/** The MCP server writes the project an agent selected (xpp_select_project); the user decides whether the window opens it. */
+function followAgentProjectSelection(context: vscode.ExtensionContext, projects: ProjectWorkspaces): void {
     const stateFile = path.join(process.env.LOCALAPPDATA ?? os.homedir(), 'XppVsCode', 'activeProject.txt');
     let lastWrite = 0;
     const written = async () => (await fs.stat(stateFile).catch(() => undefined))?.mtimeMs ?? 0;
@@ -204,9 +241,12 @@ function followAgentProjectSelection(context: vscode.ExtensionContext): void {
         }
         lastWrite = mtime;
         const selected = (await fs.readFile(stateFile, 'utf8').catch(() => '')).trim();
-        const config = vscode.workspace.getConfiguration('xpp');
-        if (selected && (config.get<string>('project') ?? '').toLowerCase() !== selected.toLowerCase()) {
-            await config.update('project', selected, vscode.ConfigurationTarget.Global);
+        if (selected && (await findActiveProject() ?? '').toLowerCase() !== selected.toLowerCase()) {
+            // Opening a project reloads the window, which would interrupt the agent: ask.
+            const choice = await vscode.window.showInformationMessage(`The agent selected project ${path.basename(selected, '.rnrproj')}.`, 'Open Project');
+            if (choice) {
+                await projects.open(selected);
+            }
         }
     };
     // Only selections written after startup count; a file left by an earlier session must not override the user's project.
@@ -228,4 +268,19 @@ function elementOf(node: ElementRef | undefined): { objectType: string; objectNa
         return { objectType: node.objectType, objectName: node.entry.name };
     }
     return undefined;
+}
+
+/** A command's element: (type, name) strings, a tree node, or a code view document (editor context menu). */
+function elementFromArg(arg: string | ElementRef | vscode.Uri | undefined, name?: string): { objectType: string; objectName: string } | undefined {
+    if (typeof arg === 'string') {
+        return { objectType: arg, objectName: name ?? '' };
+    }
+    if (arg instanceof vscode.Uri) {
+        if (arg.scheme !== XppScheme) {
+            return undefined;
+        }
+        const { objectType, objectName } = parseObjectUri(arg);
+        return { objectType, objectName };
+    }
+    return elementOf(arg);
 }

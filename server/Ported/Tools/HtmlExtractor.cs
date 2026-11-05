@@ -1,3 +1,4 @@
+using System;
 using System.Text;
 
 namespace XppVsCode.Server.Tools
@@ -17,7 +18,7 @@ namespace XppVsCode.Server.Tools
             int mainStart = html.IndexOf("<main", System.StringComparison.OrdinalIgnoreCase);
             if (mainStart >= 0)
             {
-                int mainClose = html.IndexOf(">", mainStart) + 1;
+                int mainClose = html.IndexOf(">", mainStart, StringComparison.Ordinal) + 1;
                 int mainEnd = html.IndexOf("</main>", mainClose, System.StringComparison.OrdinalIgnoreCase);
                 if (mainEnd > mainClose)
                     content = html.Substring(mainClose, mainEnd - mainClose);
@@ -29,7 +30,7 @@ namespace XppVsCode.Server.Tools
                 int artStart = html.IndexOf("<article", System.StringComparison.OrdinalIgnoreCase);
                 if (artStart >= 0)
                 {
-                    int artClose = html.IndexOf(">", artStart) + 1;
+                    int artClose = html.IndexOf(">", artStart, StringComparison.Ordinal) + 1;
                     int artEnd = html.IndexOf("</article>", artClose, System.StringComparison.OrdinalIgnoreCase);
                     if (artEnd > artClose)
                         content = html.Substring(artClose, artEnd - artClose);

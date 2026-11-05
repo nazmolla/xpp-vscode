@@ -25,7 +25,7 @@ namespace XppVsCode.Server.MetaModel
                 if (field?.GetValue(null) is IEnumerable<string> values)
                     foreach (string v in values) set.Add(v);
             }
-            catch { }
+            catch (Exception ex) { LogIgnored("Reading the supported form extension modifications", ex); }
             if (set.Count == 0)
                 foreach (string v in new[] { "Text", "Label", "HelpText", "Caption", "Visible", "Enabled", "EnableFormRef", "CountryRegionCodes",
                                              "Pattern", "PatternVersion", "NeedsRecord", "SaveRecord", "AllowEdit", "NeededPermission", "Style", "DataGroup" })

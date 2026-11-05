@@ -8,13 +8,29 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using Microsoft.Dynamics.AX.Metadata.MetaModel;
+using Microsoft.Dynamics.AX.Metadata.Providers;
+using Microsoft.Dynamics.AX.Metadata.Service;
+using static XppVsCode.Server.MetaModel.MetaModelBridge;
 
 namespace XppVsCode.Server.MetaModel
 {
     // Entity relationship diagram data: a table's fields, primary key and relations (table extensions included),
     // and which tables have relations to a table (the cross-reference database does not record relations).
-    public sealed partial class MetaModelBridge
+    internal sealed class TableRelationsService : ITableRelations
     {
+        private readonly IMetadataCore _core;
+
+        public TableRelationsService(IMetadataCore core)
+        {
+            _core = core;
+        }
+
+        private IMetaModelService MetaService => _core.MetaService;
+        private IMetadataProvider MetadataProvider => _core.MetadataProvider;
+        private bool IsCustomModel(string modelName) => _core.IsCustomModel(modelName);
+        private string GetObjectModelName(string objectType, string objectName) => _core.ObjectModelName(objectType, objectName);
+        private Dictionary<string, AxTableField> GetEffectiveTableFields(string tableName) => _core.EffectiveTableFields(tableName);
+
         public string TableErdJson(string[] tableNames)
         {
             var json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
@@ -144,7 +160,7 @@ namespace XppVsCode.Server.MetaModel
                             return map;
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { LogIgnored("Reading the relation index cache", ex); }
                 }
 
                 fromCache = false;
@@ -170,7 +186,7 @@ namespace XppVsCode.Server.MetaModel
                         ["key"] = key, ["incoming"] = result.ToDictionary(kv => kv.Key, kv => kv.Value.ToList()),
                     }));
                 }
-                catch { }
+                catch (Exception ex) { LogIgnored("Writing the relation index cache", ex); }
                 _relationIndex = result; _relationIndexKey = key;
                 return result;
             }

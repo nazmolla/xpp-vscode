@@ -91,4 +91,11 @@ table.props td { border-bottom: 1px solid var(--vscode-panel-border); padding: 2
     font: inherit;
 }
 .readonly-value { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.value-line { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.value-line > :first-child { flex: 1; min-width: 0; }
+.ref-link { color: var(--vscode-textLink-foreground); cursor: pointer; }
+.ref-link:hover { text-decoration: underline; color: var(--vscode-textLink-activeForeground); }
+button.goto { flex: none; padding: 2px 4px; background: transparent; color: var(--vscode-icon-foreground); }
+button.goto:hover { background: var(--vscode-toolbar-hoverBackground); }
+.drop-target, tr.drop-target td { outline: 1px dashed var(--vscode-focusBorder); outline-offset: -1px; background: var(--vscode-list-dropBackground); }
 .resolved { color: var(--vscode-descriptionForeground); font-size: 0.9em; font-style: italic; }

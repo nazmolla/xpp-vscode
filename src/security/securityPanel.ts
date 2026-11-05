@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
@@ -141,7 +142,7 @@ export class SecurityPanel {
     }
 
     private static html(report: SecurityReport): string {
-        const nonce = Math.random().toString(36).slice(2) + Date.now().toString(36);
+        const nonce = randomBytes(16).toString('base64');
         return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
 <style>

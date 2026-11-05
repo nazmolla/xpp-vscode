@@ -135,6 +135,7 @@
         document.getElementById('formLayout').hidden = !msg.isForm;
 
         treeEl.textContent = '';
+        treeEl.title = editable ? 'Drag nodes onto other nodes, or Application Explorer elements onto this tree (hold Shift to drop into the designer).' : '';
         controlRows.clear();
         const ul = document.createElement('ul');
         ul.className = 'tree';
@@ -180,11 +181,22 @@
         return node.kind === 'item' && node.path.length >= 3 && node.path[node.path.length - 2] === 'Controls' ? node.path[node.path.length - 1] : null;
     }
 
+    // Go To: one context key per reference the node has (xppRef_<key>), so its right-click menu lists only those.
+    function refContext(refs) {
+        const context = {};
+        if (refs && Object.keys(refs).length > 0) {
+            for (const key of Object.keys(refs)) context['xppRef_' + key] = true;
+            context.xppRefs = JSON.stringify(refs);
+        }
+        return context;
+    }
+
     function contextFor(node, parent) {
         const folders = node.children.filter(c => c.kind === 'folder' && c.type !== 'Events');
         const hasMethods = node.kind === 'folder' ? node.type === 'Methods' : folders.some(c => c.type === 'Methods');
         const canAdd = node.kind === 'folder' ? node.type !== 'Methods' && node.type !== 'Events' : folders.some(c => c.type !== 'Methods');
         const isEvents = node.kind === 'event' || (node.kind === 'folder' && node.type === 'Events');
+        const inFolder = !!parent && parent.kind === 'folder';
         return JSON.stringify({
             webviewSection: 'xppNode',
             xppKind: node.kind,
@@ -196,13 +208,28 @@
             xppIsEvent: node.kind === 'event',
             xppHasEvents: isEvents || node.kind === 'method' || node.path.length === 0 || node.children.some(c => c.type === 'Events'),
             ...(node.eventSpec ? { xppEventSpec: node.eventSpec } : {}),
-            xppCanDelete: (node.kind === 'item' || node.kind === 'method') && !!parent && parent.kind === 'folder',
+            xppCanDelete: (node.kind === 'item' || node.kind === 'method') && inFolder,
+            // Rename and duplicate change the name, which for methods is part of their code.
+            xppCanRename: node.kind === 'item' && inFolder,
             xppPath: JSON.stringify(node.path),
             xppType: node.type,
+            ...(node.kind !== 'folder' && node.kind !== 'event' ? { xppName: node.name } : {}),
+            ...(node.intrinsic ? { xppIntrinsic: node.intrinsic } : {}),
+            ...(node.memberRefs ? { xppMemberRefs: true, item: { objectType: node.memberRefs.objectType, objectName: node.memberRefs.objectName }, memberName: node.memberRefs.memberName } : {}),
+            ...refContext(node.refs),
+            ...(node.accepts && editable ? { xppAccepts: JSON.stringify(node.accepts), xppOnBaseNode: !!node.inherited } : {}),
             // The element itself: the Application Explorer's element actions (references, extensions, compare...).
             ...(node.path.length === 0 && element ? { xppRoot: element.context, item: { objectType: element.objectType, objectName: element.objectName }, objectType: element.objectType, objectName: element.objectName } : {}),
             preventDefaultContextMenuItems: true,
         });
+    }
+
+    // F12 and Ctrl+click open the node's first reference (the server orders them: EDT, enum, base, table, ...).
+    function goToFirst(node) {
+        const refs = node && node.refs;
+        const first = refs && Object.values(refs)[0];
+        if (first) send('goTo', { reference: first });
+        return !!first;
     }
 
     function renderNode(node, depth, parent) {
@@ -264,6 +291,7 @@
             });
         }
         row.addEventListener('click', () => select(row));
+        enableDragAndDrop(row, node);
         // Right-click selects the node first, like a tree view.
         row.addEventListener('contextmenu', () => select(row));
         row.addEventListener('dblclick', () => {
@@ -277,6 +305,63 @@
         });
         row._node = node;
         return li;
+    }
+
+    // Drag and drop, as in Visual Studio's designer: nodes of this element onto other nodes (field to field group, data
+    // source field to the form design, reorder), and elements from the Application Explorer onto the nodes that take them.
+    const NodeMime = 'application/vnd.xpp.node';
+    const isNodeDrag = e => e.dataTransfer && [...e.dataTransfer.types].includes(NodeMime);
+    const droppedUris = e => (e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain') || '')
+        .split(/\r?\n/).filter(u => u && !u.startsWith('#'));
+
+    function enableDragAndDrop(row, node) {
+        const draggable = editable && !node.inherited && (node.kind === 'item' || node.kind === 'method');
+        row.draggable = draggable;
+        if (draggable) {
+            row.addEventListener('dragstart', e => {
+                e.dataTransfer.setData(NodeMime, JSON.stringify(node.path));
+                e.dataTransfer.effectAllowed = 'copyMove';
+            });
+        }
+        const accepts = e => editable && (isNodeDrag(e) ? !node.inherited : !!node.accepts);
+        row.addEventListener('dragover', e => {
+            if (accepts(e)) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = isNodeDrag(e) ? 'move' : 'copy';
+                row.classList.add('drop-target');
+            }
+        });
+        row.addEventListener('dragleave', () => row.classList.remove('drop-target'));
+        row.addEventListener('drop', e => {
+            row.classList.remove('drop-target');
+            if (!accepts(e)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (isNodeDrag(e)) {
+                const sourcePath = JSON.parse(e.dataTransfer.getData(NodeMime));
+                if (pathKey(sourcePath) !== pathKey(node.path)) send('dropNode', { target: node.path, sourcePath });
+            } else {
+                send('dropElements', { target: node.path, onBaseNode: !!node.inherited, uris: droppedUris(e) });
+            }
+        });
+    }
+
+    function enablePropertyDrop(tr, p, canEdit) {
+        if (!canEdit || p.kind !== 'string') return;
+        tr.addEventListener('dragover', e => {
+            if (!isNodeDrag(e)) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+                tr.classList.add('drop-target');
+            }
+        });
+        tr.addEventListener('dragleave', () => tr.classList.remove('drop-target'));
+        tr.addEventListener('drop', e => {
+            tr.classList.remove('drop-target');
+            if (isNodeDrag(e) || !selectedPath) return;
+            e.preventDefault();
+            send('dropOnProperty', { path: selectedPath, property: p.name, uris: droppedUris(e) });
+        });
     }
 
     function toggleNode(row, ul, toggle, path) {
@@ -348,6 +433,8 @@
             e.preventDefault();
         } else if (e.key === 'Enter' && selectedRow && selectedRow._node.kind === 'method') {
             send('openMethod', { path: selectedRow._node.path });
+        } else if (e.key === 'F12' && selectedRow) {
+            if (goToFirst(selectedRow._node)) e.preventDefault();
         }
     });
 
@@ -362,13 +449,28 @@
         table.className = 'props';
         for (const p of data.properties) {
             const tr = document.createElement('tr');
+            if (p.reference) {
+                // Right-click on the row offers Go to <what the property names>, next to Cut/Copy/Paste for the value.
+                tr.dataset.vscodeContext = JSON.stringify({
+                    webviewSection: 'xppProperty',
+                    ...refContext({ [p.reference.key]: p.reference }),
+                    preventDefaultContextMenuItems: false,
+                });
+            }
             const name = document.createElement('td');
             name.className = 'prop-name';
             name.textContent = p.name;
             tr.appendChild(name);
             const cell = document.createElement('td');
             cell.className = 'prop-value';
-            cell.appendChild(editorFor(p, data.editable && editable && !p.readOnly));
+            const line = document.createElement('div');
+            line.className = 'value-line';
+            line.appendChild(editorFor(p, data.editable && editable && !p.readOnly));
+            enablePropertyDrop(tr, p, data.editable && editable && !p.readOnly);
+            if (p.reference) {
+                line.appendChild(goToButton(p.reference));
+            }
+            cell.appendChild(line);
             if (p.resolved) {
                 const hint = document.createElement('div');
                 hint.className = 'resolved';
@@ -381,12 +483,28 @@
         propsEl.appendChild(table);
     }
 
+    function goToButton(reference) {
+        const button = document.createElement('button');
+        button.className = 'goto codicon codicon-go-to-file';
+        button.title = reference.objectType === 'AxLabelFile'
+            ? `Open label ${reference.labelId} in ${reference.objectName}`
+            : `Go to ${reference.objectName} (${reference.objectType.replace(/^Ax/, '')})`;
+        button.setAttribute('aria-label', button.title);
+        button.addEventListener('click', () => send('goTo', { reference }));
+        return button;
+    }
+
     function editorFor(p, canEdit) {
         if (!canEdit) {
             const span = document.createElement('span');
             span.className = 'readonly-value';
             span.textContent = p.value;
             span.title = p.value;
+            if (p.reference) {
+                span.classList.add('ref-link');
+                span.title = `${p.value} (click to open)`;
+                span.addEventListener('click', () => send('goTo', { reference: p.reference }));
+            }
             return span;
         }
         let input;
@@ -414,6 +532,12 @@
                 }
             });
             input.addEventListener('change', () => commit(p, input.value));
+            if (p.reference) {
+                input.title = 'Ctrl+click to open';
+                input.addEventListener('click', e => {
+                    if (e.ctrlKey || e.metaKey) send('goTo', { reference: p.reference });
+                });
+            }
         }
         return input;
     }

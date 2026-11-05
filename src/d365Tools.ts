@@ -2,7 +2,7 @@ import { ErdPanel } from './erd';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { CodeExtensionFunctions, CodeTypes, ExtensionTypes, listModels, ModelLocation, typeLabel } from './aot';
+import { baseElementOf, CodeExtensionFunctions, CodeTypes, elementOpenCommand, ExtensionTypes, intrinsicReference, listModels, ModelLocation, typeLabel } from './aot';
 import { methodUri, objectUri } from './codeView';
 import { DiagramNode, DiagramPanel, hierarchyDiagram, MetadataDocuments, MetadataScheme, referencesDiagram } from './diagrams';
 import { readActiveEnvironment, selectedEnvironmentUrl } from './environment';
@@ -16,6 +16,11 @@ export type TreeArg = {
     entry?: { name: string };
     item?: { objectType: string; objectName: string };
     model?: { name: string };
+    /** A field or method of the element (designer nodes): Find References searches that member. */
+    memberName?: string;
+    /** Designer nodes: the node's name and the X++ naming it. */
+    xppName?: string;
+    xppIntrinsic?: string;
 };
 
 export interface ToolNode {
@@ -69,7 +74,8 @@ const ToolsMenu: ToolNode[] = [
     },
     {
         label: 'Project', icon: 'project', children: [
-            { label: 'Select Project…', icon: 'folder-opened', command: 'xpp.selectProject' },
+            { label: 'Open Project…', icon: 'folder-opened', command: 'xpp.selectProject' },
+            { label: 'Open Recent Project…', icon: 'history', command: 'xpp.openRecentProject' },
             { label: 'Export Project…', icon: 'export', command: 'xpp.tools.exportProject' },
             { label: 'Import Project…', icon: 'cloud-download', command: 'xpp.tools.importProject' },
         ],
@@ -173,6 +179,12 @@ export function registerTools(
     command('xpp.createExtension', (arg?: TreeArg) => createExtension(server, arg, refreshTrees));
     command('xpp.createCodeExtension', (arg?: TreeArg) => createCodeExtension(server, arg, refreshTrees));
     command('xpp.findReferences', (arg?: TreeArg) => findReferences(server, arg));
+    command('xpp.duplicateObject', (arg?: TreeArg) => duplicateObject(server, arg, refreshTrees));
+    command('xpp.copyName', (arg?: TreeArg) => copyText(arg?.xppName ?? elementOf(arg)?.objectName));
+    command('xpp.copyReference', (arg?: TreeArg) => {
+        const element = elementOf(arg);
+        return copyText(arg?.xppIntrinsic ?? (element ? intrinsicReference(element.objectType, element.objectName) : undefined));
+    });
     command('xpp.openInBrowser', (arg?: TreeArg) => openInBrowser(arg, false, server));
     command('xpp.openTableBrowser', (arg?: TreeArg) => openInBrowser(arg ?? { objectType: 'AxTable' }, true, server));
     command('xpp.tools.exportProject', () => exportProject(server));
@@ -347,7 +359,7 @@ async function updateModel(server: XppServerClient, name?: string): Promise<void
     if (!result.success) {
         throw new Error(result.message);
     }
-    vscode.window.showInformationMessage(result.message);
+    vscode.window.showInformationMessage(result.message ?? '');
 }
 
 /** Packages a model references (outgoing) and the models that reference its package (incoming). */
@@ -563,21 +575,62 @@ async function findReferences(server: XppServerClient, arg?: TreeArg): Promise<v
     if (!element) {
         return;
     }
-    const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Finding references to ${element.objectName}…` },
-        () => server.bridge('where_used', { ...element, maxResults: '1000' }));
+    const member = arg?.memberName;
+    const target = member ? `${element.objectName}.${member}` : element.objectName;
+    const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Finding references to ${target}…` },
+        () => server.bridge('where_used', { ...element, ...(member ? { memberName: member } : {}), maxResults: '1000' }));
     if (!result.success) {
         throw new Error(result.message);
     }
     const refs: any[] = result.references;
     if (refs.length === 0) {
-        vscode.window.showInformationMessage(`No references to ${element.objectName} from other elements.`);
+        vscode.window.showInformationMessage(`No references to ${target} from other elements.`);
         return;
     }
     const picked = await vscode.window.showQuickPick(
         refs.map(r => ({ label: `${r.objectName}`, description: `${r.member} · line ${r.line} · ${r.kind}`, detail: `${typeLabel(r.objectType ?? '')} · ${r.module}`, ref: r })),
-        { title: `${refs.length}${result.more ? '+' : ''} reference(s) to ${element.objectName}`, matchOnDescription: true, matchOnDetail: true });
+        { title: `${refs.length}${result.more ? '+' : ''} reference(s) to ${target}`, matchOnDescription: true, matchOnDetail: true });
     if (picked) {
         await openReference(picked.ref);
+    }
+}
+
+/** Visual Studio's Duplicate: a copy of the element under a new name in your model, added to the project. */
+async function duplicateObject(server: XppServerClient, arg: TreeArg | undefined, refreshTrees: () => void): Promise<void> {
+    const element = elementOf(arg);
+    if (!element) {
+        return;
+    }
+    const model = await targetModel('Duplicate');
+    if (!model) {
+        return;
+    }
+    const base = baseElementOf(element.objectType, element.objectName);
+    const name = await vscode.window.showInputBox({
+        title: `Duplicate ${element.objectName}`, prompt: `Name of the new ${typeLabel(element.objectType).replace(/s$/, '').toLowerCase()} in ${model}`,
+        value: base ? `${base.objectName}.${model}` : `${element.objectName}Copy`,
+        validateInput: v => base
+            ? (new RegExp(`^${base.objectName}\\.[A-Za-z_][A-Za-z0-9_]*$`).test(v) && v !== element.objectName ? undefined : `Use ${base.objectName}.<Suffix> with a new suffix.`)
+            : (/^[A-Za-z_][A-Za-z0-9_]*$/.test(v) ? undefined : 'Use letters, digits and underscores, starting with a letter.'),
+    });
+    if (!name) {
+        return;
+    }
+    const result = await server.bridge('duplicate_object', { ...element, newName: name, modelName: model });
+    if (!result.success) {
+        throw new Error(result.message);
+    }
+    await addCreatedToProject(server, element.objectType, name);
+    refreshTrees();
+    vscode.window.setStatusBarMessage(result.message ?? '', 8000);
+    const open = elementOpenCommand(element.objectType, name);
+    await vscode.commands.executeCommand(open.command, ...(open.arguments ?? []));
+}
+
+async function copyText(text: string | undefined): Promise<void> {
+    if (text) {
+        await vscode.env.clipboard.writeText(text);
+        vscode.window.setStatusBarMessage(`Copied ${text}`, 3000);
     }
 }
 
@@ -695,7 +748,7 @@ async function exportProject(server: XppServerClient): Promise<void> {
     if (!result.success) {
         throw new Error(result.message);
     }
-    vscode.window.showInformationMessage(result.message);
+    vscode.window.showInformationMessage(result.message ?? '');
 }
 
 async function importProject(server: XppServerClient, refreshTrees: () => void): Promise<void> {
@@ -724,8 +777,8 @@ async function importProject(server: XppServerClient, refreshTrees: () => void):
         throw new Error(result.message);
     }
     refreshTrees();
-    if (await vscode.window.showInformationMessage(result.message, 'Use this project')) {
-        await vscode.workspace.getConfiguration('xpp').update('project', result.projectFile, vscode.ConfigurationTarget.Global);
+    if (await vscode.window.showInformationMessage(result.message ?? '', 'Open This Project')) {
+        await vscode.commands.executeCommand('xpp.openProject', result.projectFile);
     }
 }
 

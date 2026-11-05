@@ -33,10 +33,10 @@ namespace XppVsCode.Server.Tools
             for (int i = 0; i < lines.Length; i++)
             {
                 string line = lines[i].Trim();
-                bool top = line.StartsWith("== ") && line.EndsWith(" ==");
+                bool top = line.StartsWith("== ", StringComparison.Ordinal) && line.EndsWith(" ==", StringComparison.Ordinal);
                 // A boxed heading: a rule line, the title, a rule line.
-                bool boxed = line.Length > 0 && !line.StartsWith("─") && i > 0 && i + 1 < lines.Length
-                    && lines[i - 1].Trim().StartsWith("────") && lines[i + 1].Trim().StartsWith("────");
+                bool boxed = line.Length > 0 && !line.StartsWith("─", StringComparison.Ordinal) && i > 0 && i + 1 < lines.Length
+                    && lines[i - 1].Trim().StartsWith("────", StringComparison.Ordinal) && lines[i + 1].Trim().StartsWith("────", StringComparison.Ordinal);
                 if (top || boxed)
                 {
                     if (body.ToString().Trim().Length > 0) sections.Add(new KeyValuePair<string, string>(title, body.ToString().Trim()));
@@ -45,7 +45,7 @@ namespace XppVsCode.Server.Tools
                     if (boxed) i++;   // skip the closing rule line
                     continue;
                 }
-                if (line.StartsWith("────") && i + 2 < lines.Length && lines[i + 2].Trim().StartsWith("────")) continue;
+                if (line.StartsWith("────", StringComparison.Ordinal) && i + 2 < lines.Length && lines[i + 2].Trim().StartsWith("────", StringComparison.Ordinal)) continue;
                 body.AppendLine(lines[i]);
             }
             if (body.ToString().Trim().Length > 0) sections.Add(new KeyValuePair<string, string>(title, body.ToString().Trim()));

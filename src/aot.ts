@@ -102,8 +102,66 @@ export function elementContextValue(objectType: string, isCustom = false): strin
         objectType.startsWith('AxMenuItem') ? 'menuitem' : '', objectType === 'AxDataEntityView' ? 'entity' : '',
         objectType === 'AxSecurityRole' ? 'role' : '', objectType === 'AxSecurityDuty' ? 'duty' : '',
         objectType === 'AxSecurityPrivilege' ? 'privilege' : '',
+        ExtensionBaseTypes[objectType] ? 'ext' : '', ElementIntrinsics[objectType] ? 'xstr' : '',
         isCustom ? 'custom' : '',
     ].filter(Boolean).join(' ');
+}
+
+/** Extension element types and the type they extend (Go to Base Object). */
+export const ExtensionBaseTypes: Record<string, string> = {
+    AxTableExtension: 'AxTable', AxFormExtension: 'AxForm', AxEnumExtension: 'AxEnum', AxEdtExtension: 'AxEdt',
+    AxDataEntityViewExtension: 'AxDataEntityView', AxViewExtension: 'AxView', AxMapExtension: 'AxMap', AxMenuExtension: 'AxMenu',
+    AxQuerySimpleExtension: 'AxQuery', AxSecurityDutyExtension: 'AxSecurityDuty', AxSecurityRoleExtension: 'AxSecurityRole',
+    AxMenuItemDisplayExtension: 'AxMenuItemDisplay', AxMenuItemActionExtension: 'AxMenuItemAction', AxMenuItemOutputExtension: 'AxMenuItemOutput',
+    AxTileExtension: 'AxTile', AxWorkflowApprovalExtension: 'AxWorkflowApproval', AxWorkflowTaskExtension: 'AxWorkflowTask',
+    AxWorkflowTemplateExtension: 'AxWorkflowTemplate',
+};
+
+/** The element an extension extends: CustTable.MyExt (AxTableExtension) is AxTable CustTable. */
+export function baseElementOf(objectType: string, objectName: string): { objectType: string; objectName: string } | undefined {
+    const base = ExtensionBaseTypes[objectType];
+    return base ? { objectType: base, objectName: objectName.split('.')[0] } : undefined;
+}
+
+/** Intrinsic functions naming an element in code, e.g. tableStr(CustTable). */
+export const ElementIntrinsics: Record<string, string> = {
+    AxTable: 'tableStr', AxView: 'tableStr', AxDataEntityView: 'tableStr', AxClass: 'classStr', AxForm: 'formStr', AxEnum: 'enumStr',
+    AxEdt: 'extendedTypeStr', AxQuery: 'queryStr', AxMenuItemDisplay: 'menuItemDisplayStr', AxMenuItemAction: 'menuItemActionStr',
+    AxMenuItemOutput: 'menuItemOutputStr', AxConfigurationKey: 'configurationKeyStr', AxLicenseCode: 'licenseCodeStr', AxMenu: 'menuStr',
+    AxTile: 'tileStr', AxWorkflowApproval: 'workflowApprovalStr', AxWorkflowTask: 'workflowTaskStr', AxWorkflowTemplate: 'workflowTypeStr',
+};
+
+/** X++ that names an element, or a member path in it (field, index, enum value, form data source, field or control). */
+export function intrinsicReference(objectType: string, objectName: string, path: string[] = []): string | undefined {
+    const base = baseElementOf(objectType, objectName) ?? { objectType, objectName };
+    const name = base.objectName;
+    const tableLike = ['AxTable', 'AxView', 'AxDataEntityView', 'AxMap'].includes(base.objectType);
+    if (path.length === 0) {
+        const fn = ElementIntrinsics[base.objectType];
+        return fn ? `${fn}(${name})` : undefined;
+    }
+    const last = path[path.length - 1];
+    if (tableLike && path.length === 2 && path[0] === 'Fields') {
+        return `fieldStr(${name}, ${last})`;
+    }
+    if (tableLike && path.length === 2 && path[0] === 'Indexes') {
+        return `indexStr(${name}, ${last})`;
+    }
+    if (base.objectType === 'AxEnum' && path.length === 2 && path[0] === 'EnumValues') {
+        return `${name}::${last}`;
+    }
+    if (base.objectType === 'AxForm' && path[0] === 'DataSources') {
+        if (path.length === 2) {
+            return `formDataSourceStr(${name}, ${last})`;
+        }
+        if (path.length === 4 && path[2] === 'Fields') {
+            return `formDataFieldStr(${name}, ${path[1]}, ${last})`;
+        }
+    }
+    if (base.objectType === 'AxForm' && path.length >= 3 && path[path.length - 2] === 'Controls') {
+        return `formControlStr(${name}, ${last})`;
+    }
+    return undefined;
 }
 
 /** Element types that have a metadata extension type (Create extension). */
@@ -154,6 +212,39 @@ export class AotTreeProvider implements vscode.TreeDataProvider<AotNode> {
         this.filter = filter.trim();
         void vscode.commands.executeCommand('setContext', 'xpp.aot.filtered', this.filter.length > 0);
         this.update();
+    }
+
+    /** Selects an element in the tree (Visual Studio's Locate in Application Explorer); a filter hiding it is cleared. */
+    async reveal(objectType: string, objectName: string): Promise<boolean> {
+        const entry = (await this.elements(objectType, undefined)).find(e => e.name.toLowerCase() === objectName.toLowerCase());
+        if (!entry || !this.view) {
+            return false;
+        }
+        if (this.filter && !entry.name.toLowerCase().includes(this.filter.toLowerCase())) {
+            this.setFilter('');
+        }
+        const scope = this.modelView ? entry.models[0] : undefined;
+        await vscode.commands.executeCommand('xpp.aot.focus');
+        await this.view.reveal({ kind: 'element', objectType, entry, scope }, { select: true, focus: true, expand: true });
+        return true;
+    }
+
+    getParent(node: AotNode): AotNode | undefined {
+        switch (node.kind) {
+            case 'element':
+                return { kind: 'type', objectType: node.objectType, model: node.scope };
+            case 'type': {
+                const category = Categories.find(([, types]) => types.includes(node.objectType)) ?? ['Other', [node.objectType]];
+                if (!(category[1].length === 1 && typeLabel(category[1][0]) === category[0])) {
+                    return { kind: 'category', category: category[0], model: node.model, types: category[1] };
+                }
+                return node.model ? { kind: 'model', model: node.model } : undefined;
+            }
+            case 'category':
+                return node.model ? { kind: 'model', model: node.model } : undefined;
+            default:
+                return undefined;
+        }
     }
 
     private update(): void {

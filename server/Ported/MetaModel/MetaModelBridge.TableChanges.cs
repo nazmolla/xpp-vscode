@@ -29,7 +29,7 @@ namespace XppVsCode.Server.MetaModel
                         return new Dictionary<string, string>(new JavaScriptSerializer().Deserialize<Dictionary<string, string>>(File.ReadAllText(RemovedFieldsFile))
                             ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
                 }
-                catch { }
+                catch (Exception ex) { LogIgnored("Reading removed fields", ex); }
                 return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             }
         }
@@ -47,7 +47,7 @@ namespace XppVsCode.Server.MetaModel
                     Directory.CreateDirectory(Path.GetDirectoryName(RemovedFieldsFile));
                     File.WriteAllText(RemovedFieldsFile, new JavaScriptSerializer().Serialize(map));
                 }
-                catch { }
+                catch (Exception ex) { LogIgnored("Saving removed fields", ex); }
             }
         }
 
@@ -61,7 +61,7 @@ namespace XppVsCode.Server.MetaModel
                 else if (objectType == "AxTableExtension")
                     RememberRemovedFields(objectName.Split('.')[0], MetadataProvider.TableExtensions.Read(objectName)?.Fields);
             }
-            catch { }
+            catch (Exception ex) { LogIgnored("Remembering the fields of " + objectName, ex); }
         }
 
         private static string BaseTypeOfField(AxTableField field) => field.GetType().Name.Replace("AxTableField", "");

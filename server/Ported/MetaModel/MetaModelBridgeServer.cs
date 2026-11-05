@@ -7,11 +7,19 @@ using System.Text;
 namespace XppVsCode.Server.MetaModel
 {
     /// <summary>
-    /// Routes JSON requests from the tool router to <see cref="IMetaModelBridge"/>, one at a time.
+    /// Routes JSON requests from the tool router to the metadata services (<see cref="BridgeServices"/>), one at a time.
     /// </summary>
     public sealed class MetaModelBridgeServer
     {
-        private readonly IMetaModelBridge _bridge;
+        private readonly IObjectStore _objects;
+        private readonly IMetadataDiscovery _discovery;
+        private readonly IElementDesigner _designer;
+        private readonly IProjectService _projects;
+        private readonly IBuildService _builds;
+        private readonly IModelService _models;
+        private readonly ILabelService _labels;
+        private readonly IProjectPackageService _packages;
+        private readonly ITableRelations _relations;
         private readonly object _gate = new object();
 
         private static readonly string BridgeLogPath =
@@ -28,9 +36,36 @@ namespace XppVsCode.Server.MetaModel
             catch { }
         }
 
-        public MetaModelBridgeServer(IMetaModelBridge bridge)
+        public MetaModelBridgeServer(BridgeServices services)
         {
-            _bridge = bridge ?? throw new ArgumentNullException(nameof(bridge));
+            if (services == null) throw new ArgumentNullException(nameof(services));
+            _objects = services.Objects ?? throw new ArgumentNullException(nameof(services.Objects));
+            _discovery = services.Discovery ?? throw new ArgumentNullException(nameof(services.Discovery));
+            _designer = services.Designer ?? throw new ArgumentNullException(nameof(services.Designer));
+            _projects = services.Projects ?? throw new ArgumentNullException(nameof(services.Projects));
+            _builds = services.Builds ?? throw new ArgumentNullException(nameof(services.Builds));
+            _models = services.Models ?? throw new ArgumentNullException(nameof(services.Models));
+            _labels = services.Labels ?? throw new ArgumentNullException(nameof(services.Labels));
+            _packages = services.Packages ?? throw new ArgumentNullException(nameof(services.Packages));
+            _relations = services.Relations ?? throw new ArgumentNullException(nameof(services.Relations));
+            _policy = services.Policy ?? throw new ArgumentNullException(nameof(services.Policy));
+        }
+
+        private readonly IWritePolicy _policy;
+
+        // Actions that change an existing object (objectType/objectName) and actions that create objects in a model (modelName).
+        private static readonly HashSet<string> EditActions = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "update_object", "delete_object", "set_element_property", "add_element_node", "delete_element_node", "rename_element_node",
+            "duplicate_element_node", "move_element_node", "drop_on_node", "drop_on_property", "set_element_method",
+        };
+        private static readonly HashSet<string> CreateActions = new HashSet<string>(StringComparer.Ordinal) { "create_object", "duplicate_object" };
+
+        private string WriteDenial(string action, string body)
+        {
+            if (EditActions.Contains(action) && !"true".Equals(ExtractJsonString(body, "checkOnly"), StringComparison.OrdinalIgnoreCase))
+                return _policy.EditDenial(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
+            return CreateActions.Contains(action) ? _policy.TargetModelDenial(ExtractJsonString(body, "modelName")) : null;
         }
 
         public string Dispatch(string action, string body)
@@ -45,13 +80,16 @@ namespace XppVsCode.Server.MetaModel
                 catch (Exception ex)
                 {
                     BridgeLog("Dispatch " + action + " failed: " + ex);
-                    return "{\"success\":false,\"message\":\"" + EscapeJson(ex.Message) + "\"}";
+                    return "{\"success\":false,\"message\":\"" + EscapeJson(MetaModelBridge.Cause(ex)) + "\"}";
                 }
             }
         }
 
         private string DispatchOnMainThread(string action, string body)
         {
+            string denial = WriteDenial(action, body);
+            if (denial != null)
+                return SerializeResult(new MetaModelResult { Success = false, Message = denial });
             switch (action)
             {
                 case "create_object":
@@ -81,30 +119,30 @@ namespace XppVsCode.Server.MetaModel
                 case "list_project_items":
                     return HandleListProjectItems(body);
                 case "remove_from_project":
-                    return _bridge.RemoveFromProjectJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
+                    return _projects.RemoveFromProjectJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
                 case "select_project":
                     return string.IsNullOrWhiteSpace(ExtractJsonString(body, "projectFile"))
-                        ? _bridge.ListProjectsJson(ExtractJsonString(body, "searchFolder"))
-                        : _bridge.SelectProjectJson(ExtractJsonString(body, "projectFile"));
+                        ? _projects.ListProjectsJson(ExtractJsonString(body, "searchFolder"))
+                        : _projects.SelectProjectJson(ExtractJsonString(body, "projectFile"));
                 case "delete_object":
-                    return _bridge.DeleteObjectJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                    return _objects.DeleteObjectJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
                         "true".Equals(ExtractJsonString(body, "checkOnly"), StringComparison.OrdinalIgnoreCase));
                 case "table_erd":
-                    return _bridge.TableErdJson(XppVsCode.Server.Tools.JsonHelpers.ExtractJsonStringArray(body, "tables"));
+                    return _relations.TableErdJson(XppVsCode.Server.Tools.JsonHelpers.ExtractJsonStringArray(body, "tables"));
                 case "incoming_relations":
-                    return _bridge.IncomingRelationsJson(ExtractJsonString(body, "table"), "true".Equals(ExtractJsonString(body, "force"), StringComparison.OrdinalIgnoreCase));
+                    return _relations.IncomingRelationsJson(ExtractJsonString(body, "table"), "true".Equals(ExtractJsonString(body, "force"), StringComparison.OrdinalIgnoreCase));
                 case "type_members":
-                    return _bridge.TypeMembersJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
+                    return _discovery.TypeMembersJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
                 case "label_file_entries":
-                    return _bridge.LabelFileEntriesJson(ExtractJsonString(body, "labelFile"), ExtractJsonString(body, "search"),
+                    return _labels.LabelFileEntriesJson(ExtractJsonString(body, "labelFile"), ExtractJsonString(body, "search"),
                         ExtractJsonStringArray(body, "languages")?.ToList(), int.TryParse(ExtractJsonString(body, "limit"), out int labelLimit) ? labelLimit : 500);
                 case "save_label":
-                    return _bridge.SaveLabelJson(ExtractJsonString(body, "labelFile"), ExtractJsonString(body, "labelId"),
+                    return _labels.SaveLabelJson(ExtractJsonString(body, "labelFile"), ExtractJsonString(body, "labelId"),
                         ExtractJsonObject(body, "texts"), ExtractJsonString(body, "comment"));
                 case "delete_label":
-                    return _bridge.DeleteLabelJson(ExtractJsonString(body, "labelFile"), ExtractJsonString(body, "labelId"));
+                    return _labels.DeleteLabelJson(ExtractJsonString(body, "labelFile"), ExtractJsonString(body, "labelId"));
                 case "build":
-                    return _bridge.BuildJson(ExtractJsonString(body, "modelName"),
+                    return _builds.BuildJson(ExtractJsonString(body, "modelName"),
                         string.Equals(ExtractJsonString(body, "scope"), "project", StringComparison.OrdinalIgnoreCase),
                         "true".Equals(ExtractJsonString(body, "syncDatabase"), StringComparison.OrdinalIgnoreCase));
                 case "get_environment":
@@ -116,49 +154,68 @@ namespace XppVsCode.Server.MetaModel
                 case "get_form_layout":
                     return HandleGetFormLayout(body);
                 case "get_form_tree":
-                    return _bridge.GetFormTreeJson(ExtractJsonString(body, "formName"));
+                    return _designer.GetFormTreeJson(ExtractJsonString(body, "formName"));
                 case "get_table_fields":
-                    return _bridge.GetTableFieldsJson(ExtractJsonString(body, "tableName"));
+                    return _designer.GetTableFieldsJson(ExtractJsonString(body, "tableName"));
                 case "get_element_tree":
-                    return _bridge.GetElementTreeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
+                    return _designer.GetElementTreeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
                 case "get_element_properties":
-                    return _bridge.GetElementPropertiesJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                    return _designer.GetElementPropertiesJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
                         ExtractJsonStringArray(body, "path"));
                 case "set_element_property":
-                    return _bridge.SetElementPropertyJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                    return _designer.SetElementPropertyJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
                         ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "property"), ExtractJsonString(body, "value"));
                 case "get_node_types":
-                    return _bridge.GetNodeTypesJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"), ExtractJsonStringArray(body, "path"));
+                    return _designer.GetNodeTypesJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"), ExtractJsonStringArray(body, "path"));
                 case "add_element_node":
-                    return _bridge.AddElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                    return _designer.AddElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
                         ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "typeName"), ExtractJsonString(body, "name"), ExtractJsonObject(body, "properties"));
                 case "delete_element_node":
-                    return _bridge.DeleteElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"), ExtractJsonStringArray(body, "path"));
+                    return _designer.DeleteElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"), ExtractJsonStringArray(body, "path"));
+                case "rename_element_node":
+                    return _designer.RenameElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                        ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "newName"));
+                case "duplicate_element_node":
+                    return _designer.DuplicateElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                        ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "newName"));
+                case "move_element_node":
+                    return _designer.MoveElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                        ExtractJsonStringArray(body, "path"), int.TryParse(ExtractJsonString(body, "offset"), out int moveOffset) ? moveOffset : 0);
+                case "duplicate_object":
+                    return _objects.DuplicateObjectJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                        ExtractJsonString(body, "newName"), ExtractJsonString(body, "modelName"));
+                case "drop_on_node":
+                    return _designer.DropOnNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                        ExtractJsonStringArray(body, "path"), "true".Equals(ExtractJsonString(body, "onBaseNode"), StringComparison.OrdinalIgnoreCase),
+                        ExtractJsonString(body, "sourceType"), ExtractJsonString(body, "sourceName"), ExtractJsonStringArray(body, "sourcePath"));
+                case "drop_on_property":
+                    return _designer.DropOnPropertyJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                        ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "property"), ExtractJsonString(body, "sourceType"), ExtractJsonString(body, "sourceName"));
                 case "get_element_method":
-                    return _bridge.GetElementMethodJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"), ExtractJsonStringArray(body, "path"));
+                    return _designer.GetElementMethodJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"), ExtractJsonStringArray(body, "path"));
                 case "set_element_method":
-                    return _bridge.SetElementMethodJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                    return _designer.SetElementMethodJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
                         ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "originalName"), ExtractJsonString(body, "source"));
                 case "get_overrides":
-                    return _bridge.GetOverridesJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"), ExtractJsonStringArray(body, "path"));
+                    return _designer.GetOverridesJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"), ExtractJsonStringArray(body, "path"));
                 case "get_model":
-                    return _bridge.GetModelJson(ExtractJsonString(body, "name"));
+                    return _models.GetModelJson(ExtractJsonString(body, "name"));
                 case "create_model":
-                    return _bridge.CreateModelJson(ExtractJsonString(body, "name"), ExtractJsonString(body, "displayName"), ExtractJsonString(body, "publisher"),
+                    return _models.CreateModelJson(ExtractJsonString(body, "name"), ExtractJsonString(body, "displayName"), ExtractJsonString(body, "publisher"),
                         ExtractJsonString(body, "layer"), ExtractJsonString(body, "description"), ExtractJsonStringArray(body, "references"));
                 case "update_model":
-                    return _bridge.UpdateModelJson(ExtractJsonString(body, "name"), ExtractJsonString(body, "displayName"), ExtractJsonString(body, "publisher"),
+                    return _models.UpdateModelJson(ExtractJsonString(body, "name"), ExtractJsonString(body, "displayName"), ExtractJsonString(body, "publisher"),
                         ExtractJsonString(body, "description"), body.Contains("\"references\"") ? ExtractJsonStringArray(body, "references") : null);
                 case "list_packages":
-                    return _bridge.ListPackagesJson();
+                    return _models.ListPackagesJson();
                 case "dump_element":
-                    return _bridge.DumpElementJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
+                    return _discovery.DumpElementJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
                 case "export_project":
-                    return _bridge.ExportProjectJson(ExtractJsonString(body, "projectFile"), ExtractJsonString(body, "outputFile"));
+                    return _packages.ExportProjectJson(ExtractJsonString(body, "projectFile"), ExtractJsonString(body, "outputFile"));
                 case "inspect_project_package":
-                    return _bridge.InspectProjectPackageJson(ExtractJsonString(body, "file"));
+                    return _packages.InspectProjectPackageJson(ExtractJsonString(body, "file"));
                 case "import_project":
-                    return _bridge.ImportProjectJson(ExtractJsonString(body, "file"), ExtractJsonString(body, "targetFolder"),
+                    return _packages.ImportProjectJson(ExtractJsonString(body, "file"), ExtractJsonString(body, "targetFolder"),
                         "true".Equals(ExtractJsonString(body, "overwrite"), StringComparison.OrdinalIgnoreCase));
                 default:
                     return "{\"success\":false,\"message\":\"Unknown action: " + EscapeJson(action ?? "") + "\"}";
@@ -215,7 +272,7 @@ namespace XppVsCode.Server.MetaModel
                 + " enumValues=" + (req.EnumValues?.Count ?? 0)
                 + " fields=" + (req.Fields?.Count ?? 0));
 
-            var result = _bridge.CreateObject(req);
+            var result = _objects.CreateObject(req);
             result.Message += MetaModelBridge.IgnoredPropertiesReport();
             MetaModelBridge.ClearIgnoredProperties();
             if (!result.Success)
@@ -235,9 +292,9 @@ namespace XppVsCode.Server.MetaModel
                 req.Properties, req.Fields, req.EnumValues, req.Indexes,
                 req.Relations, req.FieldGroups, req.EntryPoints, req.DataSources);
             createValidateReq.Controls = req.Controls;
-            var validation = _bridge.ValidateObject(createValidateReq);
+            var validation = _objects.ValidateObject(createValidateReq);
 
-            result.Message += _bridge.BestPracticeReport(req.ObjectType, req.ObjectName);
+            result.Message += _objects.BestPracticeReport(req.ObjectType, req.ObjectName);
             return SerializeResultWithValidation(result, validation);
         }
 
@@ -246,7 +303,7 @@ namespace XppVsCode.Server.MetaModel
             string objectType = ExtractJsonString(body, "objectType");
             string objectName = ExtractJsonString(body, "objectName");
             BridgeLog("HandleReadObject type=" + objectType + " name=" + objectName);
-            var result = _bridge.ReadObject(objectType, objectName);
+            var result = _objects.ReadObject(objectType, objectName);
             BridgeLog("HandleReadObject DONE type=" + objectType + " name=" + objectName + " success=" + result?.Success);
             return SerializeReadResult(result);
         }
@@ -254,7 +311,7 @@ namespace XppVsCode.Server.MetaModel
         private string HandleReadObjectByPath(string body)
         {
             string filePath = ExtractJsonString(body, "filePath");
-            var result = _bridge.ReadObjectByPath(filePath);
+            var result = _objects.ReadObjectByPath(filePath);
             return SerializeReadResult(result);
         }
 
@@ -308,7 +365,7 @@ namespace XppVsCode.Server.MetaModel
             if (error != null)
                 return SerializeResult(new MetaModelResult { Success = false, Message = error });
 
-            var result = _bridge.UpdateObject(req);
+            var result = _objects.UpdateObject(req);
             result.Message += MetaModelBridge.IgnoredPropertiesReport();
             MetaModelBridge.ClearIgnoredProperties();
             if (!result.Success)
@@ -324,9 +381,9 @@ namespace XppVsCode.Server.MetaModel
                 req.Properties, req.Fields, req.EnumValues, req.Indexes,
                 req.Relations, req.FieldGroups, req.EntryPoints, req.DataSources);
             updateValidateReq.Controls = req.Controls;
-            var validation = _bridge.ValidateObject(updateValidateReq);
+            var validation = _objects.ValidateObject(updateValidateReq);
 
-            result.Message += _bridge.BestPracticeReport(req.ObjectType, req.ObjectName);
+            result.Message += _objects.BestPracticeReport(req.ObjectType, req.ObjectName);
             return SerializeResultWithValidation(result, validation);
         }
 
@@ -375,7 +432,7 @@ namespace XppVsCode.Server.MetaModel
                 ParseEntryPoints(body),
                 ParseDataSources(body));
             req.Controls = ParseFormControls(body, "controls");
-            var result = _bridge.ValidateObject(req);
+            var result = _objects.ValidateObject(req);
             BridgeLog("HandleValidateObject DONE type=" + objectType + " name=" + objectName + " valid=" + result?.Valid);
             return SerializeValidateResult(result);
         }
@@ -383,7 +440,7 @@ namespace XppVsCode.Server.MetaModel
         private string HandleGetObjectTypeSchema(string body)
         {
             string objectType = ExtractJsonString(body, "objectType");
-            var result = _bridge.GetObjectTypeSchema(objectType);
+            var result = _discovery.GetObjectTypeSchema(objectType);
             return SerializeObjectTypeSchemaResult(result);
         }
 
@@ -394,7 +451,7 @@ namespace XppVsCode.Server.MetaModel
             int.TryParse(ExtractJsonString(body, "maxDepth"), out int maxDepth);
             BridgeLog("HandleGetFormLayout form=" + formName + " root=" + rootControl + " depth=" + maxDepth);
 
-            var result = _bridge.GetFormLayout(formName, rootControl, maxDepth);
+            var result = _discovery.GetFormLayout(formName, rootControl, maxDepth);
             var sb = new StringBuilder();
             sb.Append("{\"success\":" + (result.Success ? "true" : "false"));
             if (result.Message != null)
@@ -416,7 +473,7 @@ namespace XppVsCode.Server.MetaModel
             if (maxResults < 1) maxResults = 1;
             if (maxResults > 100) maxResults = 100;
 
-            var result = _bridge.FindReferences(objectType, objectName, ExtractJsonString(body, "memberName"), referenceKind, maxResults);
+            var result = _discovery.FindReferences(objectType, objectName, ExtractJsonString(body, "memberName"), referenceKind, maxResults);
 
             var sb = new StringBuilder();
             sb.Append("{\"success\":" + (result.Success ? "true" : "false"));
@@ -463,7 +520,7 @@ namespace XppVsCode.Server.MetaModel
             if (!exact && (objectName ?? "").Trim().Length < 3)
                 return "{\"success\":false,\"message\":\"objectName must be at least 3 characters for partial matching (or set exactMatch=true). Search for a specific object name.\",\"matches\":[]}";
 
-            var result = _bridge.FindObject(objectName, objectType, exact, maxResults);
+            var result = _discovery.FindObject(objectName, objectType, exact, maxResults);
 
             var sb = new StringBuilder();
             sb.Append("{\"success\":" + (result.Success ? "true" : "false"));
@@ -501,7 +558,7 @@ namespace XppVsCode.Server.MetaModel
             if (!string.IsNullOrWhiteSpace(modelName) && string.IsNullOrWhiteSpace(objectType))
                 return "{\"success\":false,\"message\":\"objectType is required when modelName is set (model filtering is expensive per object).\",\"objects\":[]}";
 
-            var result = _bridge.ListObjects(modelName, objectType, nameFilter, maxResults);
+            var result = _discovery.ListObjects(modelName, objectType, nameFilter, maxResults);
 
             var sb = new StringBuilder();
             sb.Append("{\"success\":" + (result.Success ? "true" : "false"));
@@ -524,7 +581,7 @@ namespace XppVsCode.Server.MetaModel
         private string HandleGetModelInfo(string body)
         {
             string modelName = ExtractJsonString(body, "modelName");
-            var result = _bridge.GetModelInfo(modelName);
+            var result = _models.GetModelInfo(modelName);
             var sb = new StringBuilder();
             sb.Append("{\"success\":" + (result.Success ? "true" : "false"));
             if (result.Message != null) sb.Append(",\"message\":\"" + EscapeJson(result.Message) + "\"");
@@ -542,7 +599,7 @@ namespace XppVsCode.Server.MetaModel
 
         private string HandleListModels(string body)
         {
-            var models = _bridge.ListModels();
+            var models = _models.ListModels();
             var sb = new StringBuilder();
             sb.Append("{\"success\":true,\"models\":[");
             for (int i = 0; i < models.Count; i++)
@@ -568,7 +625,7 @@ namespace XppVsCode.Server.MetaModel
             if (!string.IsNullOrEmpty(maxStr)) int.TryParse(maxStr, out maxResults);
             if (maxResults < 1) maxResults = 1;
             if (maxResults > 100) maxResults = 100;
-            var result = _bridge.ReadLabel(labelFileId, language, labelId, searchText, maxResults);
+            var result = _labels.ReadLabel(labelFileId, language, labelId, searchText, maxResults);
 
             var sb = new StringBuilder();
             sb.Append("{\"success\":" + (result.Success ? "true" : "false"));
@@ -609,7 +666,7 @@ namespace XppVsCode.Server.MetaModel
                         Comment = ExtractJsonString(obj, "comment"),
                         Translations = ExtractJsonObject(obj, "translations")
                     });
-            var result = _bridge.CreateLabels(labelFileId, language, labels);
+            var result = _labels.CreateLabels(labelFileId, language, labels);
             return SerializeResult(result);
         }
 
@@ -617,15 +674,15 @@ namespace XppVsCode.Server.MetaModel
         {
             string objectType = ExtractJsonString(body, "objectType");
             string objectName = ExtractJsonString(body, "objectName");
-            var result = _bridge.AddToProject(objectType, objectName);
+            var result = _projects.AddToProject(objectType, objectName);
             return SerializeResult(result);
         }
 
         private string HandleListProjectItems(string body)
         {
-            var items = _bridge.ListProjectItems();
+            var items = _projects.ListProjectItems();
             var sb = new StringBuilder();
-            sb.Append("{\"success\":true,\"hasProject\":" + (_bridge.HasActiveProject ? "true" : "false") + ",\"items\":[");
+            sb.Append("{\"success\":true,\"hasProject\":" + (_projects.HasActiveProject ? "true" : "false") + ",\"items\":[");
             for (int i = 0; i < items.Count; i++)
             {
                 if (i > 0) sb.Append(",");
@@ -642,7 +699,7 @@ namespace XppVsCode.Server.MetaModel
 
         private string HandleGetEnvironment(string body)
         {
-            var info = _bridge.GetEnvironmentInfo();
+            var info = _discovery.GetEnvironmentInfo();
             var sb = new StringBuilder();
             sb.Append("{\"success\":true");
             sb.Append(",\"customMetadataFolder\":\"" + EscapeJson(info.CustomMetadataFolder ?? "") + "\"");
@@ -1062,7 +1119,7 @@ namespace XppVsCode.Server.MetaModel
         {
             if (string.IsNullOrEmpty(value)) return null;
             string t = value.TrimStart();
-            if (t.StartsWith("<![CDATA[") || t.StartsWith("<?") || t.StartsWith("<Ax"))
+            if (t.StartsWith("<![CDATA[", StringComparison.Ordinal) || t.StartsWith("<?", StringComparison.Ordinal) || t.StartsWith("<Ax", StringComparison.Ordinal))
                 return "ERROR: The '" + paramName + "' parameter contains markup. " + FormattedContentRejectionMessage;
             return null;
         }
@@ -1098,7 +1155,7 @@ namespace XppVsCode.Server.MetaModel
 
             // Reject formatted markup — this app is JSON-only
             string trimmed = metadataStr.TrimStart();
-            if (trimmed.StartsWith("<"))
+            if (trimmed.StartsWith("<", StringComparison.Ordinal))
             {
                 BridgeLog("REJECTED formatted markup in metadata — app is JSON-only");
                 return "ERROR: Formatted markup is not supported. You MUST use the strongly-typed JSON parameters "
@@ -1151,7 +1208,7 @@ namespace XppVsCode.Server.MetaModel
             }
 
             string trimmed = metadataStr.TrimStart();
-            if (trimmed.StartsWith("<"))
+            if (trimmed.StartsWith("<", StringComparison.Ordinal))
             {
                 BridgeLog("REJECTED formatted markup in metadata (update) — app is JSON-only");
                 return "ERROR: Formatted markup is not supported. You MUST use the strongly-typed JSON parameters "
@@ -2025,12 +2082,7 @@ namespace XppVsCode.Server.MetaModel
             return result.Count > 0 ? result.ToArray() : null;
         }
 
-        private static string EscapeJson(string s)
-        {
-            if (s == null) return "";
-            return s.Replace("\\", "\\\\").Replace("\"", "\\\"")
-                    .Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t");
-        }
+        private static string EscapeJson(string s) => XppVsCode.Server.Tools.JsonHelpers.EscapeJsonString(s);
 
     }
 }

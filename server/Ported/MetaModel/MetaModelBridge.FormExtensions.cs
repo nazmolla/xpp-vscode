@@ -149,7 +149,7 @@ namespace XppVsCode.Server.MetaModel
             }
             catch (Exception ex)
             {
-                return new FormLayoutResult { Message = "Form layout failed: " + ex.Message };
+                return new FormLayoutResult { Message = "Form layout failed: " + Cause(ex) };
             }
         }
 
@@ -243,7 +243,7 @@ namespace XppVsCode.Server.MetaModel
                 AddControlNode(child, node, controlOrigin, byName);
         }
 
-        private static IEnumerable<string> GetExtensionNames(System.Collections.IEnumerable primaryKeys, string baseName)
+        internal static IEnumerable<string> GetExtensionNames(System.Collections.IEnumerable primaryKeys, string baseName)
         {
             string prefix = baseName + ".";
             foreach (object key in primaryKeys)
@@ -267,7 +267,7 @@ namespace XppVsCode.Server.MetaModel
         private static bool IsContainerControl(object control) =>
             control?.GetType().GetProperty("Controls")?.PropertyType == typeof(KeyedObjectCollection<AxFormControl>);
 
-        private static string GetStringProperty(object target, string propertyName) =>
+        internal static string GetStringProperty(object target, string propertyName) =>
             target?.GetType().GetProperty(propertyName)?.GetValue(target) as string;
 
         // Base table fields plus fields added by every table extension.
