@@ -2,7 +2,7 @@
   "name": "xpp-vscode",
   "displayName": "F&O Studio for VS Code",
   "description": "A full Dynamics 365 Finance & Operations development environment in VS Code: Application Explorer, designers, X++ code, build, deploy, debugging, and AI agent tools.",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "publisher": "MNazmi",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -2832,7 +2832,8 @@
     "build:server": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-server.ps1",
     "test:server": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-server.ps1 -Test && node scripts/check-bridge-actions.js",
     "build": "npm run build:server && npm run compile",
-    "package": "vsce package"
+    "package": "vsce package --readme-path docs/FEATURES.md --baseContentUrl https://github.com/nazmolla/xpp-vscode/blob/HEAD/docs --baseImagesUrl https://github.com/nazmolla/xpp-vscode/raw/HEAD/docs",
+    "publish": "vsce publish --readme-path docs/FEATURES.md --baseContentUrl https://github.com/nazmolla/xpp-vscode/blob/HEAD/docs --baseImagesUrl https://github.com/nazmolla/xpp-vscode/raw/HEAD/docs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

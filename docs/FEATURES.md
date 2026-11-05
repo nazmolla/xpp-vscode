@@ -1,4 +1,27 @@
-﻿# F&O Studio: feature reference
+﻿# F&O Studio for VS Code
+
+A full Dynamics 365 Finance & Operations development environment in VS Code, with AI built in: Application Explorer, designers, code editing, build, deploy, debugging, data, performance and security analysis, plus agent tools for Copilot. It works against a unified developer environment (UDE), or on a cloud-hosted or VHD environment, with the same metadata API, compiler and scripts as Visual Studio, so projects and models move freely between the two.
+
+## What's new
+
+### 0.12
+- **Data:** Browse Table Data and a SQL query panel with Explain Plan. Temporary database credentials on unified developer environments (requested from VS Code, kept in secret storage), the local AxDB on cloud-hosted and VHD. Copilot reads data with `xpp_query_data` after your confirmation.
+- **Performance:** Analyze Performance finds slow X++ patterns (queries in loops, set-based statements that fall back to row by row, missing indexes, cache settings). Live insights show missing indexes, the most expensive queries, batch job history and number sequences.
+- **Trace analysis:** Analyze Trace reads a trace from the web client with F&O Studio's own parser, no Trace Parser or database import: requests on a timeline, call trees, hot methods, SQL per method and pauses, each method one click from its code.
+- **Upgrade readiness:** obsolete API uses, plus Chain of Command wrappers, event handlers and table, form and enum extensions that no longer match the installed application.
+- **Wizards:** New Report, New Approval Workflow, New Custom Service and New Batch Job create complete standard patterns that compile without warnings.
+- **Review and release:** best-practice checks (xppbp), Review My Changes with a pull request summary, a Pre-Deploy Checklist, git change marks in the project view, Synchronize Tables.
+- **Copilot:** the `@fno` chat participant (`/design`, `/extend`, `/explain`, `/review`, `/support`, `/performance`), a Copilot Activity view with the changes agents make, team rules for agents, and new tools for best practice, branch changes, packages, performance, traces and upgrade readiness.
+- **Editing:** Rename for methods, label hover with actions, Translate Missing Labels, Find Unused Labels, undo and redo in the element designer.
+- **Build and test:** SysTest classes in Test Explorer, build tasks, status bar items for the project, the server and the database.
+- **Look and feel:** one product name (F&O Studio), a Get Started walkthrough, an X++ file icon, an accessibility pass on every panel, error messages that say what to do next.
+
+### 0.11
+- **Designer:** Go To referenced elements, F12 links in code, View History of an element, rename, duplicate and move nodes, drag and drop from the Application Explorer with Visual Studio's drop rules.
+- **Projects:** each project opens in its own workspace with its project and model folders; Open Recent and Close Project.
+- **Security review:** every write is checked on the server against your models, plus a documentation allow-list and stricter input validation.
+
+## Features
 
 ### Application Explorer
 - **Classic view** (elements of all models grouped by category and type) and **model view** (each model by display name), with a name filter.
@@ -10,9 +33,7 @@
   - Compare Code, Compare Metadata.
   - Open in Browser, Open Table Browser.
 
-![Application Explorer filtered on CustGroup: categories in Visual Studio's order](images/aot.png)
-
-![View References of CustGroup: every reference opens the code at its line](images/references.png)
+![Application Explorer filtered on CustGroup](images/aot.png)
 
 ### Element designer
 - **Node tree and Properties grid** for every element type, generated from the metadata classes Visual Studio's designer uses.
@@ -26,18 +47,12 @@
 - **Read-only for others' elements:** elements outside your models can be viewed but not changed; extend them instead.
 - **Label editor:** label ID, text and comment, with search and the label file's other languages side by side; New label, Edit, Delete (every language) and Copy @reference for your own label files. Properties opens the property grid.
 
-![Table designer: CustGroup with Visual Studio's node order, Events node and Properties](images/table-designer.png)
-
 ![Form designer: CustGroup with the rendered preview](images/form-designer.png)
-
-![Entity relationship diagram of CustGroup](images/erd.png)
 
 ### Code
 - **Code view** shows a class the way Visual Studio does: the declaration, then the methods inside its braces. Objects in your own models are editable.
 - **Methods of nested nodes** (data sources, fields, controls) open in their own editor.
 - **Navigation:** Go to / Peek Definition (F12) for element names and members: `Type::method`, `this.`, `super.`, `variable.method()` (the variable's declared type), and calls to methods of the object or its base classes. **Find All References** (Shift+F12) uses the cross-reference database. Hover shows the element or the method signature.
-
-![Code view of SalesFormLetter with code lens: references, Chain of Command, overrides, handlers](images/code.png)
 
 ### Code intelligence
 Each feature can be turned on or off under **Code intelligence** in the Dynamics 365 view, or with the `xpp.codeIntelligence.*` settings. Features marked *slow* use more CPU or disk.
@@ -52,8 +67,6 @@ Each feature can be turned on or off under **Code intelligence** in the Dynamics
 - **Obsolete API warnings:** calls to methods and uses of classes and tables marked `[SysObsolete]` show in Problems.
 
 ![Peek Implementations on SalesFormLetter.run: the Chain of Command extensions and handlers](images/implementations.png)
-
-![Completion on a CustTable buffer](images/completion.png)
 
 ### Productivity
 - **Search Code in All Packages** (`Ctrl+Shift+Alt+F`): text or regex search over the X++ code of every package; a result opens the method at the matching line.
@@ -104,6 +117,8 @@ Each feature can be turned on or off under **Code intelligence** in the Dynamics
 - **Live insights** (with database access): missing indexes, the most expensive queries from Query Store, batch job history and number sequences that slow posting (continuous or without preallocation).
 - **Explain Plan** in the SQL query panel.
 - **Analyze Trace** (also on `.etl` files in the Explorer): reads a trace taken in the web client (Settings > Trace) with F&O Studio's own parser, no Trace Parser or SQL import needed. Shows each request (web request or batch task) with its call tree, inclusive and exclusive time and SQL per method; methods by exclusive time; SQL statements with the X++ method that ran them; and pauses where a request or the whole server logged nothing. Every method opens in the code view. Agents get the same as `xpp_analyze_trace`.
+
+![Analyze Trace: requests on a timeline, the slowest request's hot spots and call tree](images/trace.png)
 - **Telemetry Queries:** KQL for the telemetry Finance and Operations sends to Application Insights (most opened and slowest forms, X++ exceptions, custom events); on a form, filtered to that form.
 
 ### Labels and refactoring
@@ -145,6 +160,46 @@ Copilot can:
 
 The agent's instructions are a compact rule set; the full guide with examples (SSRS reports, Chain of Command per object type, event handlers, the X++ language reference, object properties) is read on demand with `xpp_get_guide`, so it does not fill the context of every session.
 
-The tools are registered automatically. `node scripts/tool-regression.js --project <your .rnrproj>` checks them against the active environment.
+The tools are registered automatically.
+
+## Requirements
+
+- Windows.
+- A Dynamics 365 Finance & Operations unified developer environment (**F&O Studio: Connect to Environment** installs the metadata, compiler and FinOps tools), or a cloud-hosted or VHD environment. On a cloud-hosted or VHD environment, run VS Code as administrator, as Visual Studio does, to build into PackagesLocalDirectory.
+- SQL Server LocalDB, for cross references.
+- [Power Platform CLI](https://learn.microsoft.com/power-platform/developer/cli/introduction) (`pac`), for deploy and database sync.
+
+## Getting started
+
+1. Open the **X++** view in the activity bar, or the **Get started with F&O Studio** walkthrough.
+2. If the machine isn't set up yet, run **Connect to Environment** from the Dynamics 365 view.
+3. Browse **Application Explorer**, or pick a project with **Open D365FO Project** (or **Create D365FO Project**); a project is optional.
+4. Open elements, build, debug, browse data, or ask Copilot in agent mode (or `@fno` in chat) to work on your model.
+
+## Settings
+
+| Setting | Description |
+| --- | --- |
+| `xpp.project` | The project (`.rnrproj`) of a project workspace; written by Open Project, ignored in user settings |
+| `xpp.environmentUrl` | Dataverse URL of your default unified developer environment (**Select Environment** chooses one per workspace) |
+| `xpp.financeAndOperationsUrl` | Web client URL, for Open in Browser and Open Table Browser when the environment's configuration has none |
+| `xpp.auth.clientId` | Optional Entra app ID for sign-in |
+| `xpp.build.crossReference` | Update cross references while building |
+| `xpp.build.runAppCheckerRules` | Run AppChecker rules during the build |
+| `xpp.pacPath` | Path to `pac` |
+| `xpp.debuggerProxyPath` | Path to `Microsoft.Dynamics.AX.DebuggerProxy.exe`, if not in the default location |
+| `xpp.erd.depth`, `xpp.erd.direction`, `xpp.erd.fields` | Defaults for the entity relationship diagram (also changeable in the diagram) |
+| `xpp.security.sodRulesFile` | Segregation of duties rules (JSON); empty uses the built-in rules |
+| `xpp.codeIntelligence.<feature>` | Turn each code intelligence feature on or off (also in the Dynamics 365 view) |
+| `xpp.git.baseBranch` | Branch Review My Changes and Show Changed Elements compare with |
+| `xpp.usageStatistics` | Count command use locally (never sent anywhere); Show Usage Statistics lists them |
+
+## Status
+
+Preview. The debugger has not yet been verified end to end against a live environment.
+
+Licensed under the [Apache License 2.0](https://github.com/nazmolla/xpp-vscode/blob/main/LICENSE).
+
+*F&O Studio is an independent project and is not affiliated with or endorsed by Microsoft. Dynamics 365 is a trademark of Microsoft Corporation.*
 
 

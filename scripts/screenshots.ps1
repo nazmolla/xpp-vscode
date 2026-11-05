@@ -1,7 +1,7 @@
 # Captures the README screenshots: launches a throw-away VS Code window with only this extension, no project selected
 # (standard objects only), lets test/screenshots.js drive it, and captures the window at each step into docs/images.
 # Usage: powershell -ExecutionPolicy Bypass -File scripts/screenshots.ps1
-param([int]$Width = 1600, [int]$Height = 1000)
+param([int]$Width = 1600, [int]$Height = 1000, [int]$MaxWidth = 1200)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $shots = Join-Path $env:TEMP 'xpp-shots'
@@ -75,6 +75,10 @@ while ((Get-Date) -lt $deadline) {
         [Win]::SetCursorPos($r.Left + [int](($r.Right - $r.Left) * 0.72), $r.Top + [int](($r.Bottom - $r.Top) * 0.746)) | Out-Null
         [Win]::mouse_event(0x2, 0, 0, 0, [UIntPtr]::Zero); [Win]::mouse_event(0x4, 0, 0, 0, [UIntPtr]::Zero)
         Start-Sleep -Milliseconds 1500
+        # The onboarding dialog's next page ("Make It Yours"): its close button, top right of the dialog.
+        [Win]::SetCursorPos($r.Left + [int](($r.Right - $r.Left) * 0.781), $r.Top + [int](($r.Bottom - $r.Top) * 0.241)) | Out-Null
+        [Win]::mouse_event(0x2, 0, 0, 0, [UIntPtr]::Zero); [Win]::mouse_event(0x4, 0, 0, 0, [UIntPtr]::Zero)
+        Start-Sleep -Milliseconds 1500
         Add-Type -AssemblyName System.Windows.Forms
         [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
         Start-Sleep -Milliseconds 800
@@ -91,6 +95,17 @@ while ((Get-Date) -lt $deadline) {
     [Win]::PrintWindow($h, $hdc, 2) | Out-Null
     $g.ReleaseHdc($hdc)
     $g.Dispose()
+    # Drop the title bar, status bar and (editor shots) the activity bar, then scale to at most $MaxWidth pixels wide.
+    $left = if ($step -eq 'aot') { 0 } else { 48 }
+    $crop = New-Object System.Drawing.Rectangle $left, 35, ($bmp.Width - $left), ($bmp.Height - 35 - 22)
+    $scale = [Math]::Min(1.0, $MaxWidth / $crop.Width)
+    $out = New-Object System.Drawing.Bitmap ([int]($crop.Width * $scale)), ([int]($crop.Height * $scale))
+    $g = [System.Drawing.Graphics]::FromImage($out)
+    $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $g.DrawImage($bmp, (New-Object System.Drawing.Rectangle 0, 0, $out.Width, $out.Height), $crop, [System.Drawing.GraphicsUnit]::Pixel)
+    $g.Dispose()
+    $bmp.Dispose()
+    $bmp = $out
     $bmp.Save((Join-Path $images "$step.png"), [System.Drawing.Imaging.ImageFormat]::Png)
     $bmp.Dispose()
     Write-Host "captured $step"

@@ -15,3 +15,5 @@ XvsTestModel/**
 docs/**
 .vscode-test/**
 **/*.etl
+# The Marketplace overview is docs/FEATURES.md (npm run package / publish pass it as --readme-path).
+README.md
