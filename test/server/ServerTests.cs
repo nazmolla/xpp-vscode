@@ -82,10 +82,11 @@ namespace XppVsCode.Server.Tests
             public string TargetModelDenial(string modelName) { Calls.Add("model " + modelName); return modelName == "Foundation" ? "not custom" : null; }
         }
 
-        // A bridge that fails every call, so a test sees whether the dispatcher got past the policy.
-        private sealed class FailingBridge : RealProxy
+        // Services that fail every call, so a test sees whether the dispatcher got past the policy.
+        private sealed class FailingService : RealProxy
         {
-            public FailingBridge() : base(typeof(IMetaModelBridge)) { }
+            private FailingService(Type role) : base(role) { }
+            public static T Of<T>() => (T)new FailingService(typeof(T)).GetTransparentProxy();
             public override IMessage Invoke(IMessage msg) =>
                 new ReturnMessage(new InvalidOperationException("bridge reached"), (IMethodCallMessage)msg);
         }
@@ -93,7 +94,20 @@ namespace XppVsCode.Server.Tests
         private static (MetaModelBridgeServer server, Policy policy) Create()
         {
             var policy = new Policy();
-            return (new MetaModelBridgeServer((IMetaModelBridge)new FailingBridge().GetTransparentProxy(), policy), policy);
+            var services = new BridgeServices
+            {
+                Objects = FailingService.Of<IObjectStore>(),
+                Discovery = FailingService.Of<IMetadataDiscovery>(),
+                Designer = FailingService.Of<IElementDesigner>(),
+                Projects = FailingService.Of<IProjectService>(),
+                Builds = FailingService.Of<IBuildService>(),
+                Models = FailingService.Of<IModelService>(),
+                Labels = FailingService.Of<ILabelService>(),
+                Packages = FailingService.Of<IProjectPackageService>(),
+                Relations = FailingService.Of<ITableRelations>(),
+                Policy = policy,
+            };
+            return (new MetaModelBridgeServer(services), policy);
         }
 
         [Theory]

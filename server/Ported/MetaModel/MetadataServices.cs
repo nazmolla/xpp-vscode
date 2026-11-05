@@ -2,32 +2,39 @@ using System.Collections.Generic;
 
 namespace XppVsCode.Server.MetaModel
 {
-    /// <summary>
-    /// Abstraction over the D365FO IMetaModelService API.
-    /// All metadata operations (create, read, update, search)
-    /// go through this interface. Implemented by <see cref="MetaModelBridge"/>
-    /// which wraps the real IMetaModelService available inside VS.
-    /// </summary>
-    public interface IMetaModelBridge
-    {
-        // ── Object CRUD ──
+    // The metadata operations by role. MetaModelBridge implements the element-centred roles; models, labels, project
+    // packages and table relations have their own services. MetaModelBridgeServer routes requests to them.
 
+    /// <summary>Create, read, change, check and delete elements.</summary>
+    public interface IObjectStore
+    {
         MetaModelResult CreateObject(CreateObjectRequest request);
         MetaModelResult UpdateObject(UpdateObjectRequest request);
         ReadObjectResult ReadObject(string objectType, string objectName);
         ReadObjectResult ReadObjectByPath(string filePath);
         ValidateObjectResult ValidateObject(ValidateObjectRequest request);
+        string DeleteObjectJson(string objectType, string objectName, bool checkOnly = false);
+        string DuplicateObjectJson(string objectType, string objectName, string newName, string modelName);
+        string BestPracticeReport(string objectType, string objectName);
+    }
 
-        // ── Discovery ──
-
+    /// <summary>Find elements and describe types, forms and the environment.</summary>
+    public interface IMetadataDiscovery
+    {
         FindObjectResult FindObject(string objectName, string objectType, bool exactMatch, int maxResults);
         ListObjectsResult ListObjects(string modelName, string objectType, string nameFilter, int maxResults);
         FindReferencesResult FindReferences(string objectType, string objectName, string memberName, string referenceKind, int maxResults);
         ObjectTypeSchemaResult GetObjectTypeSchema(string objectType);
         ProxyGenerationResult GenerateProxies(ProxyGenerationRequest request);
-        ModelInfoResult GetModelInfo(string modelName);
-        List<ModelSummary> ListModels();
         FormLayoutResult GetFormLayout(string formName, string rootControl, int maxDepth);
+        string TypeMembersJson(string objectType, string objectName);
+        string DumpElementJson(string objectType, string objectName);
+        EnvironmentInfo GetEnvironmentInfo();
+    }
+
+    /// <summary>The element designer: node tree, properties, node edits, drops and methods.</summary>
+    public interface IElementDesigner
+    {
         string GetFormTreeJson(string formName);
         string GetTableFieldsJson(string tableName);
         string GetElementTreeJson(string objectType, string objectName);
@@ -39,47 +46,79 @@ namespace XppVsCode.Server.MetaModel
         string RenameElementNodeJson(string objectType, string objectName, string[] path, string newName);
         string DuplicateElementNodeJson(string objectType, string objectName, string[] path, string newName);
         string MoveElementNodeJson(string objectType, string objectName, string[] path, int offset);
-        string DuplicateObjectJson(string objectType, string objectName, string newName, string modelName);
         string DropOnNodeJson(string objectType, string objectName, string[] path, bool onBaseNode, string sourceType, string sourceName, string[] sourcePath);
         string DropOnPropertyJson(string objectType, string objectName, string[] path, string property, string sourceType, string sourceName);
         string GetElementMethodJson(string objectType, string objectName, string[] path);
         string SetElementMethodJson(string objectType, string objectName, string[] nodePath, string originalName, string source);
         string GetOverridesJson(string objectType, string objectName, string[] nodePath);
-        string GetModelJson(string name);
-        string CreateModelJson(string name, string displayName, string publisher, string layer, string description, string[] references);
-        string UpdateModelJson(string name, string displayName, string publisher, string description, string[] references);
-        string ListPackagesJson();
-        string ExportProjectJson(string projectFile, string outputFile);
-        string InspectProjectPackageJson(string file);
-        string ImportProjectJson(string file, string targetFolder, bool overwrite);
-        string DumpElementJson(string objectType, string objectName);
+    }
 
-        // ── Labels ──
-
-        LabelResult ReadLabel(string labelFileId, string language, string labelId, string searchText, int maxResults);
-        MetaModelResult CreateLabel(string labelFileId, string language, string labelId, string text, string comment);
-        MetaModelResult CreateLabels(string labelFileId, string language, List<LabelRequestDto> labels);
-
-        // ── Project ──
-
+    /// <summary>The active project and its items.</summary>
+    public interface IProjectService
+    {
         MetaModelResult AddToProject(string objectType, string objectName);
         List<ProjectItemInfo> ListProjectItems();
         bool HasActiveProject { get; }
         string RemoveFromProjectJson(string objectType, string objectName);
         string ListProjectsJson(string searchFolder);
         string SelectProjectJson(string projectFile);
-        string DeleteObjectJson(string objectType, string objectName, bool checkOnly = false);
-        string TypeMembersJson(string objectType, string objectName);
-        string BestPracticeReport(string objectType, string objectName);
-        string TableErdJson(string[] tableNames);
-        string IncomingRelationsJson(string tableName, bool force);
+    }
+
+    /// <summary>Builds a model or the project's elements.</summary>
+    public interface IBuildService
+    {
+        string BuildJson(string modelName, bool projectOnly, bool syncDatabase);
+    }
+
+    /// <summary>Models and packages.</summary>
+    public interface IModelService
+    {
+        ModelInfoResult GetModelInfo(string modelName);
+        List<ModelSummary> ListModels();
+        string GetModelJson(string name);
+        string CreateModelJson(string name, string displayName, string publisher, string layer, string description, string[] references);
+        string UpdateModelJson(string name, string displayName, string publisher, string description, string[] references);
+        string ListPackagesJson();
+    }
+
+    /// <summary>Label files and their labels.</summary>
+    public interface ILabelService
+    {
+        LabelResult ReadLabel(string labelFileId, string language, string labelId, string searchText, int maxResults);
+        MetaModelResult CreateLabel(string labelFileId, string language, string labelId, string text, string comment);
+        MetaModelResult CreateLabels(string labelFileId, string language, List<LabelRequestDto> labels);
         string LabelFileEntriesJson(string labelFile, string search, List<string> otherLanguages, int limit);
         string SaveLabelJson(string labelFile, string labelId, Dictionary<string, string> texts, string comment);
         string DeleteLabelJson(string labelFile, string labelId);
-        string BuildJson(string modelName, bool projectOnly, bool syncDatabase);
+    }
 
-        // ── Environment ──
+    /// <summary>Project export and import (.axpp).</summary>
+    public interface IProjectPackageService
+    {
+        string ExportProjectJson(string projectFile, string outputFile);
+        string InspectProjectPackageJson(string file);
+        string ImportProjectJson(string file, string targetFolder, bool overwrite);
+    }
 
-        EnvironmentInfo GetEnvironmentInfo();
+    /// <summary>Tables with their relations, and the tables that relate to a table.</summary>
+    public interface ITableRelations
+    {
+        string TableErdJson(string[] tableNames);
+        string IncomingRelationsJson(string tableName, bool force);
+    }
+
+    /// <summary>The services the request dispatcher routes to (composed in Program).</summary>
+    public sealed class BridgeServices
+    {
+        public IObjectStore Objects { get; set; }
+        public IMetadataDiscovery Discovery { get; set; }
+        public IElementDesigner Designer { get; set; }
+        public IProjectService Projects { get; set; }
+        public IBuildService Builds { get; set; }
+        public IModelService Models { get; set; }
+        public ILabelService Labels { get; set; }
+        public IProjectPackageService Packages { get; set; }
+        public ITableRelations Relations { get; set; }
+        public IWritePolicy Policy { get; set; }
     }
 }
