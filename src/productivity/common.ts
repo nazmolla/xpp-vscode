@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { BridgeAction, BridgeResult } from '../bridgeContract';
 import { CodeIntelligence, splitParameters } from '../codeIntel/providers';
 import { XppServerClient } from '../serverClient';
 
@@ -30,10 +31,12 @@ export interface FindMatch {
 }
 
 /** Calls a server action and turns an unknown action or a failure into an error with the server's message. */
-export async function call<T = any>(client: XppServerClient, kind: 'bridge' | 'lang', action: string, body: object): Promise<T & { success: boolean; message?: string }> {
-    let result: any;
+export async function call<T = unknown>(client: XppServerClient, kind: 'bridge', action: BridgeAction, body: object): Promise<T & BridgeResult>;
+export async function call<T = unknown>(client: XppServerClient, kind: 'lang', action: string, body: object): Promise<T & BridgeResult>;
+export async function call<T>(client: XppServerClient, kind: 'bridge' | 'lang', action: string, body: object): Promise<T & BridgeResult> {
+    let result: BridgeResult | undefined;
     try {
-        result = kind === 'bridge' ? await client.bridge(action, body) : await client.lang(action, body);
+        result = kind === 'bridge' ? await client.bridge(action as BridgeAction, body) : await client.lang<BridgeResult>(action, body);
     } catch (err) {
         throw new Error(`${action}: ${(err as Error).message}`);
     }
@@ -43,7 +46,7 @@ export async function call<T = any>(client: XppServerClient, kind: 'bridge' | 'l
     if (result.success === false) {
         throw new Error(result.message || result.error || `${action} failed.`);
     }
-    return result;
+    return result as T & BridgeResult;
 }
 
 /** The element with exactly this type and name, if any. */

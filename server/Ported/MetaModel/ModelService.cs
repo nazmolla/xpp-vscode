@@ -4,13 +4,85 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
 using Microsoft.Dynamics.AX.Metadata.MetaModel;
+using Microsoft.Dynamics.AX.Metadata.Service;
+using XppVsCode.Server.Host;
+using static XppVsCode.Server.MetaModel.MetaModelBridge;
 
 namespace XppVsCode.Server.MetaModel
 {
     // Model management (Dynamics 365 > Model Management): create a model, read and update its parameters.
-    public sealed partial class MetaModelBridge
+    internal sealed class ModelService : IModelService
     {
+        private readonly IMetadataCore _core;
+
+        public ModelService(IMetadataCore core)
+        {
+            _core = core;
+        }
+
+        private IMetaModelService MetaService => _core.MetaService;
+        private bool IsCustomModel(string modelName) => _core.IsCustomModel(modelName);
+
         private static readonly string[] LayerNames = { "SYS", "SYP", "GLS", "GLP", "FPK", "FPP", "SLN", "SLP", "ISV", "ISP", "VAR", "VAP", "CUS", "CUP", "USR", "USP" };
+
+        public ModelInfoResult GetModelInfo(string modelName)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            if (MetaService == null)
+                return new ModelInfoResult { Message = "MetaModel service not available." };
+
+            try
+            {
+                var modelInfo = MetaService.GetModel(modelName);
+
+                if (modelInfo == null)
+                    return new ModelInfoResult { Message = "Model '" + modelName + "' not found." };
+
+                var result = new ModelInfoResult
+                {
+                    Success = true,
+                    Name = modelInfo.Name,
+                    DisplayName = modelInfo.DisplayName,
+                    Publisher = modelInfo.Publisher,
+                    Version = modelInfo.VersionMajor + "." + modelInfo.VersionMinor + "." + modelInfo.VersionBuild + "." + modelInfo.VersionRevision,
+                    ModelId = DescriptorModelId(modelInfo) ?? modelInfo.Id,
+                    Layer = modelInfo.Layer >= 0 && modelInfo.Layer < LayerNames.Length
+                        ? LayerNames[modelInfo.Layer] + " (" + modelInfo.Layer + ")"
+                        : modelInfo.Layer.ToString(),
+                    Package = modelInfo.Module,
+                    Dependencies = modelInfo.ModuleReferences?.ToList() ?? new List<string>()
+                };
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                return new ModelInfoResult { Message = "Model info failed: " + Cause(ex) };
+            }
+        }
+
+        public List<ModelSummary> ListModels()
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            var models = new List<ModelSummary>();
+            if (MetaService == null) return models;
+
+            try
+            {
+                foreach (var info in MetaService.GetModels())
+                {
+                    models.Add(new ModelSummary
+                    {
+                        Name = info.Name,
+                        DisplayName = info.DisplayName,
+                        IsCustom = IsCustomModel(info.Name)
+                    });
+                }
+            }
+            catch (Exception ex) { LogIgnored("Listing models", ex); }
+
+            return models;
+        }
 
         public string GetModelJson(string name)
         {
@@ -71,8 +143,8 @@ namespace XppVsCode.Server.MetaModel
                     prop.SetValue(info, Activator.CreateInstance(typeof(List<>).MakeGenericType(prop.PropertyType.GetGenericArguments())));
             }
             MetaService.CreateModel(info);
-            _host.Reset();
-            InvalidateCaches();
+            _core.ResetHost();
+            _core.InvalidateCaches();
             return json.Serialize(new Dictionary<string, object> { ["success"] = true, ["message"] = "Created model " + name + " in package " + name + "." });
         }
 
@@ -97,8 +169,8 @@ namespace XppVsCode.Server.MetaModel
                 model.ModuleReferences = new List<string>(references);
             }
             MetaService.UpdateModel(model);
-            _host.Reset();
-            InvalidateCaches();
+            _core.ResetHost();
+            _core.InvalidateCaches();
             return json.Serialize(new Dictionary<string, object> { ["success"] = true, ["message"] = "Updated model " + model.Name + "." });
         }
 

@@ -63,12 +63,12 @@ namespace XppVsCode.Server.Tools
                                 if (literal < 4) continue;
                                 list.Add(new LabelEntry
                                 {
-                                    Reference = id.StartsWith("@") ? id : "@" + file + ":" + id,
+                                    Reference = id.StartsWith("@", StringComparison.Ordinal) ? id : "@" + file + ":" + id,
                                     File = file, Text = text, Pieces = pieces, LiteralLength = literal,
                                 });
                             }
                         }
-                        catch { }
+                        catch (Exception ex) { McpLogger.Log("Reading labels of " + file + " failed: " + ex.Message); }
                     }
                 }
                 Indexes[language] = list;

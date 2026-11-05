@@ -116,7 +116,7 @@ namespace XppVsCode.Server.Tools
                     foreach (string model in Directory.GetDirectories(package).Where(m => !string.Equals(Path.GetFileName(m), "Descriptor", StringComparison.OrdinalIgnoreCase)))
                         index.CustomModels.Add(Path.GetFileName(model));
             }
-            catch { }
+            catch (Exception ex) { McpLogger.Log("Listing custom models failed: " + ex.Message); }
 
             var docs = new ConcurrentBag<Tuple<string, string, XElement>>();   // type, model, root
             var files = folders.SelectMany(f => SafeFiles(f.Key).Select(file => Tuple.Create(Path.GetFileName(f.Key), f.Value, file))).ToList();
@@ -127,7 +127,7 @@ namespace XppVsCode.Server.Tools
                     if (f.Item1 == "AxDataEntityView") { docs.Add(Tuple.Create(f.Item1, f.Item2, new XElement("E", Path.GetFileNameWithoutExtension(f.Item3)))); return; }
                     docs.Add(Tuple.Create(f.Item1, f.Item2, XDocument.Load(f.Item3).Root));
                 }
-                catch { }
+                catch (Exception ex) { McpLogger.Log("Reading " + f.Item3 + " failed: " + ex.Message); }
             });
 
             foreach (var d in docs.Where(x => x.Item1 == "AxSecurityPrivilege"))
@@ -175,7 +175,7 @@ namespace XppVsCode.Server.Tools
                 foreach (var x in Items(d.Item3, "Privileges")) { string n = Child(x, "Name"); if (role.Privileges.Add(n)) role.AddedBy[n] = name; }
                 foreach (var x in Items(d.Item3, "SubRoles")) { string n = Child(x, "Name"); if (role.SubRoles.Add(n)) role.AddedBy[n] = name; }
             }
-            foreach (var d in docs.Where(x => x.Item1.StartsWith("AxMenuItem")))
+            foreach (var d in docs.Where(x => x.Item1.StartsWith("AxMenuItem", StringComparison.Ordinal)))
             {
                 var r = d.Item3;
                 string type = d.Item1.Substring("AxMenuItem".Length);
@@ -421,8 +421,8 @@ namespace XppVsCode.Server.Tools
             var rows = new List<Dictionary<string, object>>();
             foreach (var pg in privileges)
             {
-                var duties = index.PrivilegeOwners.TryGetValue(pg.Item1.Name, out var owners) ? owners.Where(o => o.StartsWith("Duty:")).Select(o => o.Substring(5)).ToList() : new List<string>();
-                var directRoles = owners?.Where(o => o.StartsWith("Role:")).Select(o => o.Substring(5)).ToList() ?? new List<string>();
+                var duties = index.PrivilegeOwners.TryGetValue(pg.Item1.Name, out var owners) ? owners.Where(o => o.StartsWith("Duty:", StringComparison.Ordinal)).Select(o => o.Substring(5)).ToList() : new List<string>();
+                var directRoles = owners?.Where(o => o.StartsWith("Role:", StringComparison.Ordinal)).Select(o => o.Substring(5)).ToList() ?? new List<string>();
                 var roles = new HashSet<string>(directRoles, StringComparer.OrdinalIgnoreCase);
                 foreach (string d in duties) if (index.DutyRoles.TryGetValue(d, out var rs)) roles.UnionWith(rs);
                 foreach (string r in roles.ToList()) AddParents(index, r, roles);
@@ -724,7 +724,7 @@ namespace XppVsCode.Server.Tools
             var reasons = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             void Add(string role, double points, string reason)
             {
-                if (!index.Roles.TryGetValue(role, out var r) || index.CustomModels.Contains(r.Model) || role.StartsWith("-")) return;
+                if (!index.Roles.TryGetValue(role, out var r) || index.CustomModels.Contains(r.Model) || role.StartsWith("-", StringComparison.Ordinal)) return;
                 score[role] = (score.TryGetValue(role, out double s) ? s : 0) + points;
                 if (!reasons.TryGetValue(role, out var list)) reasons[role] = list = new List<string>();
                 if (!list.Contains(reason)) list.Add(reason);
@@ -774,7 +774,7 @@ namespace XppVsCode.Server.Tools
         internal static string LabelText(string label)
         {
             if (string.IsNullOrWhiteSpace(label)) return null;
-            if (!label.StartsWith("@")) return label;
+            if (!label.StartsWith("@", StringComparison.Ordinal)) return label;
             int colon = label.IndexOf(':');
             string file, id;
             if (colon > 1) { file = label.Substring(1, colon - 1); id = label.Substring(colon + 1); }
@@ -815,12 +815,12 @@ namespace XppVsCode.Server.Tools
                 if (!_labelFilePaths.TryGetValue(file, out string path)) return texts;
                 foreach (string line in File.ReadLines(path))
                 {
-                    if (line.StartsWith(" ;") || line.StartsWith(";")) continue;
+                    if (line.StartsWith(" ;", StringComparison.Ordinal) || line.StartsWith(";", StringComparison.Ordinal)) continue;
                     int eq = line.IndexOf('=');
                     if (eq > 0 && !texts.ContainsKey(line.Substring(0, eq))) texts[line.Substring(0, eq)] = line.Substring(eq + 1);
                 }
             }
-            catch { }
+            catch (Exception ex) { McpLogger.Log("Reading label texts failed: " + ex.Message); }
             return texts;
         }
 

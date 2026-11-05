@@ -1,8 +1,12 @@
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
-import { CodeTypes, elementContextValue, typeLabel } from './aot';
+import { baseElementOf, CodeTypes, elementContextValue, intrinsicReference, typeLabel, WhereUsedTypes } from './aot';
+import { BridgeAction } from './bridgeContract';
 import { methodUri, objectUri } from './codeView';
 import { addEventNodes, copyEventHandler, EventSpec, eventLabel, handlerQuery } from './events';
+import { pickElement } from './d365Tools';
+import { ElementDragAndDrop, elementsFromUris } from './dragAndDrop';
+import { openElementReference } from './goTo';
 import { XppServerClient } from './serverClient';
 import { methodSpans } from './xppSource';
 
@@ -12,6 +16,10 @@ export interface DesignerNodeContext {
     xppKind: string;
     xppType?: string;
     xppEventSpec?: EventSpec;
+    /** Element types the node accepts (drop or Add from Application Explorer), as JSON. */
+    xppAccepts?: string;
+    /** The node belongs to the base element of an extension: what is added becomes an extension item. */
+    xppOnBaseNode?: boolean;
 }
 
 /** Element types whose own methods can have Pre/Post handlers and delegates with subscribers. */
@@ -27,35 +35,67 @@ function baseType(objectType: string): string {
 
 const NamePattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+interface TreeNode {
+    kind: string;
+    path: string[];
+    children: TreeNode[];
+    intrinsic?: string;
+    memberRefs?: { objectType: string; objectName: string; memberName: string };
+}
+
+/**
+ * Per node: the X++ naming it (tableStr, fieldStr, formControlStr, ...) for Copy X++ Reference, and for fields and methods
+ * the member the cross-reference database knows (Find References); extension members are found under the base element.
+ */
+function annotateNodes(objectType: string, objectName: string, node: TreeNode): void {
+    if (node.kind === 'element' || node.kind === 'item') {
+        node.intrinsic = intrinsicReference(objectType, objectName, node.path);
+    }
+    const owner = baseElementOf(objectType, objectName) ?? { objectType, objectName };
+    if (node.path.length === 2 && (node.path[0] === 'Fields' || node.path[0] === 'Methods') && WhereUsedTypes.has(owner.objectType)) {
+        node.memberRefs = { ...owner, memberName: node.path[1] };
+    }
+    node.children.forEach(child => annotateNodes(objectType, objectName, child));
+}
+
+/** What designers need from the extension. */
+export interface DesignerServices {
+    context: vscode.ExtensionContext;
+    server: XppServerClient;
+    drags: ElementDragAndDrop;
+}
+
 /**
  * Element designer: the element's node tree and a Properties grid, like Visual Studio's designer and Properties window.
  * Forms also show a rendered preview. Elements in your own models can be changed; everything else is read-only.
  */
 export class ElementDesigner {
+    // One panel per element, and the panel whose webview context menu was used: VS Code's commands carry no panel.
     private static readonly panels = new Map<string, ElementDesigner>();
     private static active: ElementDesigner | undefined;
     /** Fired after the designer changes an element, so open code views can reload. */
     static readonly onDidChange = new vscode.EventEmitter<{ objectType: string; objectName: string }>();
 
-    static open(context: vscode.ExtensionContext, server: XppServerClient, objectType: string, objectName: string): void {
+    static open(services: DesignerServices, objectType: string, objectName: string, column = vscode.ViewColumn.Active): void {
         const key = `${objectType}/${objectName}`.toLowerCase();
         const existing = ElementDesigner.panels.get(key);
         if (existing) {
-            existing.panel.reveal();
+            existing.panel.reveal(column === vscode.ViewColumn.Active ? undefined : column);
             return;
         }
-        const panel = vscode.window.createWebviewPanel('xppElementDesigner', `${objectName} [${typeLabel(objectType).replace(/s$/, '')}]`, vscode.ViewColumn.Active, {
+        const panel = vscode.window.createWebviewPanel('xppElementDesigner', `${objectName} [${typeLabel(objectType).replace(/s$/, '')}]`, column, {
             enableScripts: true,
             retainContextWhenHidden: true,
-            localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media')],
+            localResourceRoots: [vscode.Uri.joinPath(services.context.extensionUri, 'media')],
         });
-        const designer = new ElementDesigner(context, server, objectType, objectName, panel, key);
+        const designer = new ElementDesigner(services, objectType, objectName, panel, key);
         ElementDesigner.panels.set(key, designer);
         ElementDesigner.active = designer;
     }
 
     /** Runs a right-click action on the designer the menu was opened in. */
-    static async runAction(action: 'new' | 'newMethod' | 'override' | 'delete' | 'openMethod' | 'copyEventHandler' | 'findEventHandlers',
+    static async runAction(action: 'new' | 'newMethod' | 'override' | 'delete' | 'openMethod' | 'copyEventHandler' | 'findEventHandlers'
+        | 'rename' | 'duplicate' | 'moveUp' | 'moveDown' | 'addElement',
         node: DesignerNodeContext): Promise<void> {
         const designer = ElementDesigner.active;
         if (!designer) {
@@ -68,6 +108,11 @@ export class ElementDesigner {
                 case 'newMethod': return await designer.newMethod(node.xppKind === 'folder' ? path.slice(0, -1) : path);
                 case 'override': return await designer.overrideMethod(node.xppKind === 'folder' ? path.slice(0, -1) : path);
                 case 'delete': return await designer.deleteNode(path, node.xppKind);
+                case 'rename': return await designer.renameNode(path);
+                case 'duplicate': return await designer.duplicateNode(path);
+                case 'moveUp': return await designer.moveNode(path, -1);
+                case 'moveDown': return await designer.moveNode(path, 1);
+                case 'addElement': return await designer.addElement(path, node);
                 case 'openMethod': return await designer.openMethod(path);
                 case 'copyEventHandler': {
                     const spec = node.xppEventSpec ?? await designer.methodEvent(path, true);
@@ -80,15 +125,19 @@ export class ElementDesigner {
         }
     }
 
+    private readonly server: XppServerClient;
+    private readonly drags: ElementDragAndDrop;
+
     private constructor(
-        context: vscode.ExtensionContext,
-        private readonly server: XppServerClient,
+        services: DesignerServices,
         private readonly objectType: string,
         private readonly objectName: string,
         private readonly panel: vscode.WebviewPanel,
         key: string,
     ) {
-        panel.webview.html = this.html(context, panel.webview);
+        this.server = services.server;
+        this.drags = services.drags;
+        panel.webview.html = this.html(services.context, panel.webview);
         panel.onDidDispose(() => {
             ElementDesigner.panels.delete(key);
             if (ElementDesigner.active === this) {
@@ -120,6 +169,14 @@ export class ElementDesigner {
                 return this.openMethod(message.path);
             case 'copyEventHandler':
                 return copyEventHandler(message.spec);
+            case 'goTo':
+                return openElementReference(message.reference);
+            case 'dropNode':
+                return this.drop(message.target, { sourcePath: message.sourcePath }, message.target);
+            case 'dropElements':
+                return this.dropElements(message.target, !!message.onBaseNode, message.uris ?? []);
+            case 'dropOnProperty':
+                return this.dropOnProperty(message.path, message.property, message.uris ?? []);
             case 'viewCode':
                 await vscode.commands.executeCommand('vscode.open', objectUri(this.objectType, this.objectName));
                 return;
@@ -137,6 +194,7 @@ export class ElementDesigner {
                 throw new Error(tree.message ?? `${this.objectName} not found.`);
             }
             addEventNodes(this.objectType, this.objectName, tree.root);
+            annotateNodes(this.objectType, this.objectName, tree.root);
             this.post({
                 type: 'tree',
                 data: tree,
@@ -261,6 +319,105 @@ export class ElementDesigner {
         await this.changed(path.slice(0, -1));
     }
 
+    private async renameNode(path: string[]): Promise<void> {
+        const name = path[path.length - 1];
+        const newName = await vscode.window.showInputBox({
+            title: `Rename ${name}`, prompt: 'New name', value: name,
+            validateInput: v => NamePattern.test(v) ? undefined : 'Use letters, digits and underscores, starting with a letter.',
+        });
+        if (!newName || newName === name) {
+            return;
+        }
+        if (!await this.confirmRenameOfUsedField(path)) {
+            return;
+        }
+        await this.nodeAction('rename_element_node', { path, newName }, [...path.slice(0, -1), newName]);
+    }
+
+    /** Code and other elements that use a field keep the old name: say so before renaming a field that is used. */
+    private async confirmRenameOfUsedField(path: string[]): Promise<boolean> {
+        const owner = baseElementOf(this.objectType, this.objectName) ?? { objectType: this.objectType, objectName: this.objectName };
+        if (path.length !== 2 || path[0] !== 'Fields' || !WhereUsedTypes.has(owner.objectType)) {
+            return true;
+        }
+        const result = await this.server.bridge('where_used', { ...owner, memberName: path[1], maxResults: '100' }).catch(() => undefined);
+        const count: number = result?.success ? result.references.length : 0;
+        if (count === 0) {
+            return true;
+        }
+        const answer = await vscode.window.showWarningMessage(
+            `${path[1]} has ${count}${result?.more ? '+' : ''} reference(s) in X++ code and other elements (cross-reference database). They are not renamed.`,
+            { modal: true, detail: 'Field groups, indexes and relations of this element are updated. Use Find References to fix the others.' }, 'Rename Anyway');
+        return answer === 'Rename Anyway';
+    }
+
+    private async duplicateNode(path: string[]): Promise<void> {
+        const name = path[path.length - 1];
+        const newName = await vscode.window.showInputBox({
+            title: `Duplicate ${name}`, prompt: 'Name of the copy', value: `${name}Copy`,
+            validateInput: v => NamePattern.test(v) ? undefined : 'Use letters, digits and underscores, starting with a letter.',
+        });
+        if (newName) {
+            await this.nodeAction('duplicate_element_node', { path, newName }, [...path.slice(0, -1), newName]);
+        }
+    }
+
+    /** Visual Studio's drag from the Application Explorer, without dragging: pick an element the node accepts. */
+    private async addElement(path: string[], node: DesignerNodeContext): Promise<void> {
+        const types: string[] = JSON.parse(node.xppAccepts ?? '[]');
+        const element = await pickElement(this.server, `Add to ${path[path.length - 1] ?? this.objectName}`, types);
+        if (element) {
+            await this.drop(path, { onBaseNode: node.xppOnBaseNode ? 'true' : 'false', sourceType: element.objectType, sourceName: element.objectName }, path);
+        }
+    }
+
+    /** Elements dropped from the Application Explorer or the project (xpp-element: URIs, else the last drag). */
+    private async dropElements(target: string[], onBaseNode: boolean, uris: string[]): Promise<void> {
+        const elements = elementsFromUris(uris);
+        for (const element of elements.length ? elements : this.drags.recentDrag() ?? []) {
+            await this.drop(target, { onBaseNode: onBaseNode ? 'true' : 'false', sourceType: element.objectType, sourceName: element.objectName }, target);
+        }
+    }
+
+    private async dropOnProperty(path: string[], property: string, uris: string[]): Promise<void> {
+        const element = elementsFromUris(uris)[0] ?? this.drags.recentDrag()?.[0];
+        if (!element) {
+            return;
+        }
+        const result = await this.server.bridge('drop_on_property', {
+            objectType: this.objectType, objectName: this.objectName, path, property, sourceType: element.objectType, sourceName: element.objectName,
+        });
+        if (!result.success) {
+            throw new Error(result.message);
+        }
+        vscode.window.setStatusBarMessage(result.message ?? '', 5000);
+        await this.changed(path);
+    }
+
+    private async drop(target: string[], source: object, selectPath: string[]): Promise<void> {
+        const result = await this.server.bridge('drop_on_node', { objectType: this.objectType, objectName: this.objectName, path: target, ...source });
+        if (!result.success) {
+            throw new Error(result.message);
+        }
+        vscode.window.setStatusBarMessage(result.message ?? '', 5000);
+        await this.changed(selectPath);
+    }
+
+    private async moveNode(path: string[], offset: number): Promise<void> {
+        await this.nodeAction('move_element_node', { path, offset: String(offset) }, path);
+    }
+
+    private async nodeAction(action: BridgeAction, body: object, selectPath: string[]): Promise<void> {
+        const result = await this.server.bridge(action, { objectType: this.objectType, objectName: this.objectName, ...body });
+        if (!result.success) {
+            throw new Error(result.message);
+        }
+        await this.changed(selectPath);
+        if (action !== 'move_element_node') {
+            vscode.window.showInformationMessage(result.message ?? '');
+        }
+    }
+
     /** Properties of a node; base element nodes in an extension's designer are read from the base element, read-only. */
     private async loadProperties(path: string[], source?: { objectType: string; objectName: string }): Promise<void> {
         const result = await this.server.bridge('get_element_properties', {
@@ -297,15 +454,16 @@ export class ElementDesigner {
         const lines = document.getText().split(/\r?\n/);
         const span = methodSpans(document.getText()).find(s => s.name.toLowerCase() === path[1].toLowerCase());
         let header = '';
+        const name = path[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         for (let i = span?.startLine ?? 0; i < lines.length && i < (span?.startLine ?? 0) + 30; i++) {
             header += ' ' + lines[i].replace(/\/\/.*$/, '');
-            if (/\)/.test(lines[i]) && new RegExp(`\\b${path[1]}\\s*\\(`, 'i').test(header)) {
+            if (/\)/.test(lines[i]) && new RegExp(`\\b${name}\\s*\\(`, 'i').test(header)) {
                 break;
             }
         }
         const base = { element: this.objectName, elementType: this.objectType, method: path[1], isStatic: /\bstatic\b/.test(header) };
         if (/\bdelegate\b/.test(header)) {
-            const params = new RegExp(`\\b${path[1]}\\s*\\(([^)]*)\\)`, 'i').exec(header)?.[1].replace(/\s+/g, ' ').trim() ?? '';
+            const params = new RegExp(`\\b${name}\\s*\\(([^)]*)\\)`, 'i').exec(header)?.[1].replace(/\s+/g, ' ').trim() ?? '';
             return { ...base, kind: 'Delegate', parameters: params };
         }
         if (!askPrePost) {

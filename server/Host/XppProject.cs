@@ -157,7 +157,7 @@ namespace XppVsCode.Server.Host
                 case "AxSecurityRoleExtension": return "Security Role Extensions";
                 default:
                     // e.g. AxMenuItemDisplayExtension -> "Menu Item Display Extensions"
-                    string bare = objectType.StartsWith("Ax") ? objectType.Substring(2) : objectType;
+                    string bare = objectType.StartsWith("Ax", StringComparison.Ordinal) ? objectType.Substring(2) : objectType;
                     return System.Text.RegularExpressions.Regex.Replace(bare, "(?<=[a-z])(?=[A-Z])", " ") + "s";
             }
         }

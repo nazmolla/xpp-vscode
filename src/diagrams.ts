@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import { elementOpenCommand, typeLabel } from './aot';
 import { XppServerClient } from './serverClient';
@@ -33,7 +34,7 @@ export interface DiagramNode {
 export class DiagramPanel {
     static show(title: string, roots: DiagramNode[]): void {
         const panel = vscode.window.createWebviewPanel('xppDiagram', title, vscode.ViewColumn.Active, { enableScripts: true });
-        const nonce = Math.random().toString(36).slice(2) + Date.now().toString(36);
+        const nonce = randomBytes(16).toString('base64');
         const nodes: DiagramNode[] = [];
         const render = (node: DiagramNode): string => {
             const id = nodes.push(node) - 1;

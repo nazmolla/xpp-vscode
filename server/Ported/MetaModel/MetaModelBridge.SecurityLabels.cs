@@ -46,7 +46,7 @@ namespace XppVsCode.Server.MetaModel
                                 string text = m.Success ? ResolveLabelText(System.Net.WebUtility.HtmlDecode(m.Groups[1].Value)) : null;
                                 if (!string.IsNullOrEmpty(text)) index[name] = text;
                             }
-                            catch { }
+                            catch (Exception ex) { LogIgnored("Reading the label of " + file, ex); }
                         }
                     }
             BridgeLogStatic("security label index " + objectType + ": " + index.Count + " labels in " + sw.ElapsedMilliseconds + " ms");
@@ -58,7 +58,7 @@ namespace XppVsCode.Server.MetaModel
         private string ResolveLabelText(string label)
         {
             if (string.IsNullOrWhiteSpace(label)) return null;
-            if (!label.StartsWith("@")) return label;
+            if (!label.StartsWith("@", StringComparison.Ordinal)) return label;
             int colon = label.IndexOf(':');
             string file, id;
             if (colon > 1) { file = label.Substring(1, colon - 1); id = label.Substring(colon + 1); }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Linq;
 using System.Reflection;
@@ -26,7 +27,7 @@ namespace XppVsCode.Server.MetaModel
         {
             string indent = new string(' ', depth * 4);
             sb.Append(indent).Append(name).Append(" (").Append(node.GetType().Name.Replace("Ax", "")).Append(")\n");
-            foreach (var prop in node.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            foreach (var prop in PublicProperties(node.GetType())
                 .Where(p => p.GetIndexParameters().Length == 0 && IsDesignerProperty(p))
                 .GroupBy(p => p.Name).Select(g => g.First())
                 .OrderBy(p => p.Name, System.StringComparer.OrdinalIgnoreCase))
@@ -35,7 +36,7 @@ namespace XppVsCode.Server.MetaModel
                 try { value = prop.GetValue(node); }
                 catch { continue; }
                 string text = FormatValue(value);
-                if (string.IsNullOrEmpty(text) || text.StartsWith("Microsoft.Dynamics.")) continue;
+                if (string.IsNullOrEmpty(text) || text.StartsWith("Microsoft.Dynamics.", StringComparison.Ordinal)) continue;
                 if (prop.Name == "Declaration")
                 {
                     sb.Append(indent).Append("    Declaration\n");

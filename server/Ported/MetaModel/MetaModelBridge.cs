@@ -19,7 +19,7 @@ namespace XppVsCode.Server.MetaModel
     /// All metadata operations use strongly-typed APIs — no raw XML manipulation.
     /// Calls are serialized by <see cref="MetaModelBridgeServer"/>.
     /// </summary>
-    public sealed partial class MetaModelBridge : IMetaModelBridge
+    public sealed partial class MetaModelBridge : IObjectStore, IMetadataDiscovery, IElementDesigner, IProjectService
     {
         private readonly MetadataHost _host;
         private readonly LabelStore _labels;
@@ -46,6 +46,7 @@ namespace XppVsCode.Server.MetaModel
         {
             _objectModelNameCache.Clear();
             _elementCacheKey = null;
+            _typeNames.Clear();
         }
 
         private IMetaModelService MetaService => _host.MetaService;
@@ -185,7 +186,7 @@ namespace XppVsCode.Server.MetaModel
             }
             catch (Exception ex)
             {
-                return Fail("Create failed: " + ex.Message);
+                return Fail("Create failed: " + Cause(ex));
             }
         }
 
@@ -542,7 +543,7 @@ namespace XppVsCode.Server.MetaModel
             }
             catch (Exception ex)
             {
-                return new ReadObjectResult { Message = "Read failed: " + ex.Message };
+                return new ReadObjectResult { Message = "Read failed: " + Cause(ex) };
             }
         }
 
@@ -702,7 +703,7 @@ namespace XppVsCode.Server.MetaModel
             // Polymorphic members (menu elements, controls, fields): name the concrete type so its extra properties make sense.
             if (declaredType != null && declaredType != t)
                 dict["$type"] = t.Name;
-            foreach (var prop in t.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            foreach (var prop in PublicProperties(t))
             {
                 if (!prop.CanRead || prop.GetIndexParameters().Length > 0) continue;
                 if (prop.Name == "Parent" && !(value is AxMenuExtensionElement)) continue;
@@ -789,7 +790,7 @@ namespace XppVsCode.Server.MetaModel
 
             object target = Activator.CreateInstance(targetUnderlying);
             var srcType = source.GetType();
-            foreach (var tp in targetUnderlying.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            foreach (var tp in PublicProperties(targetUnderlying))
             {
                 if (!tp.CanRead || tp.GetIndexParameters().Length > 0) continue;
 
@@ -1206,8 +1207,8 @@ namespace XppVsCode.Server.MetaModel
                 return;
             }
 
-            string expText = Convert.ToString(expected);
-            string actText = Convert.ToString(actual);
+            string expText = Convert.ToString(expected, System.Globalization.CultureInfo.InvariantCulture);
+            string actText = Convert.ToString(actual, System.Globalization.CultureInfo.InvariantCulture);
             if (!string.Equals(expText, actText, StringComparison.OrdinalIgnoreCase))
                 mismatches.Add(path + ": expected '" + expText + "', actual '" + actText + "'");
         }
@@ -1514,7 +1515,7 @@ namespace XppVsCode.Server.MetaModel
                 {
                     Success = false,
                     ObjectType = objectType,
-                    Message = "Schema generation failed: " + ex.Message
+                    Message = "Schema generation failed: " + Cause(ex)
                 };
             }
         }
@@ -1635,7 +1636,7 @@ namespace XppVsCode.Server.MetaModel
             }
 
             var properties = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            foreach (var prop in underlying.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            foreach (var prop in PublicProperties(underlying))
             {
                 if (!prop.CanRead || prop.GetIndexParameters().Length > 0) continue;
                 // Read-only scalars (e.g. AxEnum.HelpText, an alias of Help) cannot be set by create/update.
@@ -1722,241 +1723,6 @@ namespace XppVsCode.Server.MetaModel
             return new Dictionary<string, object> { { "kind", "scalar" }, { "type", type.Name } };
         }
 
-        public ModelInfoResult GetModelInfo(string modelName)
-        {
-            ThreadHelper.ThrowIfNotOnUIThread();
-            if (MetaService == null)
-                return new ModelInfoResult { Message = "MetaModel service not available." };
-
-            try
-            {
-                var modelInfo = MetaService.GetModel(modelName);
-
-                if (modelInfo == null)
-                    return new ModelInfoResult { Message = "Model '" + modelName + "' not found." };
-
-                var result = new ModelInfoResult
-                {
-                    Success = true,
-                    Name = modelInfo.Name,
-                    DisplayName = modelInfo.DisplayName,
-                    Publisher = modelInfo.Publisher,
-                    Version = modelInfo.VersionMajor + "." + modelInfo.VersionMinor + "." + modelInfo.VersionBuild + "." + modelInfo.VersionRevision,
-                    ModelId = DescriptorModelId(modelInfo) ?? modelInfo.Id,
-                    Layer = modelInfo.Layer >= 0 && modelInfo.Layer < LayerNames.Length
-                        ? LayerNames[modelInfo.Layer] + " (" + modelInfo.Layer + ")"
-                        : modelInfo.Layer.ToString(),
-                    Package = modelInfo.Module,
-                    Dependencies = modelInfo.ModuleReferences?.ToList() ?? new List<string>()
-                };
-
-                return result;
-            }
-            catch (Exception ex)
-            {
-                return new ModelInfoResult { Message = "Model info failed: " + ex.Message };
-            }
-        }
-
-        public List<ModelSummary> ListModels()
-        {
-            ThreadHelper.ThrowIfNotOnUIThread();
-            var models = new List<ModelSummary>();
-            if (MetaService == null) return models;
-
-            try
-            {
-                foreach (var info in MetaService.GetModels())
-                {
-                    models.Add(new ModelSummary
-                    {
-                        Name = info.Name,
-                        DisplayName = info.DisplayName,
-                        IsCustom = IsCustomModel(info.Name)
-                    });
-                }
-            }
-            catch { }
-
-            return models;
-        }
-
-        // ── Labels ──
-
-        public LabelResult ReadLabel(string labelFileId, string language, string labelId, string searchText, int maxResults)
-        {
-            ThreadHelper.ThrowIfNotOnUIThread();
-            if (MetaService == null)
-                return new LabelResult { Message = "MetaModel service not available." };
-
-            try
-            {
-                string labelPath = _labels.FindLabelFile(labelFileId, language);
-                if (labelPath == null)
-                    return new LabelResult { Message = "Label file '" + labelFileId + "' (" + (language ?? "en-US") + ") not found." };
-
-                var result = new LabelResult { Success = true };
-
-                // If specific label requested
-                if (!string.IsNullOrEmpty(labelId))
-                {
-                    result.Labels.AddRange(_labels.Read(labelPath, labelId, null, 1));
-                    if (result.Labels.Count == 0)
-                        result.Message = "Label '" + labelId + "' not found in " + labelFileId;
-                    return result;
-                }
-
-                result.Labels.AddRange(_labels.Read(labelPath, null, searchText, maxResults > 0 ? maxResults : 50));
-
-                result.Message = result.Labels.Count > 0
-                    ? "Retrieved " + result.Labels.Count + " labels from " + labelFileId + "."
-                    : "No labels found in " + labelFileId + ".";
-                return result;
-            }
-            catch (Exception ex)
-            {
-                return new LabelResult { Message = "Label read failed: " + ex.Message };
-            }
-        }
-
-        public MetaModelResult CreateLabel(string labelFileId, string language, string labelId, string text, string comment)
-        {
-            ThreadHelper.ThrowIfNotOnUIThread();
-            if (MetaService == null)
-                return Fail("MetaModel service not available.");
-
-            try
-            {
-                string labelPath = _labels.FindLabelFile(labelFileId, language);
-                if (labelPath == null)
-                    return Fail("Label file '" + labelFileId + "' (" + (language ?? "en-US") + ") not found.");
-                if (!_labels.IsWritable(labelPath))
-                    return Fail("Label file '" + labelFileId + "' is not in your custom metadata folder. Add labels only to label files of your own model.");
-
-                if (_labels.Exists(labelPath, labelId))
-                    return Fail("Label '" + labelId + "' already exists in " + labelFileId);
-
-                _labels.Insert(labelPath, labelId, text, comment);
-
-                return new MetaModelResult
-                {
-                    Success = true,
-                    Message = "Created label @" + labelFileId + ":" + labelId + " = " + text
-                };
-            }
-            catch (Exception ex)
-            {
-                return Fail("Label create failed: " + ex.Message);
-            }
-        }
-
-        // ── Project ──
-
-        private static readonly System.Text.RegularExpressions.Regex LabelIdPattern =
-            new System.Text.RegularExpressions.Regex(@"^[A-Za-z_][A-Za-z0-9_]*$");
-
-        /// <summary>
-        /// Creates several labels (each with optional translations). Every language's label file is read once and
-        /// written once. Same ID with the same text is reported as unchanged; same ID with another text fails.
-        /// </summary>
-        public MetaModelResult CreateLabels(string labelFileId, string language, List<LabelRequestDto> labels)
-        {
-            ThreadHelper.ThrowIfNotOnUIThread();
-            if (MetaService == null) return Fail("MetaModel service not available.");
-            if (labels == null || labels.Count == 0) return Fail("No labels given.");
-            string baseLanguage = string.IsNullOrWhiteSpace(language) ? "en-US" : language.Trim();
-
-            var lines = new List<string>();
-            bool failed = false;
-            var perLanguage = new Dictionary<string, List<KeyValuePair<LabelRequestDto, string>>>(StringComparer.OrdinalIgnoreCase);
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var label in labels)
-            {
-                string id = label.LabelId?.Trim();
-                if (string.IsNullOrEmpty(id) || !LabelIdPattern.IsMatch(id))
-                {
-                    lines.Add("FAILED '" + label.LabelId + "': the label ID must be letters, digits or _ (e.g. HSRemovalStatus).");
-                    failed = true;
-                    continue;
-                }
-                if (string.IsNullOrWhiteSpace(label.Text))
-                {
-                    lines.Add("FAILED " + id + ": text is required.");
-                    failed = true;
-                    continue;
-                }
-                if (!seen.Add(id))
-                {
-                    lines.Add("FAILED " + id + ": listed more than once in this call.");
-                    failed = true;
-                    continue;
-                }
-                label.LabelId = id;
-                AddFor(perLanguage, baseLanguage, label, label.Text);
-                foreach (var t in label.Translations ?? new Dictionary<string, string>())
-                {
-                    if (string.IsNullOrWhiteSpace(t.Value)) { lines.Add("FAILED " + id + " " + t.Key + ": empty translation."); failed = true; continue; }
-                    AddFor(perLanguage, t.Key, label, t.Value);
-                }
-            }
-
-            var outcome = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-            foreach (var group in perLanguage)
-            {
-                try
-                {
-                    string path = _labels.FindLabelFile(labelFileId, group.Key);
-                    string fileError = path == null
-                        ? "label file '" + labelFileId + "' has no " + group.Key + " language (create it with xpp_create_object AxLabelFile, properties.Languages)"
-                        : !_labels.IsWritable(path) ? "label file '" + labelFileId + "' is not in your custom metadata folder" : null;
-                    var existing = fileError == null ? _labels.ReadAll(path) : null;
-                    var toInsert = new List<LabelEntry>();
-                    foreach (var item in group.Value)
-                    {
-                        string state;
-                        if (fileError != null) { state = "FAILED (" + fileError + ")"; failed = true; }
-                        else if (existing.TryGetValue(item.Key.LabelId, out var current))
-                        {
-                            if (string.Equals(current.Text, item.Value, StringComparison.Ordinal)) state = "unchanged (already there)";
-                            else { state = "FAILED (already exists with text '" + current.Text + "')"; failed = true; }
-                        }
-                        else
-                        {
-                            toInsert.Add(new LabelEntry { Id = item.Key.LabelId, Text = item.Value, Comment = item.Key.Comment });
-                            state = "created";
-                        }
-                        Outcome(outcome, item.Key.LabelId).Add(group.Key + " " + state + (state == "created" ? ": " + item.Value : ""));
-                    }
-                    if (toInsert.Count > 0) _labels.InsertMany(path, toInsert);
-                }
-                catch (Exception ex)
-                {
-                    failed = true;
-                    foreach (var item in group.Value)
-                        Outcome(outcome, item.Key.LabelId).Add(group.Key + " FAILED (" + ex.Message + ")");
-                }
-            }
-
-            foreach (var label in labels.Where(l => outcome.ContainsKey(l.LabelId ?? "")))
-                lines.Add("@" + labelFileId + ":" + label.LabelId + " - " + string.Join("; ", outcome[label.LabelId]));
-            int created = outcome.Values.SelectMany(v => v).Count(s => s.Contains(" created"));
-            lines.Insert(0, (failed ? "Some labels failed. " : "") + "Labels in " + labelFileId + ": " + created + " text(s) written, "
-                + perLanguage.Count + " label file(s) touched.");
-            return new MetaModelResult { Success = !failed, Message = string.Join("\n", lines) };
-        }
-
-        private static void AddFor(Dictionary<string, List<KeyValuePair<LabelRequestDto, string>>> map, string language, LabelRequestDto label, string text)
-        {
-            if (!map.TryGetValue(language, out var list)) map[language] = list = new List<KeyValuePair<LabelRequestDto, string>>();
-            list.Add(new KeyValuePair<LabelRequestDto, string>(label, text));
-        }
-
-        private static List<string> Outcome(Dictionary<string, List<string>> map, string id)
-        {
-            if (!map.TryGetValue(id, out var list)) map[id] = list = new List<string>();
-            return list;
-        }
-
         public MetaModelResult AddToProject(string objectType, string objectName)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
@@ -1997,7 +1763,7 @@ namespace XppVsCode.Server.MetaModel
             }
             catch (Exception ex)
             {
-                return Fail("Add to project failed: " + ex.Message);
+                return Fail("Add to project failed: " + Cause(ex));
             }
         }
 
@@ -2049,7 +1815,7 @@ namespace XppVsCode.Server.MetaModel
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { LogIgnored("Reading the active project's model", ex); }
 
             return info;
         }
@@ -2390,7 +2156,7 @@ namespace XppVsCode.Server.MetaModel
             }
             catch (Exception ex)
             {
-                return Fail("ApplyTypedMetadata failed for AxTable '" + req.ObjectName + "': " + ex.Message);
+                return Fail("ApplyTypedMetadata failed for AxTable '" + req.ObjectName + "': " + Cause(ex));
             }
             MetaService.UpdateTable(tbl, saveInfo);
             return Ok("Updated AxTable '" + req.ObjectName + "'.");
@@ -2512,7 +2278,7 @@ namespace XppVsCode.Server.MetaModel
         // Simple metadata types (menu items, services, tiles, configuration keys, ...): MetaService.Get<X>/Update<X> by reflection.
         private MetaModelResult UpdateGenericByTypedApi(UpdateObjectRequest req)
         {
-            string core = req.ObjectType.StartsWith("Ax") ? req.ObjectType.Substring(2) : req.ObjectType;
+            string core = req.ObjectType.StartsWith("Ax", StringComparison.Ordinal) ? req.ObjectType.Substring(2) : req.ObjectType;
             Type metaType = ResolveMetadataType(req.ObjectType);
             var svcType = MetaService.GetType();
             var getter = svcType.GetMethod("Get" + core, new[] { typeof(string) });
@@ -2901,7 +2667,7 @@ namespace XppVsCode.Server.MetaModel
                         value = kvp.Value;
                     else if (propType == typeof(bool))
                         value = "true".Equals(kvp.Value, StringComparison.OrdinalIgnoreCase)
-                             || "1".Equals(kvp.Value) || "yes".Equals(kvp.Value, StringComparison.OrdinalIgnoreCase);
+                             || "1".Equals(kvp.Value, StringComparison.Ordinal) || "yes".Equals(kvp.Value, StringComparison.OrdinalIgnoreCase);
                     else if (propType == typeof(int))
                         value = int.Parse(kvp.Value);
                     else if (propType == typeof(long))
@@ -3466,7 +3232,7 @@ namespace XppVsCode.Server.MetaModel
             if (simple != null) return simple;
 
             if (targetType == typeof(string))
-                return Convert.ToString(input);
+                return Convert.ToString(input, System.Globalization.CultureInfo.InvariantCulture);
 
             if (input is string text)
             {
@@ -3681,26 +3447,26 @@ namespace XppVsCode.Server.MetaModel
                 if (input == null) return null;
                 Type nt = Nullable.GetUnderlyingType(targetType) ?? targetType;
 
-                if (nt == typeof(string)) return Convert.ToString(input);
+                if (nt == typeof(string)) return Convert.ToString(input, System.Globalization.CultureInfo.InvariantCulture);
                 if (nt.IsEnum)
                 {
                     if (input is string es)
                         return Enum.Parse(nt, es, true);
-                    return Enum.ToObject(nt, Convert.ToInt32(input));
+                    return Enum.ToObject(nt, Convert.ToInt32(input, System.Globalization.CultureInfo.InvariantCulture));
                 }
                 if (nt == typeof(bool))
                 {
                     if (input is string bs)
                     {
-                        if ("1".Equals(bs) || "yes".Equals(bs, StringComparison.OrdinalIgnoreCase)) return true;
-                        if ("0".Equals(bs) || "no".Equals(bs, StringComparison.OrdinalIgnoreCase)) return false;
+                        if ("1".Equals(bs, StringComparison.Ordinal) || "yes".Equals(bs, StringComparison.OrdinalIgnoreCase)) return true;
+                        if ("0".Equals(bs, StringComparison.Ordinal) || "no".Equals(bs, StringComparison.OrdinalIgnoreCase)) return false;
                     }
-                    return Convert.ToBoolean(input);
+                    return Convert.ToBoolean(input, System.Globalization.CultureInfo.InvariantCulture);
                 }
                 if (nt == typeof(Guid))
-                    return Guid.Parse(Convert.ToString(input));
+                    return Guid.Parse(Convert.ToString(input, System.Globalization.CultureInfo.InvariantCulture));
                 if (nt == typeof(DateTime))
-                    return DateTime.Parse(Convert.ToString(input));
+                    return DateTime.Parse(Convert.ToString(input, System.Globalization.CultureInfo.InvariantCulture), System.Globalization.CultureInfo.InvariantCulture);
 
                 return Convert.ChangeType(input, nt, System.Globalization.CultureInfo.InvariantCulture);
             }
@@ -4022,7 +3788,7 @@ namespace XppVsCode.Server.MetaModel
             foreach (var f in fields)
             {
                 string fieldType = f.GetType().Name;
-                if (fieldType.StartsWith("AxTableField"))
+                if (fieldType.StartsWith("AxTableField", StringComparison.Ordinal))
                     fieldType = fieldType.Substring("AxTableField".Length);
                 var dto = new FieldDto { Name = f.Name, FieldType = fieldType, Label = f.Label };
                 var edtProp = f.GetType().GetProperty("ExtendedDataType");
@@ -4336,7 +4102,7 @@ namespace XppVsCode.Server.MetaModel
         {
             if (string.IsNullOrEmpty(value)) return value;
             string trimmed = value.Trim();
-            if (trimmed.StartsWith("<![CDATA[") && trimmed.EndsWith("]]>"))
+            if (trimmed.StartsWith("<![CDATA[", StringComparison.Ordinal) && trimmed.EndsWith("]]>", StringComparison.Ordinal))
                 return trimmed.Substring(9, trimmed.Length - 12);
             return value;
         }
@@ -4344,7 +4110,7 @@ namespace XppVsCode.Server.MetaModel
         private static MetaModelResult Ok(string message) =>
             new MetaModelResult { Success = true, Message = message };
 
-        private static MetaModelResult Fail(string message) =>
+        internal static MetaModelResult Fail(string message) =>
             new MetaModelResult { Success = false, Message = message };
 
         // ── Type name search helpers ──

@@ -7,5 +7,5 @@ const test = path.resolve(root, process.argv[2] || 'test/productivitySmoke.js');
 runTests({
     extensionDevelopmentPath: root,
     extensionTestsPath: test,
-    launchArgs: ['--disable-extensions', '--user-data-dir=' + path.join(require('os').tmpdir(), 'xpp-test-electron-ud')],
+    launchArgs: [...(process.env.XPP_TEST_WORKSPACE ? [process.env.XPP_TEST_WORKSPACE] : []), '--disable-extensions', '--user-data-dir=' + path.join(require('os').tmpdir(), 'xpp-test-electron-ud')],
 }).then(() => process.exit(0), err => { console.error(err); process.exit(1); });

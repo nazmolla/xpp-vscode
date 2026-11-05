@@ -70,6 +70,8 @@ namespace XppVsCode.Server.MetaModel
         private object _elementCacheObject;
         private string _elementCacheModel;
         private DateTime _elementCacheTime;
+        private bool _dropAnnotate;
+        private bool _dropBasePass;
 
         public string GetElementTreeJson(string objectType, string objectName)
         {
@@ -79,10 +81,24 @@ namespace XppVsCode.Server.MetaModel
                 return json.Serialize(Failure(objectType + " '" + objectName + "' not found."));
 
             int count = 0;
+            // Drop targets are listed for elements you can change; base nodes of an extension only take extension items.
+            _dropAnnotate = IsCustomModel(model);
+            _dropBasePass = false;
             var root = ElementNode(element, objectName, element.GetType().Name, new List<string>(), "element", ref count);
             string baseType = BaseTypeOfExtension(objectType);
             if (baseType != null)
+            {
+                _dropBasePass = true;
                 MergeBaseTree(root, baseType, objectName.Split('.')[0], ref count);
+                _dropBasePass = false;
+                var baseRef = ResolveReference(new[] { baseType }, objectName.Split('.')[0]);
+                if (baseRef != null)
+                {
+                    var refs = root.TryGetValue("refs", out object existing) ? (Dictionary<string, object>)existing : new Dictionary<string, object>();
+                    refs["BaseObject"] = baseRef;
+                    root["refs"] = OrderReferences(refs);
+                }
+            }
             return json.Serialize(new Dictionary<string, object>
             {
                 ["success"] = true,
@@ -276,6 +292,8 @@ namespace XppVsCode.Server.MetaModel
                     {
                         ["name"] = TreeLabel(obj.GetType(), prop.Name), ["type"] = prop.Name, ["kind"] = "folder", ["path"] = childPath, ["children"] = folder,
                     };
+                    if (_dropAnnotate && AcceptedDrops(obj, prop.Name, _dropBasePass) is List<string> folderDrops && folderDrops.Count > 0)
+                        folderNode["accepts"] = folderDrops;
                     if (InlineFolder(obj.GetType(), prop.Name)) folderNode["inline"] = true;
                     children.Add(folderNode);
                 }
@@ -286,19 +304,24 @@ namespace XppVsCode.Server.MetaModel
                     children.Add(itemNode);
                 }
             }
-            return new Dictionary<string, object>
+            var result = new Dictionary<string, object>
             {
                 ["name"] = name,
-                ["type"] = type.StartsWith("Ax") ? type.Substring(2) : type,
+                ["type"] = type.StartsWith("Ax", StringComparison.Ordinal) ? type.Substring(2) : type,
                 ["kind"] = kind,
                 ["path"] = path,
                 ["children"] = children,
             };
+            var refs = NodeReferences(obj);
+            if (refs != null) result["refs"] = refs;
+            if (_dropAnnotate && AcceptedDrops(obj, null, _dropBasePass) is List<string> drops && drops.Count > 0)
+                result["accepts"] = drops;
+            return result;
         }
 
         private static IEnumerable<PropertyInfo> ChildCollections(Type type)
         {
-            var props = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            var props = PublicProperties(type)
                 .Where(p => p.GetIndexParameters().Length == 0 && !HiddenCollections.Contains(p.Name)
                     && (HasAttribute(p, "AxCollectionPropertyAttribute") || p.Name == "Methods"))
                 .GroupBy(p => p.Name).Select(g => g.First())
@@ -314,7 +337,7 @@ namespace XppVsCode.Server.MetaModel
         private List<Dictionary<string, object>> DescribeProperties(object node)
         {
             var result = new List<Dictionary<string, object>>();
-            foreach (var prop in node.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            foreach (var prop in PublicProperties(node.GetType())
                 .Where(p => p.GetIndexParameters().Length == 0 && (IsDesignerProperty(p) || p.Name == "Name"))
                 .GroupBy(p => p.Name).Select(g => g.First())
                 .OrderBy(p => p.Name == "Name" ? 0 : 1).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
@@ -340,8 +363,17 @@ namespace XppVsCode.Server.MetaModel
                     entry["options"] = Enum.GetNames(type);
                 else if (type == typeof(bool))
                     entry["options"] = new[] { "False", "True" };
-                if (value is string text && text.StartsWith("@"))
+                if (value is string text && text.StartsWith("@", StringComparison.Ordinal))
                     entry["resolved"] = ResolveLabel(text);
+                if (value is string target && kind == "string")
+                {
+                    var reference = PropertyReference(node, prop.Name, target, out string key);
+                    if (reference != null)
+                    {
+                        reference["key"] = key;
+                        entry["reference"] = reference;
+                    }
+                }
                 result.Add(entry);
             }
             return result;
@@ -425,7 +457,7 @@ namespace XppVsCode.Server.MetaModel
         private bool UpdateViaMetadataProvider(string objectType, object element, ModelSaveInfo saveInfo, out string error)
         {
             error = null;
-            foreach (var prop in typeof(IMetadataProvider).GetProperties())
+            foreach (var prop in typeof(IMetadataProvider).GetProperties().Where(p => p.GetIndexParameters().Length == 0))
             {
                 var update = prop.PropertyType.GetMethod("Update", new[] { element.GetType(), typeof(ModelSaveInfo) })
                     ?? prop.PropertyType.GetInterfaces().Select(i => i.GetMethod("Update", new[] { element.GetType(), typeof(ModelSaveInfo) })).FirstOrDefault(m => m != null);
@@ -493,7 +525,7 @@ namespace XppVsCode.Server.MetaModel
         private static string SplitWords(string name)
             => System.Text.RegularExpressions.Regex.Replace(name, "(?<=[a-z])(?=[A-Z])", " ");
 
-        private static Dictionary<string, object> Failure(string message)
+        internal static Dictionary<string, object> Failure(string message)
             => new Dictionary<string, object> { ["success"] = false, ["message"] = message };
     }
 }

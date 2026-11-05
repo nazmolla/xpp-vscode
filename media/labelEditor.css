@@ -22,4 +22,5 @@ td.actions, th.actions { white-space: nowrap; width: 1%; }
 td.actions button { margin-left: 4px; }
 tr:hover td { background: var(--vscode-list-hoverBackground); }
 tr.editing td { background: var(--vscode-list-inactiveSelectionBackground); }
+tr.highlight td { background: var(--vscode-editor-findMatchHighlightBackground); }
 #footer { padding: 8px 0; }

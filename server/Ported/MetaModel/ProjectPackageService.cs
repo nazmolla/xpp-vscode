@@ -8,17 +8,28 @@ using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
 using System.Xml.Linq;
 using Microsoft.Dynamics.AX.Metadata.MetaModel;
+using Microsoft.Dynamics.AX.Metadata.Service;
 using XppVsCode.Server.Host;
+using static XppVsCode.Server.MetaModel.MetaModelBridge;
 
 namespace XppVsCode.Server.MetaModel
 {
     // Dynamics 365 > Export/Import Project: the .axpp format Visual Studio writes (ProjectExporter/ProjectImporter),
     // so packages move freely between Visual Studio and VS Code.
-    public sealed partial class MetaModelBridge
+    internal sealed class ProjectPackageService : IProjectPackageService
     {
-        private const string PackageDescriptorEntry = "BA6BECB9-70B9-4E31-BD29-1A3725A0BA4F.xml";
+        private readonly IMetadataCore _core;
 
-        private static string CustomFolder => DynamicsConfigurationReader.ReadActiveConfiguration().CustomMetadataFolder;
+        public ProjectPackageService(IMetadataCore core)
+        {
+            _core = core;
+        }
+
+        private IMetaModelService MetaService => _core.MetaService;
+        private bool IsCustomModel(string modelName) => _core.IsCustomModel(modelName);
+        private XppProject GetActiveProject() => _core.ActiveProject;
+
+        private const string PackageDescriptorEntry = "BA6BECB9-70B9-4E31-BD29-1A3725A0BA4F.xml";
 
         [DataContract(Name = "PackageDescriptor", Namespace = "http://schemas.datacontract.org/2004/07/Microsoft.Dynamics.Framework.Tools.ProjectSystem.ExportImport")]
         private sealed class AxppDescriptor
@@ -138,7 +149,7 @@ namespace XppVsCode.Server.MetaModel
                 if (model == null)
                 {
                     MetaService.CreateModel(archived);
-                    _host.Reset();
+                    _core.ResetHost();
                     model = MetaService.GetModel(archived.Name);
                     if (model == null)
                         return json.Serialize(Failure("Could not create model " + archived.Name + "."));
@@ -177,8 +188,8 @@ namespace XppVsCode.Server.MetaModel
                 projectPath = Path.Combine(projectFolder, projectEntry.Name);
                 projectEntry.ExtractToFile(projectPath, overwrite: true);
             }
-            _host.Reset();
-            InvalidateCaches();
+            _core.ResetHost();
+            _core.InvalidateCaches();
             return json.Serialize(new Dictionary<string, object>
             {
                 ["success"] = true,

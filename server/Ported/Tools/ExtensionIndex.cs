@@ -266,7 +266,7 @@ WHERE at.Path IN ('/Classes/PostHandlerFor', '/Classes/PreHandlerFor', '/Classes
                         var cached = serializer.Deserialize<Snapshot>(File.ReadAllText(file));
                         if (cached?.Key == key) return cached;
                     }
-                    catch { }
+                    catch (Exception ex) { McpLogger.Log("Reading the extension index cache failed: " + ex.Message); }
                 }
 
                 var snap = new Snapshot { Key = key };
@@ -293,7 +293,7 @@ WHERE at.Path IN ('/Classes/PostHandlerFor', '/Classes/PreHandlerFor', '/Classes
                     snap.Handlers.Add(new Handler
                     {
                         Class = parts[1], Method = parts[3], Target = row[2],
-                        Kind = row[1].EndsWith("PostHandlerFor") ? "Post" : row[1].EndsWith("PreHandlerFor") ? "Pre" : "Delegate",
+                        Kind = row[1].EndsWith("PostHandlerFor", StringComparison.Ordinal) ? "Post" : row[1].EndsWith("PreHandlerFor", StringComparison.Ordinal) ? "Pre" : "Delegate",
                     });
                 }
                 Directory.CreateDirectory(CacheFolder);
@@ -364,7 +364,7 @@ WHERE at.Path IN ('/Classes/PostHandlerFor', '/Classes/PreHandlerFor', '/Classes
                     var cached = serializer.Deserialize<Snapshot>(File.ReadAllText(file));
                     if (cached?.Key == key) return cached;
                 }
-                catch { }
+                catch (Exception ex) { McpLogger.Log("Reading the extension index cache failed: " + ex.Message); }
             }
             var snap = new Snapshot { Key = key };
             var found = new System.Collections.Concurrent.ConcurrentBag<Handler>();

@@ -7,12 +7,26 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
 using System.Xml.Linq;
+using Microsoft.Dynamics.AX.Metadata.Service;
+using XppVsCode.Server.Host;
+using static XppVsCode.Server.MetaModel.MetaModelBridge;
 
 namespace XppVsCode.Server.MetaModel
 {
     // Build (labels + X++) the way Visual Studio and the extension's Build command do, for agents.
-    public sealed partial class MetaModelBridge
+    internal sealed class BuildService : IBuildService
     {
+        private readonly IMetadataCore _core;
+
+        public BuildService(IMetadataCore core)
+        {
+            _core = core;
+        }
+
+        private IMetaModelService MetaService => _core.MetaService;
+        private bool IsCustomModel(string modelName) => _core.IsCustomModel(modelName);
+        private XppProject GetActiveProject() => _core.ActiveProject;
+
         private const int MaxReportedDiagnostics = 80;
 
         public sealed class BuildDiagnostic
@@ -179,7 +193,7 @@ namespace XppVsCode.Server.MetaModel
                 var segments = (d.Path ?? "").Replace("dynamics://", "").Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
                 if (segments.Length >= 2)
                 {
-                    d.ObjectType = segments[0].StartsWith("Ax") ? segments[0] : "Ax" + segments[0];
+                    d.ObjectType = segments[0].StartsWith("Ax", StringComparison.Ordinal) ? segments[0] : "Ax" + segments[0];
                     d.ObjectName = segments[1];
                     if (segments.Length >= 4 && segments[segments.Length - 2].Equals("Method", StringComparison.OrdinalIgnoreCase))
                         d.Member = segments[segments.Length - 1];
