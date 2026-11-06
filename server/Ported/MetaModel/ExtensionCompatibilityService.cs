@@ -4,6 +4,10 @@ using System.IO;
 using System.Linq;
 using System.Web.Script.Serialization;
 using Microsoft.Dynamics.AX.Metadata.MetaModel;
+using Microsoft.Dynamics.AX.Metadata.Providers;
+using Microsoft.Dynamics.AX.Metadata.Service;
+using Microsoft.Dynamics.AX.Metadata.Storage;
+using Microsoft.Dynamics.AX.Metadata.Storage.DiskProvider;
 using XppVsCode.Server.Analysis;
 
 namespace XppVsCode.Server.MetaModel
@@ -44,6 +48,224 @@ namespace XppVsCode.Server.MetaModel
         private sealed class Finding
         {
             public string Severity, Rule, ObjectType, ObjectName, Member, Message;
+        }
+
+        private const int MaxDriftSource = 20000;
+
+        /// <summary>
+        /// Clashes between a model's extensions and the other installed models' extensions of the same elements: the same
+        /// field, index or field group added to a table twice, the same enum value, form controls added twice or both
+        /// changing one control, and methods several of your models wrap (their order is undefined).
+        /// </summary>
+        public string ExtensionCollisionsJson(string modelName)
+        {
+            var json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+            string folder = ModelFolder(modelName);
+            if (folder == null)
+                return json.Serialize(new Dictionary<string, object> { ["success"] = false, ["message"] = "Model '" + modelName + "' is not one of your models in the custom metadata folder." });
+            var findings = new List<Finding>();
+            void Add(string severity, string rule, string type, string name, string member, string message) =>
+                findings.Add(new Finding { Severity = severity, Rule = rule, ObjectType = type, ObjectName = name, Member = member, Message = message });
+            string ModelOf(string type, string name) => _objects.ReadObject(type, name)?.ModelName ?? "?";
+            int checkedExtensions = 0;
+
+            foreach (string name in Names(folder, "AxTableExtension"))
+            {
+                var mine = _core.MetaService.GetTableExtension(name);
+                if (mine == null || name.IndexOf('.') <= 0) continue;
+                checkedExtensions++;
+                string baseName = name.Substring(0, name.IndexOf('.'));
+                var myNames = new Dictionary<string, HashSet<string>>
+                {
+                    ["field"] = Set(mine.Fields?.Select(f => f.Name)),
+                    ["index"] = Set(mine.Indexes?.Select(i => i.Name)),
+                    ["field group"] = Set(mine.FieldGroups?.Select(g => g.Name)),
+                };
+                foreach (string other in MetaModelBridge.GetExtensionNames(_core.MetadataProvider.TableExtensions.GetPrimaryKeys(), baseName).Where(o => !o.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    var ext = _core.MetadataProvider.TableExtensions.Read(other);
+                    if (ext == null) continue;
+                    var theirs = new Dictionary<string, IEnumerable<string>>
+                    {
+                        ["field"] = ext.Fields?.Select(f => f.Name), ["index"] = ext.Indexes?.Select(i => i.Name), ["field group"] = ext.FieldGroups?.Select(g => g.Name),
+                    };
+                    foreach (var kind in theirs)
+                        foreach (string clash in (kind.Value ?? Enumerable.Empty<string>()).Where(n => myNames[kind.Key].Contains(n)))
+                            Add("Error", "DuplicateTableExtensionMember", "AxTableExtension", name, clash,
+                                "Table " + baseName + ": " + other + " (model " + ModelOf("AxTableExtension", other) + ") also adds " + kind.Key + " " + clash + "; the packages can't be deployed together.");
+                }
+            }
+
+            foreach (string name in Names(folder, "AxEnumExtension"))
+            {
+                var mine = _core.MetadataProvider.EnumExtensions.Read(name);
+                if (mine == null || name.IndexOf('.') <= 0) continue;
+                checkedExtensions++;
+                string baseName = name.Substring(0, name.IndexOf('.'));
+                var myValues = Set(mine.EnumValues?.Select(v => v.Name));
+                foreach (string other in MetaModelBridge.GetExtensionNames(_core.MetadataProvider.EnumExtensions.GetPrimaryKeys(), baseName).Where(o => !o.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                    foreach (string clash in (_core.MetadataProvider.EnumExtensions.Read(other)?.EnumValues?.Select(v => v.Name) ?? Enumerable.Empty<string>()).Where(myValues.Contains))
+                        Add("Error", "DuplicateEnumValue", "AxEnumExtension", name, clash,
+                            "Enum " + baseName + ": " + other + " (model " + ModelOf("AxEnumExtension", other) + ") also adds value " + clash + ".");
+            }
+
+            foreach (string name in Names(folder, "AxFormExtension"))
+            {
+                var mine = _core.MetaService.GetFormExtension(name);
+                if (mine == null || name.IndexOf('.') <= 0) continue;
+                checkedExtensions++;
+                string baseName = name.Substring(0, name.IndexOf('.'));
+                var myAdded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var added in mine.Controls ?? Enumerable.Empty<AxFormExtensionControl>())
+                    FormExtensionMerger.Collect(added.FormControl, c => myAdded.Add(c));
+                var myModified = Set(Names(mine, "ControlModifications"));
+                foreach (string other in MetaModelBridge.GetExtensionNames(_core.MetadataProvider.FormExtensions.GetPrimaryKeys(), baseName).Where(o => !o.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    var ext = _core.MetaService.GetFormExtension(other);
+                    if (ext == null) continue;
+                    var theirAdded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var added in ext.Controls ?? Enumerable.Empty<AxFormExtensionControl>())
+                        FormExtensionMerger.Collect(added.FormControl, c => theirAdded.Add(c));
+                    foreach (string clash in theirAdded.Where(myAdded.Contains))
+                        Add("Error", "DuplicateFormControl", "AxFormExtension", name, clash,
+                            "Form " + baseName + ": " + other + " (model " + ModelOf("AxFormExtension", other) + ") also adds control " + clash + ".");
+                    foreach (string clash in Names(ext, "ControlModifications").Where(myModified.Contains))
+                        Add("Warning", "SameControlModified", "AxFormExtension", name, clash,
+                            "Form " + baseName + ": " + other + " (model " + ModelOf("AxFormExtension", other) + ") also changes control " + clash + "; which change wins depends on the deployment.");
+                }
+            }
+
+            // Chain of Command: methods your models wrap more than once (the order of the wrappers is not defined).
+            var wrappers = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            string root = MetaModelBridge.CustomFolder;
+            foreach (string package in Directory.Exists(root) ? Directory.EnumerateDirectories(root) : Enumerable.Empty<string>())
+                foreach (string model in Directory.EnumerateDirectories(package))
+                    foreach (string name in Names(model, "AxClass"))
+                    {
+                        var cls = _core.MetaService.GetClass(name);
+                        var target = cls == null ? null : XppTarget.ParseExtensionOf(cls.Declaration);
+                        if (target == null) continue;
+                        foreach (var method in (cls.Methods ?? Enumerable.Empty<AxMethod>()).Where(m => XppTarget.IsWrapper(m.Source, m.Name)))
+                        {
+                            string key = Describe(target) + "." + method.Name;
+                            if (!wrappers.TryGetValue(key, out var list)) wrappers[key] = list = new List<string>();
+                            list.Add(cls.Name + " (" + Path.GetFileName(model) + ")");
+                        }
+                    }
+            var myClasses = Set(Names(folder, "AxClass"));
+            foreach (var group in wrappers.Where(w => w.Value.Count > 1 && w.Value.Any(v => myClasses.Contains(v.Split(' ')[0]))))
+                Add("Info", "SeveralWrappers", "AxClass", group.Value.First(v => myClasses.Contains(v.Split(' ')[0])).Split(' ')[0], group.Key.Substring(group.Key.LastIndexOf('.') + 1),
+                    group.Key + " is wrapped by " + string.Join(", ", group.Value) + ": the order they run in is not defined, so none may depend on another's changes.");
+
+            return json.Serialize(new Dictionary<string, object>
+            {
+                ["success"] = true, ["model"] = modelName, ["extensions"] = checkedExtensions,
+                ["findings"] = findings.OrderBy(f => f.Severity == "Error" ? 0 : f.Severity == "Warning" ? 1 : 2).ThenBy(f => f.ObjectName).Select(f => new Dictionary<string, object>
+                {
+                    ["severity"] = f.Severity, ["rule"] = f.Rule, ["objectType"] = f.ObjectType, ["objectName"] = f.ObjectName, ["member"] = f.Member, ["message"] = f.Message,
+                }).ToList(),
+            });
+        }
+
+        private static HashSet<string> Set(IEnumerable<string> names) => new HashSet<string>((names ?? Enumerable.Empty<string>()).Where(n => !string.IsNullOrEmpty(n)), StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Chain of Command wrappers whose target method's code differs between the installed application and an earlier
+        /// PackagesLocalDirectory (read through its own disk provider): the wrapper still compiles, but the behaviour
+        /// around next may have changed.
+        /// </summary>
+        public string WrapperDriftJson(string modelName, string previousFolder)
+        {
+            var json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+            string folder = ModelFolder(modelName);
+            if (folder == null)
+                return json.Serialize(new Dictionary<string, object> { ["success"] = false, ["message"] = "Model '" + modelName + "' is not one of your models in the custom metadata folder." });
+            if (string.IsNullOrWhiteSpace(previousFolder) || !Directory.Exists(previousFolder)
+                || !string.Equals(Path.GetFileName(previousFolder.TrimEnd('\\', '/')), "PackagesLocalDirectory", StringComparison.OrdinalIgnoreCase))
+                return json.Serialize(new Dictionary<string, object> { ["success"] = false, ["message"] = "Pass the PackagesLocalDirectory folder of the earlier version." });
+
+            var disk = new DiskProviderConfiguration();
+            disk.AddMetadataPath(previousFolder);
+            var previous = new MetaModelServiceFactory().Create(new MetadataProviderFactory().CreateDiskProvider(disk));
+
+            var results = new List<Dictionary<string, object>>();
+            int wrappers = 0, unchanged = 0, notFound = 0;
+            foreach (string name in Names(folder, "AxClass"))
+            {
+                var cls = _core.MetaService.GetClass(name);
+                var target = cls == null ? null : XppTarget.ParseExtensionOf(cls.Declaration);
+                if (target == null) continue;
+                foreach (var method in cls.Methods ?? Enumerable.Empty<AxMethod>())
+                {
+                    if (!XppTarget.IsWrapper(method.Source, method.Name)) continue;
+                    wrappers++;
+                    string now = FindMethodSource(_core.MetaService, target, method.Name);
+                    string before = FindMethodSource(previous, target, method.Name);
+                    if (now == null || before == null)
+                    {
+                        notFound++;
+                        continue;
+                    }
+                    if (Normalize(now) == Normalize(before))
+                    {
+                        unchanged++;
+                        continue;
+                    }
+                    if (results.Count >= 200) continue;
+                    var nowLines = Lines(now);
+                    var beforeLines = new HashSet<string>(Lines(before));
+                    results.Add(new Dictionary<string, object>
+                    {
+                        ["className"] = cls.Name,
+                        ["method"] = method.Name,
+                        ["target"] = Describe(target),
+                        ["changedLines"] = nowLines.Count(l => !beforeLines.Contains(l)) + Lines(before).Count(l => !nowLines.Contains(l)),
+                        ["current"] = Cap(now),
+                        ["previous"] = Cap(before),
+                    });
+                }
+            }
+            return json.Serialize(new Dictionary<string, object>
+            {
+                ["success"] = true, ["model"] = modelName, ["wrappers"] = wrappers, ["unchanged"] = unchanged, ["notFound"] = notFound,
+                ["changed"] = results.OrderByDescending(r => (int)r["changedLines"]).ToList(),
+            });
+        }
+
+        private static string Cap(string source) => source.Length > MaxDriftSource ? source.Substring(0, MaxDriftSource) + "\n// ... truncated" : source;
+
+        private static List<string> Lines(string source)
+            => source.Replace("\r", "").Split('\n').Select(l => System.Text.RegularExpressions.Regex.Replace(l.Trim(), @"\s+", " ")).Where(l => l.Length > 0).ToList();
+
+        // Formatting-only changes (indentation, blank lines) are not drift.
+        private static string Normalize(string source) => string.Join("\n", Lines(source));
+
+        /// <summary>The code of the method a wrapper targets, from the given metadata (the element, its data source or its base classes).</summary>
+        private static string FindMethodSource(IMetaModelService service, XppTarget target, string methodName)
+        {
+            IEnumerable<AxMethod> methods;
+            switch (target.Kind.ToLowerInvariant())
+            {
+                case "classstr":
+                    var all = new List<AxMethod>();
+                    var cls = service.GetClass(target.Element);
+                    for (int depth = 0; cls != null && depth < 30; depth++)
+                    {
+                        all.AddRange(cls.Methods ?? Enumerable.Empty<AxMethod>());
+                        cls = string.IsNullOrEmpty(cls.Extends) ? null : service.GetClass(cls.Extends);
+                    }
+                    methods = all;
+                    break;
+                case "tablestr": methods = service.GetTable(target.Element)?.Methods; break;
+                case "formstr": methods = service.GetForm(target.Element)?.Methods; break;
+                case "dataentityviewstr": methods = service.GetDataEntityView(target.Element)?.Methods; break;
+                case "viewstr": methods = service.GetView(target.Element)?.Methods; break;
+                case "formdatasourcestr":
+                    methods = service.GetForm(target.Element)?.DataSources?.FirstOrDefault(d => string.Equals(d.Name, target.Member, StringComparison.OrdinalIgnoreCase))?.Methods;
+                    break;
+                default: return null;
+            }
+            return methods?.FirstOrDefault(m => string.Equals(m.Name, methodName, StringComparison.OrdinalIgnoreCase))?.Source;
         }
 
         public string ExtensionCompatibilityJson(string modelName)

@@ -1,5 +1,5 @@
 import { exec, execFile } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, promises as fs } from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { orgName, readActiveEnvironment, selectedEnvironmentUrl, XppEnvironment } from './environment';
@@ -44,26 +44,28 @@ export class PacCommands {
         await this.run('Sign in', ['auth', 'create', '--name', profileName(url), '--environment', url]);
     }
 
-    async deploy(): Promise<void> {
+    /** Returns the deployed models, or undefined when nothing was deployed. */
+    async deploy(): Promise<string[] | undefined> {
         if (await this.local()) {
-            return;
+            return undefined;
         }
-        const root = this.solutionRoot();
+        const root = await this.ensureSolution();
         if (!root) {
-            return;
+            return undefined;
         }
         const sync = await vscode.window.showQuickPick(['None', 'Incremental', 'Full'], { title: 'Database sync after deploy' });
         if (!sync) {
-            return;
+            return undefined;
         }
         if (!await this.useProfile()) {
-            return;
+            return undefined;
         }
         // Compile against the selected environment's version, not the one registered for pac's active environment.
         const env = await readActiveEnvironment().catch(() => undefined);
         const version = env?.dataverseUrl && env.applicationVersion ? ['--app-version', env.applicationVersion] : [];
         await this.run('Compile packages', ['package', 'compile', '--package-type', 'erp', '--solution-root', root, ...version]);
         await this.run('Deploy packages', ['package', 'deploy', '--package-type', 'erp', '--solution-root', root, '--db-sync', sync, ...this.environmentArgs()]);
+        return solutionModels(root);
     }
 
     async syncDatabase(): Promise<void> {
@@ -157,14 +159,20 @@ export class PacCommands {
         return root;
     }
 
-    private solutionRoot(): string | undefined {
+    /** The deployment solution of the workspace; the first deploy initializes it (pac package init) for the project's model. */
+    private async ensureSolution(): Promise<string | undefined> {
         const root = this.workspaceRoot();
-        if (root && !existsSync(path.join(root, '.erp', 'xpp.json'))) {
-            void vscode.window.showErrorMessage('This workspace is not a deployment solution (.erp/xpp.json is missing).', 'Initialize')
-                .then(choice => choice === 'Initialize' ? this.initSolution() : undefined);
+        if (!root || existsSync(path.join(root, '.erp', 'xpp.json'))) {
+            return root;
+        }
+        const project = await readProject().catch(() => undefined);
+        const choice = await vscode.window.showInformationMessage(
+            `The first deploy from this workspace sets up its deployment solution (.erp/xpp.json)${project?.model ? ` for ${project.model}` : ''}.`, 'Set Up and Deploy');
+        if (!choice) {
             return undefined;
         }
-        return root;
+        await this.initSolution();
+        return existsSync(path.join(root, '.erp', 'xpp.json')) ? root : undefined;
     }
 
     /** Runs pac (a .cmd, so through a shell) as a visible task. */
@@ -195,4 +203,30 @@ export class PacCommands {
 /** pac profile names are at most 30 characters. */
 function profileName(url: string): string {
     return orgName(url).slice(0, 30);
+}
+
+/** The models of a deployment solution: every "model"/"models" value in .erp/xpp.json, else the project's model. */
+async function solutionModels(root: string): Promise<string[]> {
+    const found = new Set<string>();
+    const collect = (value: unknown, key = '') => {
+        if (typeof value === 'string' && /^models?$/i.test(key)) {
+            value.split(',').map(v => v.trim()).filter(Boolean).forEach(v => found.add(v));
+        } else if (Array.isArray(value)) {
+            value.forEach(v => collect(v, key));
+        } else if (value && typeof value === 'object') {
+            Object.entries(value).forEach(([k, v]) => collect(v, k));
+        }
+    };
+    try {
+        collect(JSON.parse((await fs.readFile(path.join(root, '.erp', 'xpp.json'), 'utf8')).replace(/^\uFEFF/, '')));
+    } catch {
+        // An unreadable solution file: fall back to the project.
+    }
+    if (!found.size) {
+        const model = (await readProject().catch(() => undefined))?.model;
+        if (model) {
+            found.add(model);
+        }
+    }
+    return [...found];
 }

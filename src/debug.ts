@@ -8,6 +8,7 @@ import { listModels } from './aot';
 import { objectUri, parseObjectUri, XppScheme } from './codeView';
 import { dynamics365Folder, readActiveEnvironment, selectedEnvironmentUrl } from './environment';
 import { XppServerClient } from './serverClient';
+import { DeployState } from './deployState';
 import { getDataverseToken, readUdeEnvironment, resolveDataverseUrl } from './ude';
 import { compilerView, documentLineToCompilerLine } from './xppSource';
 
@@ -39,14 +40,14 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
     private pending: PendingAdapter | undefined;
     readonly infolog = new InfologProvider();
 
-    constructor(private readonly server: XppServerClient, private readonly log: vscode.OutputChannel) { }
+    constructor(private readonly server: XppServerClient, private readonly log: vscode.OutputChannel, private readonly deployState: DeployState) { }
 
     register(context: vscode.ExtensionContext): void {
         context.subscriptions.push(
             vscode.debug.registerDebugConfigurationProvider(DebugType, this),
             vscode.debug.registerDebugAdapterDescriptorFactory(DebugType, this),
             vscode.debug.registerDebugAdapterTrackerFactory(DebugType, { createDebugAdapterTracker: () => this.tracker() }),
-            vscode.window.registerTreeDataProvider('xpp.infolog', this.infolog),
+            this.infolog.view = vscode.window.createTreeView('xpp.infolog', { treeDataProvider: this.infolog }),
             vscode.commands.registerCommand('xpp.debug.start', () => vscode.debug.startDebugging(undefined, {
                 type: DebugType, request: 'attach', name: 'Attach to Dynamics 365 (unified developer environment)',
             })),
@@ -66,6 +67,9 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
         }
         if ((await readActiveEnvironment().catch(() => undefined))?.local) {
             vscode.window.showErrorMessage('The X++ debugger attaches to unified developer environments. On a cloud-hosted or VHD environment, debug from Visual Studio on the VM.');
+            return undefined;
+        }
+        if (!await this.deployState.confirmCurrent('The debugger')) {
             return undefined;
         }
         return vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Preparing X++ debugging…' }, async progress => {
@@ -351,10 +355,15 @@ export class InfologProvider implements vscode.TreeDataProvider<InfologEntry> {
     private readonly entries: InfologEntry[] = [];
     private kinds = new Set(['Error', 'Warning', 'Info']);
     private text = '';
+    view: vscode.TreeView<InfologEntry> | undefined;
 
     add(entry: InfologEntry): void {
+        const first = this.entries.length === 0;
         this.entries.unshift(entry);
         this.changed.fire();
+        if (first && this.view && !this.view.visible) {
+            this.view.reveal(entry, { focus: false, select: false }).then(undefined, () => undefined);
+        }
     }
 
     clear(): void {
@@ -398,5 +407,9 @@ export class InfologProvider implements vscode.TreeDataProvider<InfologEntry> {
 
     getChildren(): InfologEntry[] {
         return this.visible();
+    }
+
+    getParent(): undefined {
+        return undefined;
     }
 }

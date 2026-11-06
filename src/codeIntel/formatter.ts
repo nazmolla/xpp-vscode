@@ -7,13 +7,13 @@
 
 const Indent = '    ';
 
-interface ScanState {
+export interface ScanState {
     inBlockComment: boolean;
     inVerbatim: boolean;
 }
 
 /** The code of a line with string contents blanked and comments removed; updates the multi-line state. */
-function codeOf(line: string, state: ScanState): { code: string; commentAt: number } {
+export function codeOf(line: string, state: ScanState): { code: string; commentAt: number } {
     let code = '';
     let commentAt = -1;
     for (let i = 0; i < line.length; i++) {

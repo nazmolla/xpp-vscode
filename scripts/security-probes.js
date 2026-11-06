@@ -119,6 +119,14 @@ const markup = '<?xml version="1.0"?>';
     r = await bridge('save_label', { labelFile: 'SYS', labelId: 'Pwn\r\nX', texts: { 'en-US': 'x' } });
     verdict('D24', 'save_label refuses a CRLF label ID / standard label file', !ok(r), msgOf(r));
 
+    // Copilot checkpoints and version comparison: ids and folders from the caller are not paths to wander through.
+    r = await bridge('revert_checkpoint', { id: '..\\..\\..\\Windows' });
+    verdict('D35', 'revert_checkpoint refuses a traversal id (or is unavailable in this process)', !ok(r), msgOf(r));
+    r = await bridge('wrapper_drift', { modelName: model, previousFolder: 'C:\\Windows' });
+    verdict('D36', 'wrapper_drift reads only a PackagesLocalDirectory', !ok(r), msgOf(r));
+    r = await bridge('extension_collisions', { modelName: 'ApplicationSuite' });
+    verdict('D37', 'extension_collisions refuses a standard model', !ok(r), msgOf(r));
+
     // Agent tools: SQL injection, regex time-outs, URL allow-list.
     t = await tool('xpp_find_references', { objectType: 'AxTable', objectName: "CustTable' OR 1=1 --" });
     verdict('D25', 'xpp_find_references treats SQL as data', !/syntax|SqlException|incorrect/i.test(t.text), t.text);

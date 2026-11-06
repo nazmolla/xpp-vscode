@@ -33,6 +33,17 @@ export async function getDataverseToken(dataverseUrl: string): Promise<string> {
     return session.accessToken;
 }
 
+/** The token when VS Code already has a session for the org; never shows a sign-in. */
+export async function getDataverseTokenSilently(dataverseUrl: string): Promise<string | undefined> {
+    const scopes = [`${dataverseUrl}/.default`];
+    const clientId = vscode.workspace.getConfiguration('xpp').get<string>('auth.clientId');
+    if (clientId) {
+        scopes.push(`VSCODE_CLIENT_ID:${clientId}`);
+    }
+    const session = await vscode.authentication.getSession('microsoft', scopes, { silent: true }).then(s => s, () => undefined);
+    return session?.accessToken;
+}
+
 async function dataverseCall(url: string, token: string, method: 'GET' | 'POST'): Promise<any> {
     const response = await httpFetch(url, {
         method,

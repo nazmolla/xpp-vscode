@@ -61,6 +61,8 @@ namespace XppVsCode.Server
                 DataShape = new TableDataShapeService(bridge),
                 Performance = new PerformanceAnalysisService(bridge),
                 Compatibility = new ExtensionCompatibilityService(bridge, bridge),
+                AgentWrites = ActivityLog.Enabled ? bridge : null,
+                Checkpoints = allowData ? bridge : null,
             };
             var client = new BridgeClient(new MetaModelBridgeServer(services));
             new McpStdioServer(new ToolRouter(client), client, Version, allowData ? new DataQueryService() : null, rulesFile).Run();

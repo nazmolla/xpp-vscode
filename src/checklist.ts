@@ -2,24 +2,25 @@ import * as vscode from 'vscode';
 import { XppBuilder } from './build';
 import { readActiveEnvironment } from './environment';
 import { readProject } from './project';
+import { ResultsView } from './results';
 import { XppServerClient } from './serverClient';
 
 interface Step { name: string; ok: boolean; detail: string }
 
-const CodeTypes = new Set(['AxClass', 'AxTable', 'AxForm']);
+const CodeTypes = new Set(['AxClass', 'AxTable', 'AxForm', 'AxDataEntityView']);
 
 /**
  * F&O Studio: Pre-Deploy Checklist: build, best practice, performance, security gaps and (on unified environments) tests
  * for the project, in one report; when everything blocking passes, offers to create the deployable package or deploy.
  */
-export async function preDeployChecklist(server: XppServerClient, builder: XppBuilder): Promise<void> {
+export async function preDeployChecklist(server: XppServerClient, builder: XppBuilder, results: ResultsView): Promise<void> {
     const project = await readProject();
     if (!project?.model) {
         throw new Error('Open a D365FO project first.');
     }
     const model = project.model;
     const steps: Step[] = [];
-    const cancelled = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Pre-deploy checklist: ${project.name}`, cancellable: true },
+    const cancelled = await vscode.window.withProgress({ location: { viewId: 'xpp.results' }, title: `Pre-deploy checklist: ${project.name}`, cancellable: true },
         async (progress, token) => {
             progress.report({ message: 'build' });
             const built = await builder.build(model, token, project.items).catch(() => false);
@@ -51,6 +52,12 @@ export async function preDeployChecklist(server: XppServerClient, builder: XppBu
             steps.push({ name: 'Security', ok: !blocking, detail: gapText ? gapText.split('\n').slice(0, 12).join('\n') : 'Could not run.' });
 
             const env = await readActiveEnvironment();
+            const runner = `${model.replace(/\W/g, '')}ScratchRunner`;
+            const scratch = await server.bridge('find_object', { objectName: runner, objectType: 'AxClass', exactMatch: true, maxResults: 1 }).catch(() => undefined);
+            const hasScratch = (scratch?.matches ?? []).some((m: { modelName?: string }) => (m.modelName ?? '').toLowerCase() === model.toLowerCase());
+            steps.push({ name: 'Scratch code', ok: !hasScratch, detail: hasScratch
+                ? `${runner} (Run Snippet's scratch class) is in ${model} and would ship in the package: delete it (project view > Delete) before packaging.`
+                : 'No scratch runner in the model.' });
             steps.push({ name: 'Tests', ok: true, detail: env.local ? 'Run tests on the VM (cloud-hosted/VHD).' : 'Run them after deploying: Test Explorer or Run Tests (they run against the deployed code).' });
             return token.isCancellationRequested;
         });
@@ -64,7 +71,17 @@ export async function preDeployChecklist(server: XppServerClient, builder: XppBu
         `**${passed ? 'Ready to package and deploy.' : 'Not ready: fix the failed steps first.'}**`, '',
         ...steps.flatMap(s => [`## ${s.ok ? '✅' : '❌'} ${s.name}`, '', s.detail, '']),
     ].join('\n');
-    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument({ language: 'markdown', content }), { preview: true });
+    await results.show({
+        title: `Pre-Deploy Checklist: ${project.name}`, time: new Date(), markdown: content, rerun: { command: 'xpp.preDeployChecklist' },
+        summary: passed ? 'Ready to package and deploy' : 'Not ready: fix the failed steps first',
+        sections: steps.map(s => {
+            const lines = s.detail.split('\n').map(l => l.replace(/^-\s*/, '').trim()).filter(Boolean);
+            return {
+                title: s.name, severity: s.ok ? 'pass' as const : 'error' as const, description: lines.length === 1 ? lines[0] : undefined,
+                findings: lines.length > 1 ? lines.map(l => ({ label: l, severity: /^Error\b/.test(l) ? 'error' as const : /^Warning\b/.test(l) ? 'warning' as const : 'info' as const })) : [],
+            };
+        }),
+    });
     if (passed) {
         const env = await readActiveEnvironment();
         const choice = await vscode.window.showInformationMessage('The checklist passed.', 'Create Deployment Package', ...(env.local ? [] : ['Deploy']));

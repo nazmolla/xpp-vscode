@@ -19,5 +19,6 @@ export function registerProductivity(context: vscode.ExtensionContext, command: 
     command('xpp.findExamples', (arg?: TreeArg) => findExamples(ctx, arg));
     command('xpp.addToPrivilege', (arg?: TreeArg) => addToPrivilege(ctx, arg));
     command('xpp.generateTests', (arg?: TreeArg) => generateTests(ctx, arg));
+    command('xpp.generateAtlTests', (arg?: TreeArg) => generateTests(ctx, arg, true));
     command('xpp.runSnippet', () => runSnippet(ctx));
 }

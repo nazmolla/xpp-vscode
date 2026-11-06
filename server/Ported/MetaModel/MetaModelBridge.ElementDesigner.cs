@@ -337,6 +337,7 @@ namespace XppVsCode.Server.MetaModel
         private List<Dictionary<string, object>> DescribeProperties(object node)
         {
             var result = new List<Dictionary<string, object>>();
+            object defaults = DefaultInstance(node.GetType());
             foreach (var prop in PublicProperties(node.GetType())
                 .Where(p => p.GetIndexParameters().Length == 0 && (IsDesignerProperty(p) || p.Name == "Name"))
                 .GroupBy(p => p.Name).Select(g => g.First())
@@ -358,7 +359,16 @@ namespace XppVsCode.Server.MetaModel
                     ["value"] = FormatValue(value),
                     ["kind"] = kind,
                     ["readOnly"] = !prop.CanWrite || kind == "other" || prop.Name == "Name",
+                    ["category"] = PropertyCategory(prop),
                 };
+                string description = AttributeText(prop, "DescriptionAttribute");
+                if (!string.IsNullOrEmpty(description))
+                    entry["description"] = description;
+                if (defaults != null && prop.Name != "Name")
+                {
+                    try { entry["modified"] = FormatValue(value) != FormatValue(prop.GetValue(defaults)); }
+                    catch { }
+                }
                 if (type.IsEnum)
                     entry["options"] = Enum.GetNames(type);
                 else if (type == typeof(bool))
@@ -509,6 +519,47 @@ namespace XppVsCode.Server.MetaModel
         }
 
         private static bool IsDesignerProperty(PropertyInfo prop) => HasAttribute(prop, "AxPropertyAttribute");
+
+        private static readonly Dictionary<Type, object> Defaults = new Dictionary<Type, object>();
+
+        /// <summary>A new node of the type, to tell which properties differ from their default (null when it has no public constructor).</summary>
+        private static object DefaultInstance(Type type)
+        {
+            lock (Defaults)
+            {
+                if (!Defaults.TryGetValue(type, out object instance))
+                {
+                    try { instance = type.GetConstructor(Type.EmptyTypes) != null ? Activator.CreateInstance(type) : null; }
+                    catch { instance = null; }
+                    Defaults[type] = instance;
+                }
+                return instance;
+            }
+        }
+
+        private static string AttributeText(PropertyInfo prop, string attributeName)
+        {
+            var data = prop.GetCustomAttributesData().FirstOrDefault(a => a.AttributeType.Name == attributeName);
+            return data != null && data.ConstructorArguments.Count > 0 ? data.ConstructorArguments[0].Value as string : null;
+        }
+
+        private static readonly string[] AppearanceWords = { "Label", "HelpText", "Caption", "Visible", "Width", "Height", "Style", "Image", "Font", "Color", "Alignment", "Arrange", "Columns", "Display", "Title", "Pattern", "Template" };
+        private static readonly string[] DataWords = { "Table", "Field", "DataSource", "DataField", "DataMethod", "Edt", "ExtendedDataType", "EnumType", "Relation", "Index", "Key", "Mandatory", "AllowEdit", "Join", "Cache", "Size", "StringSize", "Type", "Extends", "Query", "Range" };
+        private static readonly string[] BehaviorWords = { "Allow", "Auto", "Enabled", "Skip", "Validate", "Is", "Run", "Object", "Menu", "Linked", "Count", "Save", "Delete", "Insert", "Update", "Create" };
+
+        /// <summary>The Properties window group: the metadata's own category when it has one, else by the property's name.</summary>
+        private static string PropertyCategory(PropertyInfo prop)
+        {
+            string category = AttributeText(prop, "CategoryAttribute");
+            if (!string.IsNullOrEmpty(category)) return category;
+            string name = prop.Name;
+            if (name == "Name") return "Identification";
+            if (name.EndsWith("Key", StringComparison.Ordinal) && name.StartsWith("Configuration", StringComparison.Ordinal) || name == "CountryRegionCodes" || name.StartsWith("Security", StringComparison.Ordinal)) return "Configuration and security";
+            if (AppearanceWords.Any(w => name.Contains(w))) return "Appearance";
+            if (DataWords.Any(w => name.Contains(w))) return "Data";
+            if (BehaviorWords.Any(w => name.StartsWith(w, StringComparison.Ordinal))) return "Behavior";
+            return "Misc";
+        }
 
         private static bool HasAttribute(PropertyInfo prop, string attributeName)
             => prop.GetCustomAttributesData().Any(a => a.AttributeType.Name == attributeName);

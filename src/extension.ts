@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { AotTreeProvider } from './aot';
 import { XppBuilder } from './build';
+import { DeployState } from './deployState';
 import { XppReferenceLinks } from './codeLinks';
 import { ElementDragAndDrop, ElementDropIntoCode, ElementsMime } from './dragAndDrop';
 import { objectUri, parseObjectUri, XppCodeFileSystem, XppScheme } from './codeView';
@@ -36,17 +37,27 @@ import { registerChatParticipant } from './chat';
 import { preDeployChecklist } from './checklist';
 import { newSysOperationJob } from './scaffolding/batch';
 import { newReport, newService, newWorkflow } from './scaffolding/wizards';
+import { newElement } from './scaffolding/newElement';
+import { addNumberSequence, newBusinessEvent, newFeature } from './scaffolding/lifecycleWizards';
 import { findUnusedLabels, translateMissingLabels } from './labels';
 import { registerTraceAnalyzer } from './traceAnalyzer';
 import { XppRename } from './rename';
 import { elementOf as treeElementOf, pickElement } from './d365Tools';
-import { connectEnvironment } from './setup';
+import { clearSetupStatus, connectEnvironment } from './setup';
+import { cleanUpOldVersions, VersionGuard } from './versionGuard';
+import { openTeamRepository } from './teamRepository';
+import { verifyInRunningApp } from './verify';
+import { AgentSession } from './agentSession';
+import { registerIntegration } from './integration';
+import { recordError, reportProblem } from './reportProblem';
 import { registerTests } from './tests';
 import { checkEnvironmentConnection } from './ude';
 import { CodeIntelligence } from './codeIntel/providers';
 import { registerProductivity } from './productivity';
 import { registerSecurity } from './security';
 import { registerDatabase } from './database';
+import { goToFinding, ResultsView } from './results';
+import { registerPanelSerializer } from './webviewState';
 
 export function activate(context: vscode.ExtensionContext): void {
     const log = vscode.window.createOutputChannel('X++');
@@ -56,18 +67,24 @@ export function activate(context: vscode.ExtensionContext): void {
     // Language features run in a server process of their own, so index builds never block the designers.
     const languageServer = new XppServerClient(context, log, findActiveProject);
     const builder = new XppBuilder(buildOutput);
+    const deployState = new DeployState(context, builder);
     const projectTree = new ProjectTreeProvider();
     const aotTree = new AotTreeProvider();
     const codeFs = new XppCodeFileSystem(server);
     const navigation = new XppNavigation(server);
     const pac = new PacCommands();
-    const environment = new EnvironmentStatus();
+    const versionGuard = new VersionGuard();
+    const environment = new EnvironmentStatus(versionGuard);
     const dragAndDrop = new ElementDragAndDrop(server, () => projectTree.refresh());
     const designers: DesignerServices = { context, server, drags: dragAndDrop };
     const projects = new ProjectWorkspaces(context);
+    registerPanelSerializer<{ objectType: string; objectName: string }>(context, 'xppElementDesigner', (panel, state) => ElementDesigner.revive(designers, panel, state));
+    registerPanelSerializer<{ formName: string }>(context, 'xppFormDesigner', (panel, state) => FormDesigner.revive(context, server, panel, state));
+    registerPanelSerializer<{ labelFile: string }>(context, 'xppLabelEditor', (panel, state) =>
+        LabelEditor.revive(context, server, panel, state, () => ElementDesigner.open(designers, 'AxLabelFile', state.labelFile)));
     void projects.migrateUserSetting().catch(err => log.appendLine('Project setting: ' + (err as Error).message));
-    context.subscriptions.push(log, buildOutput, server, languageServer, builder, environment, new ServerStatus([server, languageServer]),
-        new ProjectStatus(builder), vscode.tasks.registerTaskProvider(TaskType, new XppTaskProvider(builder)));
+    context.subscriptions.push(log, buildOutput, server, languageServer, builder, deployState, versionGuard, environment, new ServerStatus([server, languageServer]),
+        new ProjectStatus(builder, deployState), vscode.tasks.registerTaskProvider(TaskType, new XppTaskProvider(builder)));
 
     registerMcpProvider(context, log);
 
@@ -98,6 +115,11 @@ export function activate(context: vscode.ExtensionContext): void {
             languageServer.restart();
             aotTree.refresh();
             projectTree.refresh();
+            // Open tabs show the new environment's metadata without a window reload.
+            ElementDesigner.refreshAll();
+            for (const doc of vscode.workspace.textDocuments.filter(d => d.uri.scheme === XppScheme && !d.isDirty)) {
+                codeFs.refresh(doc.uri);
+            }
         }),
         projectTree,
     );
@@ -110,8 +132,15 @@ export function activate(context: vscode.ExtensionContext): void {
             } catch (err) {
                 const error = err instanceof Error ? err : new Error(String(err));
                 log.appendLine(`[${id}] ${error.stack ?? error.message}`);
+                recordError(id, error);
                 const message = error.message || 'The command failed.';
-                vscode.window.showErrorMessage(message, 'Show Log').then(choice => { if (choice) { log.show(true); } });
+                vscode.window.showErrorMessage(message, 'Show Log', 'Report Problem').then(choice => {
+                    if (choice === 'Show Log') {
+                        log.show(true);
+                    } else if (choice === 'Report Problem') {
+                        void reportProblem(context, UsageKey, id);
+                    }
+                });
             }
         }));
 
@@ -120,20 +149,28 @@ export function activate(context: vscode.ExtensionContext): void {
         log.show(true);
     });
     command('xpp.selectEnvironment', () => selectEnvironment());
+    command('xpp.environment.menu', () => environment.menu());
+    command('xpp.reportProblem', () => reportProblem(context, UsageKey));
     command('xpp.restartServer', () => vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: 'Restarting the X++ server' }, async () => {
         server.restart();
         languageServer.restart();
         await Promise.all([server.bridge('get_environment'), languageServer.bridge('get_environment')]);
     }));
     command('xpp.checkEnvironment', () => checkEnvironmentConnection(log));
-    command('xpp.connectEnvironment', async () => {
-        if (await connectEnvironment(context, log)) {
-            server.restart();
-            vscode.window.showInformationMessage('Environment connected. Reload the window so the X++ tools use the new configuration.', 'Reload')
-                .then(choice => choice === 'Reload' ? vscode.commands.executeCommand('workbench.action.reloadWindow') : undefined);
+    command('xpp.environment.clearSetup', () => clearSetupStatus());
+    command('xpp.cleanUpOldVersions', () => cleanUpOldVersions());
+    command('xpp.checkVersion', async () => {
+        const drift = await versionGuard.check();
+        if (!drift) {
+            vscode.window.showInformationMessage('The metadata on this machine matches the environment\'s application version (or the environment could not be reached without signing in).');
         }
     });
-    command('xpp.openObject', () => openObject(server));
+    command('xpp.connectEnvironment', async (dataverseUrl?: string) => {
+        if (await connectEnvironment(context, log, typeof dataverseUrl === 'string' ? dataverseUrl : undefined)) {
+            vscode.window.showInformationMessage('Environment connected. The Application Explorer, designers and code views now use it.');
+        }
+    });
+    command('xpp.openObject', () => openObject(server, context));
     command('xpp.openFormDesigner', async (arg?: string | ElementRef) => {
         // Tree context menus pass the clicked node; the layout view opens the base form of an extension.
         const fromNode = typeof arg === 'string' ? arg : elementOf(arg)?.objectName;
@@ -184,14 +221,15 @@ export function activate(context: vscode.ExtensionContext): void {
         }
     });
     command('xpp.aot.clearFilter', () => aotTree.setFilter(''));
-    new XppDebugger(server, log).register(context);
+    new XppDebugger(server, log, deployState).register(context);
     const codeIntel = new CodeIntelligence(languageServer, server, navigation, log);
     context.subscriptions.push(codeIntel);
     codeIntel.register(command);
+    const dataTools = registerDatabase(context, command, server);
     registerTools(context, server, () => {
         aotTree.refresh();
         projectTree.refresh();
-    }, command, [environment, codeIntel]);
+    }, command, [environment, dataTools, codeIntel]);
     const productivity = {
         server, languageServer, log, codeIntel,
         refreshCode: (uri: vscode.Uri) => codeFs.refresh(uri),
@@ -201,10 +239,24 @@ export function activate(context: vscode.ExtensionContext): void {
         },
     };
     registerProductivity(context, command, productivity);
+    const agentSession = new AgentSession(server, productivity.refreshTrees);
+    context.subscriptions.push(agentSession);
+    agentSession.register(command);
     registerSecurity(context, command, productivity);
-    registerDatabase(context, command, server);
     registerPerformance(context, command, server);
-    registerUpgradeReadiness(command, server);
+    const results = new ResultsView();
+    results.register(context, command);
+    command('xpp.results.goTo', (location: Parameters<typeof goToFinding>[0]) => goToFinding(location));
+    command('xpp.results.goToElement', async (objectName: string, method?: string, line?: number) => {
+        const found = await server.bridge('find_object', { objectName, exactMatch: true, maxResults: 5 });
+        const match = (found.matches ?? [])[0];
+        if (!match) {
+            throw new Error(`${objectName} was not found.`);
+        }
+        await goToFinding({ objectType: match.objectType, objectName: match.objectName, method, line: method ? line : undefined });
+    });
+    registerUpgradeReadiness(command, server, results);
+    registerIntegration(command, server);
     registerTelemetryQueries(command);
     const activity = new ActivityView();
     context.subscriptions.push(activity, vscode.window.registerTreeDataProvider('xpp.activity', activity));
@@ -213,13 +265,41 @@ export function activate(context: vscode.ExtensionContext): void {
     command('xpp.createTeamRules', () => createTeamRules());
     const changeDecorations = new ChangeDecorations();
     context.subscriptions.push(changeDecorations);
-    command('xpp.reviewChanges', () => reviewChanges(server, builder));
+    command('xpp.reviewChanges', (base?: unknown) => reviewChanges(server, builder, results, typeof base === 'string' ? base : undefined));
     registerChatParticipant(context);
-    command('xpp.preDeployChecklist', () => preDeployChecklist(server, builder));
+    command('xpp.preDeployChecklist', () => preDeployChecklist(server, builder, results));
     command('xpp.newSysOperationJob', () => newSysOperationJob(server).then(() => projectTree.refresh()));
     command('xpp.newReport', () => newReport(server).then(() => projectTree.refresh()));
     command('xpp.newWorkflow', () => newWorkflow(server).then(() => projectTree.refresh()));
     command('xpp.newService', () => newService(server).then(() => projectTree.refresh()));
+    command('xpp.newBusinessEvent', () => newBusinessEvent(server).then(() => projectTree.refresh()));
+    command('xpp.addNumberSequence', () => addNumberSequence(server).then(() => projectTree.refresh()));
+    command('xpp.newFeature', () => newFeature(server).then(() => projectTree.refresh()));
+    command('xpp.showFeatureUsage', async (arg?: { item?: { objectType: string; objectName: string }; objectType?: string; entry?: { name: string } }) => {
+        const element = treeElementOf(arg) ?? await pickElement(server, 'Show feature usage: feature class', ['AxClass']);
+        if (!element) {
+            return;
+        }
+        const result = await vscode.window.withProgress({ location: { viewId: 'xpp.results' }, title: `Finding where ${element.objectName} is checked…` },
+            () => server.bridge('where_used', { objectType: 'AxClass', objectName: element.objectName, maxResults: '1000' }));
+        if (!result.success) {
+            throw new Error(result.message);
+        }
+        const refs = (result.references ?? []) as { objectType?: string; objectName: string; member?: string; line?: number; kind?: string; module?: string }[];
+        const findings = refs.filter(r => r.objectName !== element.objectName).map(r => ({
+            label: `${r.objectName}${r.member ? '.' + r.member : ''}`, description: `line ${r.line ?? '?'} · ${r.module ?? ''}`, severity: 'info' as const,
+            command: { command: 'xpp.results.goToElement', title: 'Open', arguments: [r.objectName, r.member, r.line] },
+        }));
+        await results.show({
+            title: `Feature usage: ${element.objectName}`, time: new Date(), rerun: { command: 'xpp.showFeatureUsage', args: [{ item: element }] },
+            summary: `${findings.length} place(s) check or use ${element.objectName}`,
+            markdown: [`# Where ${element.objectName} is used`, '', ...findings.map(f => `- ${f.label} (${f.description})`)].join('\n'),
+            sections: [{ title: 'Code gated by the feature', severity: findings.length ? 'info' : 'warning', description: findings.length ? undefined : 'not used: the feature gates nothing (or the cross references are not built)', findings }],
+        });
+    });
+    // A project folder node pre-selects its element type.
+    command('xpp.newElement', (arg?: string | { kind?: string; items?: { objectType: string }[] }) =>
+        newElement(context, server, productivity.refreshTrees, typeof arg === 'string' ? arg : arg?.items?.[0]?.objectType));
     command('xpp.translateMissingLabels', () => translateMissingLabels(server));
     command('xpp.findUnusedLabels', () => findUnusedLabels(server));
     registerTraceAnalyzer(context, command, server);
@@ -268,6 +348,10 @@ export function activate(context: vscode.ExtensionContext): void {
     command('xpp.designer.moveUp', (node: DesignerNodeContext) => ElementDesigner.runAction('moveUp', node));
     command('xpp.designer.moveDown', (node: DesignerNodeContext) => ElementDesigner.runAction('moveDown', node));
     command('xpp.designer.addElement', (node: DesignerNodeContext) => ElementDesigner.runAction('addElement', node));
+    command('xpp.designer.viewCode', () => ElementDesigner.titleAction('viewCode'));
+    command('xpp.designer.formLayout', () => ElementDesigner.titleAction('formLayout'));
+    command('xpp.designer.refresh', () => ElementDesigner.titleAction('refresh'));
+    command('xpp.designer.createExtension', () => ElementDesigner.titleAction('createExtension'));
     registerGoTo(command, server);
     registerHistory(context, server, command);
     context.subscriptions.push(ElementDesigner.onDidChange.event(e => codeFs.refresh(objectUri(e.objectType, e.objectName))));
@@ -276,35 +360,45 @@ export function activate(context: vscode.ExtensionContext): void {
     command('xpp.openRecentProject', () => projects.openRecent());
     command('xpp.openProject', (file?: string) => file ? projects.open(file) : projects.select());
     command('xpp.closeProject', () => projects.close());
+    command('xpp.openTeamRepository', () => openTeamRepository(builder, file => projects.open(file)));
+    command('xpp.verifyInRunningApp', () => verifyInRunningApp(server, deployState));
     command('xpp.createProject', async () => {
         const file = await createProject();
         if (file) {
             await projects.open(file);
         }
     });
+    const runBuild = async (title: string, model: string | undefined, items?: { objectType: string; objectName: string }[]) => {
+        await saveCodeViews();
+        const before = builder.lastResult;
+        const ok = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title, cancellable: true },
+            (_progress, token) => builder.build(model, token, items));
+        const result = builder.lastResult !== before ? builder.lastResult : undefined;
+        if (ok) {
+            vscode.window.setStatusBarMessage(`$(check) Build succeeded${result?.warnings ? `: ${result.warnings} warning(s)` : ''}`, 10000);
+        } else if (result) {
+            const choice = await vscode.window.showErrorMessage(`Build failed: ${result.errors} error(s), ${result.warnings} warning(s) in ${result.model}.`, 'Show Problems', 'Show Output');
+            if (choice === 'Show Problems') {
+                await vscode.commands.executeCommand('workbench.actions.view.problems');
+            } else if (choice === 'Show Output') {
+                builder.showOutput();
+            }
+        }
+        return ok;
+    };
     command('xpp.build', async () => {
         const project = await readProject();
-        await vscode.window.withProgress(
-            { location: vscode.ProgressLocation.Notification, title: `Building ${project?.model ?? 'model'}…`, cancellable: true },
-            async (_progress, token) => {
-                const ok = await builder.build(project?.model, token);
-                vscode.window.setStatusBarMessage(ok ? '$(check) X++ build succeeded' : '$(error) X++ build failed', 10000);
-            });
+        return runBuild(`Building ${project?.model ?? 'model'}…`, project?.model);
     });
+    // Ctrl+Shift+B and the project status bar item: the project when one is open, otherwise a model.
     command('xpp.buildProject', async () => {
         const project = await readProject();
         if (!project?.model) {
-            throw new Error('Select a D365FO project first.');
+            return runBuild('Building model…', undefined);
         }
-        return vscode.window.withProgress(
-            { location: vscode.ProgressLocation.Notification, title: `Building project ${project.name}…`, cancellable: true },
-            async (_progress, token) => {
-                const ok = await builder.build(project.model, token, project.items);
-                vscode.window.setStatusBarMessage(ok ? '$(check) X++ project build succeeded' : '$(error) X++ project build failed', 10000);
-                return ok;
-            });
+        return runBuild(`Building project ${project.name}…`, project.model, project.items);
     });
-    registerTests(context, server);
+    registerTests(context, server, deployState);
     command('xpp.bestPractice', async () => {
         const project = await readProject();
         if (!project?.model) {
@@ -321,11 +415,24 @@ export function activate(context: vscode.ExtensionContext): void {
     followAgentProjectSelection(context, projects);
     command('xpp.pac.init', () => pac.initSolution());
     command('xpp.pac.signIn', () => pac.signIn());
-    command('xpp.pac.deploy', () => pac.deploy());
+    command('xpp.pac.deploy', async () => {
+        const models = await pac.deploy();
+        if (models?.length) {
+            await deployState.deployed(models);
+        }
+    });
     command('xpp.pac.dbSync', () => pac.syncDatabase());
 }
 
 export function deactivate(): void { }
+
+/** Unsaved code views would otherwise be compiled from the metadata on disk. */
+async function saveCodeViews(): Promise<void> {
+    if (!vscode.workspace.getConfiguration('xpp').get<boolean>('build.saveBeforeBuild', true)) {
+        return;
+    }
+    await Promise.all(vscode.workspace.textDocuments.filter(d => d.isDirty && d.uri.scheme === XppScheme).map(d => d.save()));
+}
 
 const UsageKey = 'xpp.usage';
 

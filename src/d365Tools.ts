@@ -38,6 +38,10 @@ export interface ToolNode {
     onToggle?: (checked: boolean) => void;
     /** Only for unified developer environments (pac, Dataverse); hidden on cloud-hosted and VHD environments. */
     udeOnly?: boolean;
+    /** Groups start collapsed unless this is set. */
+    expanded?: boolean;
+    /** A placeholder replaced by the contributions with this slot. */
+    slot?: string;
 }
 
 /** Extra top-level nodes contributed by other parts of the extension, with a change event to refresh them. */
@@ -45,48 +49,66 @@ export interface ToolsContribution {
     nodes(): ToolNode[];
     onDidChange: vscode.Event<void>;
     hides?(node: ToolNode): boolean;
+    /** Where the nodes go: the placeholder with this slot; before Options when not set. */
+    slot?: string;
 }
 
-/** The Dynamics 365 menu of Visual Studio, as a view. */
+/** The Dynamics 365 menu of Visual Studio, grouped by task. */
 const ToolsMenu: ToolNode[] = [
+    { label: '', icon: '', slot: 'environment' },
+    {
+        label: 'Create', icon: 'add', children: [
+            { label: 'New Element…', icon: 'add', command: 'xpp.newElement' },
+            { label: 'New Batch Job…', icon: 'sparkle', command: 'xpp.newSysOperationJob' },
+            { label: 'New Report…', icon: 'sparkle', command: 'xpp.newReport' },
+            { label: 'New Approval Workflow…', icon: 'sparkle', command: 'xpp.newWorkflow' },
+            { label: 'New Custom Service…', icon: 'sparkle', command: 'xpp.newService' },
+            { label: 'New Business Event…', icon: 'sparkle', command: 'xpp.newBusinessEvent' },
+            { label: 'Add Number Sequence…', icon: 'sparkle', command: 'xpp.addNumberSequence' },
+            { label: 'New Feature…', icon: 'sparkle', command: 'xpp.newFeature' },
+            { label: 'Create Model…', icon: 'library', command: 'xpp.tools.createModel' },
+        ],
+    },
+    {
+        label: 'Build and check', icon: 'tools', expanded: true, children: [
+            { label: 'Build Project', icon: 'play', command: 'xpp.buildProject' },
+            { label: 'Build Models…', icon: 'tools', command: 'xpp.build' },
+            { label: 'Best Practice Checks', icon: 'checklist', command: 'xpp.bestPractice' },
+            { label: 'Review My Changes', icon: 'git-pull-request', command: 'xpp.reviewChanges' },
+            { label: 'Pre-Deploy Checklist', icon: 'tasklist', command: 'xpp.preDeployChecklist' },
+            { label: 'Upgrade Readiness…', icon: 'versions', command: 'xpp.upgradeReadiness' },
+            { label: 'Standard Code Drift…', icon: 'diff', command: 'xpp.standardCodeDrift', description: 'wrapped methods' },
+            { label: 'Run Tests', icon: 'beaker', command: 'xpp.runTests', udeOnly: true },
+            { label: 'Verify in the Running App', icon: 'eye', command: 'xpp.verifyInRunningApp', description: 'Copilot' },
+        ],
+    },
     {
         label: 'Deploy', icon: 'cloud-upload', children: [
             { label: 'Create Deployment Package…', icon: 'package', command: 'xpp.tools.createPackage' },
             { label: 'Deploy Models to Online Environment…', icon: 'cloud-upload', command: 'xpp.pac.deploy', description: 'pac', udeOnly: true },
+            { label: 'Synchronize Database', icon: 'database', command: 'xpp.pac.dbSync', description: 'pac', udeOnly: true },
+            { label: 'Synchronize Tables…', icon: 'sync', command: 'xpp.syncTables' },
             { label: 'Initialize Deployment Solution…', icon: 'new-folder', command: 'xpp.pac.init', description: 'pac', udeOnly: true },
         ],
     },
+    { label: '', icon: '', slot: 'data' },
     {
-        label: 'Model Management', icon: 'library', children: [
-            { label: 'Create Model…', icon: 'add', command: 'xpp.tools.createModel' },
-            { label: 'Update Model Parameters…', icon: 'settings', command: 'xpp.tools.updateModel' },
-            { label: 'View Model Dependencies…', icon: 'type-hierarchy', command: 'xpp.tools.modelDependencies' },
-            { label: 'Refresh Models', icon: 'refresh', command: 'xpp.refreshAot' },
-        ],
-    },
-    { label: 'Build Models…', icon: 'tools', command: 'xpp.build' },
-    { label: 'Synchronize Database', icon: 'database', command: 'xpp.pac.dbSync', description: 'pac' },
-    {
-        label: 'Debug', icon: 'debug-alt', children: [
-            { label: 'Launch Debugger', icon: 'debug-start', command: 'xpp.debug.start', udeOnly: true },
-            { label: 'Infolog', icon: 'output', command: 'xpp.infolog.focus' },
+        label: 'Analyze', icon: 'pulse', children: [
+            { label: 'Analyze Performance…', icon: 'dashboard', command: 'xpp.analyzePerformance' },
+            { label: 'Analyze Trace…', icon: 'graph-line', command: 'xpp.analyzeTrace' },
+            { label: 'Telemetry Queries…', icon: 'graph', command: 'xpp.telemetryQueries' },
         ],
     },
     {
-        label: 'Project', icon: 'project', children: [
-            { label: 'Open Project…', icon: 'folder-opened', command: 'xpp.selectProject' },
-            { label: 'Open Recent Project…', icon: 'history', command: 'xpp.openRecentProject' },
-            { label: 'Export Project…', icon: 'export', command: 'xpp.tools.exportProject' },
-            { label: 'Import Project…', icon: 'cloud-download', command: 'xpp.tools.importProject' },
+        label: 'Find', icon: 'search', children: [
+            { label: 'Open Element…', icon: 'search', command: 'xpp.openObject' },
+            { label: 'Find References…', icon: 'references', command: 'xpp.findReferences' },
+            { label: 'Search Code…', icon: 'search-fuzzy', command: 'xpp.searchCode', description: 'all packages' },
+            { label: 'Find Message Source…', icon: 'search', command: 'xpp.findMessageSource', description: 'error text to code' },
+            { label: 'Find Similar Standard Implementations…', icon: 'lightbulb', command: 'xpp.findExamples' },
+            { label: 'Find Tag References…', icon: 'tag', command: 'xpp.tools.findTagReferences' },
         ],
     },
-    { label: 'Find Labels…', icon: 'symbol-string', command: 'xpp.tools.findLabels' },
-    { label: 'Find Tag References…', icon: 'tag', command: 'xpp.tools.findTagReferences' },
-    { label: 'Metadata Search…', icon: 'search', command: 'xpp.openObject' },
-    { label: 'Find References…', icon: 'references', command: 'xpp.findReferences' },
-    { label: 'Search Code…', icon: 'search-fuzzy', command: 'xpp.searchCode', description: 'all packages' },
-    { label: 'Find Message Source…', icon: 'search', command: 'xpp.findMessageSource', description: 'error text to code' },
-    { label: 'Find Similar Standard Implementations…', icon: 'lightbulb', command: 'xpp.findExamples' },
     {
         label: 'Security', icon: 'shield', children: [
             { label: 'Find Security Gaps…', icon: 'checklist', command: 'xpp.security.findGaps' },
@@ -98,20 +120,52 @@ const ToolsMenu: ToolNode[] = [
         ],
     },
     {
-        label: 'View', icon: 'type-hierarchy', children: [
+        label: 'Labels', icon: 'symbol-string', children: [
+            { label: 'Find Labels…', icon: 'search', command: 'xpp.tools.findLabels' },
+            { label: 'Translate Missing Labels…', icon: 'globe', command: 'xpp.translateMissingLabels' },
+            { label: 'Find Unused Labels…', icon: 'trash', command: 'xpp.findUnusedLabels' },
+        ],
+    },
+    {
+        label: 'Model and project', icon: 'project', children: [
+            { label: 'Open Project…', icon: 'folder-opened', command: 'xpp.selectProject' },
+            { label: 'Open Recent Project…', icon: 'history', command: 'xpp.openRecentProject' },
+            { label: 'Open Team Repository…', icon: 'repo-clone', command: 'xpp.openTeamRepository' },
+            { label: 'Show Changed Elements', icon: 'git-compare', command: 'xpp.showChangedElements' },
+            { label: 'Export Project…', icon: 'export', command: 'xpp.tools.exportProject' },
+            { label: 'Import Project…', icon: 'cloud-download', command: 'xpp.tools.importProject' },
+            { label: 'Update Model Parameters…', icon: 'settings', command: 'xpp.tools.updateModel' },
+            { label: 'View Model Dependencies…', icon: 'type-hierarchy', command: 'xpp.tools.modelDependencies' },
+            { label: 'Refresh Models', icon: 'refresh', command: 'xpp.refreshAot' },
+        ],
+    },
+    {
+        label: 'Copilot', icon: 'copilot', children: [
+            { label: 'Start Checkpoint', icon: 'history', command: 'xpp.agent.startCheckpoint', tooltip: 'Every element Copilot changes from now on can be reverted' },
+            { label: 'Revert Copilot Changes…', icon: 'discard', command: 'xpp.agent.revertCheckpoint' },
+            { label: 'Set Copilot Scope…', icon: 'lock', command: 'xpp.agent.setScope', tooltip: 'The elements Copilot may change' },
+            { label: 'Create Team Rules for Copilot', icon: 'law', command: 'xpp.createTeamRules' },
+            { label: 'Copilot Activity', icon: 'pulse', command: 'xpp.activity.focus' },
+        ],
+    },
+    {
+        label: 'Debug', icon: 'debug-alt', children: [
+            { label: 'Launch Debugger', icon: 'debug-start', command: 'xpp.debug.start', udeOnly: true },
+            { label: 'Infolog', icon: 'output', command: 'xpp.infolog.focus' },
+        ],
+    },
+    {
+        label: 'View and run', icon: 'eye', children: [
             { label: 'View Hierarchy…', icon: 'type-hierarchy-sub', command: 'xpp.viewHierarchy' },
             { label: 'View References…', icon: 'references', command: 'xpp.viewReferences' },
             { label: 'Compare Code…', icon: 'diff', command: 'xpp.compare' },
             { label: 'Compare Metadata…', icon: 'diff-multiple', command: 'xpp.compareMetadata' },
-        ],
-    },
-    {
-        label: 'Run', icon: 'play', children: [
             { label: 'Open in Browser…', icon: 'globe', command: 'xpp.openInBrowser' },
             { label: 'Open Table Browser…', icon: 'table', command: 'xpp.openTableBrowser' },
         ],
     },
-    // Environment (EnvironmentStatus) and Code Intelligence are contributed here, before Options.
+    // Contributions without a slot (Code Intelligence) go here, before Options.
+    { label: 'Report a Problem…', icon: 'report', command: 'xpp.reportProblem' },
     { label: 'Options…', icon: 'gear', command: 'xpp.tools.options' },
 ];
 
@@ -128,7 +182,7 @@ export class ToolsTreeProvider implements vscode.TreeDataProvider<ToolNode> {
     getTreeItem(node: ToolNode): vscode.TreeItem {
         const hasChildren = !!node.children || !!node.dynamicChildren;
         const item = new vscode.TreeItem(node.label, hasChildren
-            ? (node.dynamicChildren ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.Expanded)
+            ? (node.expanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed)
             : vscode.TreeItemCollapsibleState.None);
         item.iconPath = new vscode.ThemeIcon(node.icon);
         item.description = node.description;
@@ -146,7 +200,8 @@ export class ToolsTreeProvider implements vscode.TreeDataProvider<ToolNode> {
 
     getChildren(node?: ToolNode): ToolNode[] {
         const nodes = !node
-            ? [...ToolsMenu.slice(0, -1), ...this.contributions.flatMap(c => c.nodes()), ...ToolsMenu.slice(-1)]
+            ? ToolsMenu.flatMap(n => n.slot ? this.contributions.filter(c => c.slot === n.slot).flatMap(c => c.nodes())
+                : n === ToolsMenu[ToolsMenu.length - 1] ? [...this.contributions.filter(c => !c.slot).flatMap(c => c.nodes()), n] : [n])
             : node.dynamicChildren ? node.dynamicChildren() : node.children ?? [];
         return nodes.filter(n => !this.contributions.some(c => c.hides?.(n)));
     }

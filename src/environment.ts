@@ -47,6 +47,11 @@ const changed = new vscode.EventEmitter<void>();
 /** Fires when this window switches to another environment. */
 export const onDidChangeEnvironment = changed.event;
 
+/** The active configuration was rewritten (Connect to Environment): reload everything that shows metadata. */
+export function notifyEnvironmentChanged(): void {
+    changed.fire();
+}
+
 /** Remembers the environment per workspace; the user setting xpp.environmentUrl is the default of every window. */
 export function initEnvironmentSelection(context: vscode.ExtensionContext): void {
     workspaceState = context.workspaceState;

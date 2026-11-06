@@ -1,6 +1,9 @@
 // Data panel: a table's rows (Browse Data) or a SQL query's results. Every value is written with textContent.
 (function () {
     const vscode = acquireVsCodeApi();
+    if (document.body.dataset.xppState) {
+        vscode.setState({ xpp: JSON.parse(document.body.dataset.xppState) });
+    }
     const $ = id => document.getElementById(id);
     const el = (tag, props = {}, children = []) => {
         const node = document.createElement(tag);
@@ -13,7 +16,7 @@
         return node;
     };
 
-    const state = { mode: undefined, shape: undefined, filters: [], company: '', asOf: '', orderBy: '', descending: false, maxRows: 200, canWrite: false, running: false };
+    const state = { mode: undefined, shape: undefined, filters: [], company: '', asOf: '', orderBy: '', descending: false, maxRows: 200, canWrite: false, running: false, relations: [], inspect: null };
     const RowChoices = [100, 200, 500, 1000, 5000];
     const NumericTypes = /^(int|bigint|smallint|tinyint|decimal|numeric|float|real|money)$/i;
 
@@ -155,12 +158,114 @@
             return th;
         }));
         const body = el('tbody');
-        for (const row of set.rows) {
+        set.rows.forEach((row, rowIndex) => {
             const tr = el('tr');
             row.forEach((value, i) => tr.append(renderCell(value, set.columns[i], fields[i])));
+            if (browsing) {
+                tr.tabIndex = 0;
+                tr.dataset.row = String(rowIndex);
+                tr.addEventListener('click', () => inspect(set, rowIndex, fields));
+                tr.addEventListener('keydown', e => {
+                    const next = e.key === 'ArrowDown' ? tr.nextElementSibling : e.key === 'ArrowUp' ? tr.previousElementSibling : null;
+                    if (next) {
+                        e.preventDefault();
+                        next.focus();
+                        next.click();
+                    } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        inspect(set, rowIndex, fields);
+                        $('inspectorFilter')?.focus();
+                    }
+                });
+            }
             body.append(tr);
+        });
+        const grid = el('div', { class: 'grid' }, [el('table', {}, [el('thead', {}, [head]), body])]);
+        if (!browsing) {
+            return el('div', { class: 'set' }, [header, grid]);
         }
-        return el('div', { class: 'set' }, [header, el('div', { class: 'grid' }, [el('table', {}, [el('thead', {}, [head]), body])])]);
+        const inspector = el('aside', { class: 'inspector', id: 'inspector', 'aria-label': 'Selected row' }, [el('div', { class: 'muted', text: 'Select a row to see all of its fields.' })]);
+        return el('div', { class: 'set' }, [header, el('div', { class: 'browse' }, [grid, inspector])]);
+    }
+
+    /** The selected row: every field with its label, enum names and links to related rows. */
+    function inspect(set, rowIndex, fields) {
+        state.inspect = { set, rowIndex, fields };
+        document.querySelectorAll('tr.selected').forEach(r => r.classList.remove('selected'));
+        document.querySelector(`tr[data-row="${rowIndex}"]`)?.classList.add('selected');
+        renderInspector();
+    }
+
+    function renderInspector() {
+        const box = $('inspector');
+        const current = state.inspect;
+        if (!box || !current) { return; }
+        const { set, rowIndex, fields } = current;
+        const row = set.rows[rowIndex];
+        const valueOf = name => {
+            const i = set.columns.findIndex(c => c.name.toLowerCase() === name.toLowerCase());
+            return i < 0 ? undefined : row[i];
+        };
+        const filter = el('input', { type: 'search', id: 'inspectorFilter', placeholder: 'Field', 'aria-label': 'Filter fields', value: current.filter || '' });
+        filter.addEventListener('input', () => { current.filter = filter.value; renderList(); filter.focus(); });
+        const move = delta => {
+            const target = rowIndex + delta;
+            if (target >= 0 && target < set.rows.length) {
+                inspect(set, target, fields);
+                document.querySelector(`tr[data-row="${target}"]`)?.scrollIntoView({ block: 'nearest' });
+            }
+        };
+        const company = valueOf('DATAAREAID');
+        const copyJson = () => {
+            const obj = {};
+            set.columns.forEach((c, i) => { obj[c.name] = row[i]; });
+            send({ type: 'copy', text: JSON.stringify(obj, null, 2) });
+        };
+        const copyWhere = () => {
+            const keys = ['RECID', 'DATAAREAID'].filter(k => valueOf(k) !== undefined && valueOf(k) !== null);
+            send({ type: 'copy', text: `WHERE ${keys.map(k => `${k} = ${sqlText(valueOf(k))}`).join(' AND ')}` });
+        };
+        const list = el('dl', { class: 'fields' });
+        const renderList = () => {
+            list.replaceChildren();
+            const needle = (current.filter || '').toLowerCase();
+            set.columns.forEach((c, i) => {
+                const field = fields[i];
+                if (needle && !c.name.toLowerCase().includes(needle) && !(field?.label || '').toLowerCase().includes(needle)) { return; }
+                const value = row[i];
+                const text = value === null || value === undefined ? 'NULL' : String(value);
+                const enumInfo = field?.enumType ? state.shape.enums[field.enumType] : undefined;
+                const enumName = enumInfo?.values?.[text];
+                const dd = el('dd', {}, [el('span', { class: value === null ? 'null' : undefined, text: enumName !== undefined ? `${text} (${enumName})` : text })]);
+                for (const relation of relationsOf(field ? field.name : c.name)) {
+                    const filters = relation.constraints.map(k => ({ column: k.relatedField, operator: '=', value: String(valueOf(k.field) ?? '') }));
+                    if (filters.some(f => f.value === '' || f.value === '0')) { continue; }
+                    const label = `Open related ${relation.relatedTable} where ${filters.map(f => `${f.column} = ${f.value}`).join(' and ')}`;
+                    dd.append(el('button', { class: 'link', title: label, 'aria-label': label, text: `\u2192 ${relation.relatedTable}`,
+                        on: { click: () => send({ type: 'openRelated', table: relation.relatedTable, filters, company: company || undefined }) } }));
+                }
+                list.append(el('dt', { title: field?.label || undefined, text: c.name }), dd);
+            });
+        };
+        renderList();
+        box.replaceChildren(
+            el('div', { class: 'inspector-bar' }, [
+                el('span', { text: `Row ${rowIndex + 1} of ${set.rows.length}` }),
+                el('span', { class: 'spacer' }),
+                el('button', { title: 'Previous row', 'aria-label': 'Previous row', text: '\u25C0', disabled: rowIndex === 0, on: { click: () => move(-1) } }),
+                el('button', { title: 'Next row', 'aria-label': 'Next row', text: '\u25B6', disabled: rowIndex === set.rows.length - 1, on: { click: () => move(1) } }),
+            ]),
+            filter, list,
+            el('div', { class: 'inspector-actions' }, [
+                el('button', { text: 'Copy as JSON', on: { click: copyJson } }),
+                el('button', { text: 'Copy WHERE clause', on: { click: copyWhere } }),
+            ]));
+    }
+
+    /** Relations that use this field, matched by name. */
+    function relationsOf(fieldName) {
+        const lower = fieldName.toLowerCase();
+        return state.relations.filter(r => r.constraints.some(k => k.field.toLowerCase() === lower));
     }
 
     function renderCell(value, column, field) {
@@ -194,6 +299,11 @@
         switch (msg.type) {
             case 'init':
                 state.mode = msg.mode;
+                if (msg.mode.kind === 'table') {
+                    state.filters = (msg.mode.filters || []).slice();
+                    state.company = msg.mode.company || '';
+                    renderFilters();
+                }
                 $('editor').hidden = msg.mode.kind !== 'query';
                 if (msg.mode.kind === 'query') {
                     $('sql').value = msg.mode.sql || '';
@@ -205,6 +315,10 @@
             case 'shape':
                 state.shape = msg.shape;
                 renderToolbar();
+                break;
+            case 'relations':
+                state.relations = msg.relations || [];
+                renderInspector();
                 break;
             case 'target':
                 state.targetText = msg.text;

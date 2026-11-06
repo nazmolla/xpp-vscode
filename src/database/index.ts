@@ -1,9 +1,10 @@
 import * as vscode from 'vscode';
-import { elementOf, pickElement, TreeArg } from '../d365Tools';
+import { elementOf, pickElement, ToolNode, ToolsContribution, TreeArg } from '../d365Tools';
 import { XppServerClient } from '../serverClient';
 import { DatabaseAccess } from './connection';
 import { CredentialStore } from './credentials';
-import { DataPanel } from './dataPanel';
+import { DataPanel, PanelMode } from './dataPanel';
+import { registerPanelSerializer } from '../webviewState';
 import { DataService } from './dataService';
 import { registerQueryTool } from './queryTool';
 import { openInSsms } from './ssms';
@@ -12,11 +13,12 @@ import { Insights } from './insights';
 type Command = (id: string, handler: (...args: any[]) => unknown) => void;
 
 /** Database access: credentials, the status bar item, Browse Data, the query panel and the agent's query tool. */
-export function registerDatabase(context: vscode.ExtensionContext, command: Command, server: XppServerClient): void {
+export function registerDatabase(context: vscode.ExtensionContext, command: Command, server: XppServerClient): ToolsContribution {
     const access = new DatabaseAccess(new CredentialStore(context.secrets));
     const data = new DataService(server, access);
     context.subscriptions.push(access);
     registerQueryTool(context, access, data);
+    registerPanelSerializer<PanelMode>(context, 'xppData', (panel, mode) => DataPanel.revive(context, server, data, access, panel, mode));
 
     command('xpp.database.requestCredentials', () => access.request());
     command('xpp.database.forgetCredentials', () => access.forget());
@@ -91,4 +93,37 @@ export function registerDatabase(context: vscode.ExtensionContext, command: Comm
             await vscode.commands.executeCommand(pick.command);
         }
     });
+    return new DataTools(access);
+}
+
+/** The Data group of the Dynamics 365 view, with the database access state as its description. */
+class DataTools implements ToolsContribution {
+    private state: string | undefined;
+    private readonly changed = new vscode.EventEmitter<void>();
+    readonly onDidChange = this.changed.event;
+    readonly slot = 'data';
+
+    constructor(private readonly access: DatabaseAccess) {
+        access.onDidChange(() => void this.refresh());
+        void this.refresh();
+    }
+
+    private async refresh(): Promise<void> {
+        const target = await this.access.current().catch(() => undefined);
+        const expires = target?.credentials?.expiresAt;
+        this.state = !target ? 'no access' : !target.credentials ? target.database
+            : `${target.credentials.role}${expires ? ` · until ${new Date(expires).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}`;
+        this.changed.fire();
+    }
+
+    nodes(): ToolNode[] {
+        return [{
+            label: 'Data', icon: 'database', description: this.state, children: [
+                { label: 'Browse Table Data…', icon: 'table', command: 'xpp.database.browseTable' },
+                { label: 'New SQL Query', icon: 'terminal', command: 'xpp.database.newQuery' },
+                { label: 'Performance Insights…', icon: 'dashboard', command: 'xpp.database.insights' },
+                { label: 'Database…', icon: 'key', command: 'xpp.database.menu', description: 'credentials, connection, SSMS' },
+            ],
+        }];
+    }
 }

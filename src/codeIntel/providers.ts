@@ -5,6 +5,7 @@ import { ToolNode, ToolsContribution } from '../d365Tools';
 import { currentObject, declaredType, documentText, Symbol, XppDocumentSelector, XppNavigation } from '../navigation';
 import { XppServerClient } from '../serverClient';
 import { compilerLineToDocumentLine, methodSpans } from '../xppSource';
+import { foldingRanges } from './folding';
 import { formatXpp, reindent } from './formatter';
 import { affects, enabled, Features, setEnabled } from './settings';
 
@@ -85,6 +86,10 @@ export class CodeIntelligence implements vscode.Disposable, ToolsContribution {
         this.disposables.push(
             this.syntax,
             vscode.languages.registerDocumentSymbolProvider(sel, { provideDocumentSymbols: d => this.symbols(d) }),
+            vscode.languages.registerFoldingRangeProvider(sel, {
+                provideFoldingRanges: d => foldingRanges(d.getText().split(/\r?\n/)).map(f => new vscode.FoldingRange(f.start, f.end,
+                    f.kind === 'comment' ? vscode.FoldingRangeKind.Comment : f.kind === 'region' ? vscode.FoldingRangeKind.Region : undefined)),
+            }),
             vscode.languages.registerImplementationProvider(sel, { provideImplementation: (d, p) => this.implementations(d, p) }),
             vscode.languages.registerCallHierarchyProvider(sel, this.callHierarchy()),
             vscode.languages.registerTypeHierarchyProvider(sel, this.typeHierarchy()),
@@ -126,6 +131,7 @@ export class CodeIntelligence implements vscode.Disposable, ToolsContribution {
         }
 
         command('xpp.codeIntel.toggle', (key: string) => setEnabled(key, !enabled(key)));
+        command('xpp.codeIntel.configure', () => this.configure());
         command('xpp.codeIntel.rebuildIndex', () => {
             this.indexRebuilt.fire();
             return this.ensureIndex(true);
@@ -151,16 +157,14 @@ export class CodeIntelligence implements vscode.Disposable, ToolsContribution {
     // ── Dynamics 365 view: Code Intelligence node ──
 
     nodes(): ToolNode[] {
+        const on = Features.filter(f => enabled(f.key)).length;
         return [{
-            label: 'Code Intelligence', icon: 'lightbulb', description: this.building ? 'indexing…' : undefined,
+            label: 'Code Intelligence', icon: 'lightbulb', description: this.building ? 'indexing…' : `${on} of ${Features.length} features on`,
             dynamicChildren: () => [
-                ...Features.map(f => ({
-                    label: f.label, icon: f.slow ? 'watch' : 'symbol-event',
-                    description: f.slow ? 'slow' : undefined,
-                    tooltip: f.description + (f.slow ? '\n\nSlow: costs noticeable time or resources.' : ''),
-                    checked: enabled(f.key),
-                    onToggle: (checked: boolean) => void setEnabled(f.key, checked),
-                })),
+                {
+                    label: 'Configure Code Intelligence…', icon: 'settings-gear', command: 'xpp.codeIntel.configure',
+                    tooltip: Features.map(f => `${enabled(f.key) ? '\u2713' : '\u00b7'} ${f.label}${f.slow ? ' (slow)' : ''}`).join('\n'),
+                },
                 {
                     label: 'Rebuild Extension Index', icon: 'refresh', command: 'xpp.codeIntel.rebuildIndex',
                     description: this.indexStatus, tooltip: 'Chain of Command classes, wrapped methods and event handlers. ' + this.indexStatus,
@@ -170,9 +174,25 @@ export class CodeIntelligence implements vscode.Disposable, ToolsContribution {
         }];
     }
 
+    /** One picker for every feature switch (the xpp.codeIntelligence.* settings). */
+    private async configure(): Promise<void> {
+        const picked = await vscode.window.showQuickPick(Features.map(f => ({
+            label: f.label, description: f.slow ? 'slow' : undefined, detail: f.description, picked: enabled(f.key), key: f.key,
+        })), { title: 'Code intelligence features', canPickMany: true, matchOnDetail: true });
+        if (!picked) {
+            return;
+        }
+        const on = new Set(picked.map(p => p.key));
+        for (const f of Features) {
+            if (enabled(f.key) !== on.has(f.key)) {
+                await setEnabled(f.key, on.has(f.key));
+            }
+        }
+    }
+
     /** Handlers of an event (designer Events node), from the extension index. */
     private async showEventHandlers(query: { path: string; event?: string; includeChildren?: boolean }, title: string): Promise<void> {
-        const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: 'Finding event handlers?' },
+        const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: 'Finding event handlers…' },
             () => this.lang.lang('event_handlers', { ...query, includeChildren: !!query.includeChildren, ...this.scanEvents() }));
         if (!result.success) {
             throw new Error(result.message);

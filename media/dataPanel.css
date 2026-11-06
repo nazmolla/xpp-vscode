@@ -32,3 +32,16 @@ td.null { color: var(--vscode-descriptionForeground); font-style: italic; }
 td.enum .raw { color: var(--vscode-descriptionForeground); margin-left: 4px; }
 tr:hover td { background: var(--vscode-list-hoverBackground); }
 td:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.browse { display: flex; gap: 8px; align-items: stretch; }
+.browse .grid { flex: 1; min-width: 0; }
+.inspector { flex: 0 0 320px; max-height: calc(100vh - 160px); overflow: auto; border: 1px solid var(--vscode-panel-border); padding: 6px; display: flex; flex-direction: column; gap: 6px; }
+.inspector-bar, .inspector-actions { display: flex; gap: 4px; align-items: center; }
+.inspector dl.fields { display: grid; grid-template-columns: max-content 1fr; gap: 2px 8px; margin: 0; }
+.inspector dt { color: var(--vscode-descriptionForeground); }
+.inspector dd { margin: 0; overflow-wrap: anywhere; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.inspector dd .null { color: var(--vscode-descriptionForeground); font-style: italic; }
+button.link { background: transparent; color: var(--vscode-textLink-foreground); padding: 0 2px; }
+button.link:hover { text-decoration: underline; background: transparent; }
+tr.selected td { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
+tr:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.muted { color: var(--vscode-descriptionForeground); }

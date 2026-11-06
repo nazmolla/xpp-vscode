@@ -12,6 +12,7 @@ const out = path.join(__dirname, '..', 'out', 'scaffolding');
 const { reportElements } = require(path.join(out, 'report.js'));
 const { workflowElements, workflowTableChanges } = require(path.join(out, 'workflow.js'));
 const { serviceElements } = require(path.join(out, 'service.js'));
+const { businessEventElements, numberSequenceElements, featureElements } = require(path.join(out, 'lifecycle.js'));
 
 const [exe, config, model] = process.argv.slice(2);
 const child = spawn(exe, ['--config', config], { windowsHide: true });
@@ -65,6 +66,17 @@ setTimeout(() => { console.log('TIMEOUT'); child.kill(); process.exit(1); }, 30 
 
         for (const element of serviceElements('XvsScafSvc', 'Scaffold service')) {
             await create(element, 'service');
+        }
+
+        const docFields = (await bridge('get_table_fields', { tableName: 'XvsScafDoc' })).fields.filter(f => f.name === 'Name');
+        for (const element of businessEventElements({ base: 'XvsScafBE', label: 'Scaffold event', description: 'Sent in the scaffold test.', table: 'XvsScafDoc', fields: docFields, module: 'Customer', trigger: 'insert' })) {
+            await create(element, 'business event');
+        }
+        for (const element of numberSequenceElements({ edt: 'XvsScafNumId', label: 'Scaffold number', moduleClass: 'NumberSeqModuleCustomer', parametersTable: 'CustParameters', prefix: 'XvsScaf' })) {
+            await create(element, 'number sequence');
+        }
+        for (const element of featureElements({ name: 'XvsScafFeature', label: 'Scaffold feature', summary: 'Used by the scaffold test.', module: 'AccountsReceivable', enabledByDefault: false })) {
+            await create(element, 'feature');
         }
 
         const build = await bridge('build', { modelName: model });

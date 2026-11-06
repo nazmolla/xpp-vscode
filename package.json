@@ -1,8 +1,8 @@
 {
   "name": "xpp-vscode",
   "displayName": "F&O Studio for VS Code",
-  "description": "A full Dynamics 365 Finance & Operations development environment in VS Code: Application Explorer, designers, X++ code, build, deploy, debugging, and AI agent tools.",
-  "version": "0.12.1",
+  "description": "Dynamics 365 Finance & Operations X++ development without Visual Studio: Application Explorer, designers, X++ code intelligence, build, deploy, debugging, data, performance and trace analysis, and Copilot agent tools on the real metadata API.",
+  "version": "0.13.0",
   "publisher": "MNazmi",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -34,12 +34,18 @@
   ],
   "keywords": [
     "Dynamics 365",
+    "D365",
+    "D365FO",
     "Finance and Operations",
     "F&O",
     "X++",
-    "D365FO",
+    "xpp",
+    "Dynamics AX",
     "ERP",
-    "MCP"
+    "Chain of Command",
+    "unified developer environment",
+    "MCP",
+    "Copilot"
   ],
   "os": [
     "win32"
@@ -192,12 +198,23 @@
       {
         "language": "xpp",
         "path": "./snippets/xpp.json"
+      },
+      {
+        "language": "kusto",
+        "path": "./snippets/kusto.json"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
           "id": "xpp",
+          "title": "F&O Studio",
+          "icon": "media/icon-activitybar.svg"
+        }
+      ],
+      "panel": [
+        {
+          "id": "xppPanel",
           "title": "F&O Studio",
           "icon": "media/icon-activitybar.svg"
         }
@@ -221,6 +238,12 @@
         {
           "id": "xpp.tools",
           "name": "Dynamics 365"
+        }
+      ],
+      "xppPanel": [
+        {
+          "id": "xpp.results",
+          "name": "Results"
         },
         {
           "id": "xpp.infolog",
@@ -228,8 +251,7 @@
         },
         {
           "id": "xpp.activity",
-          "name": "Copilot Activity",
-          "visibility": "collapsed"
+          "name": "Copilot Activity"
         }
       ]
     },
@@ -283,8 +305,7 @@
             "title": "Connect to your environment",
             "description": "A unified developer environment needs its metadata and cross-reference database on this machine; F&O Studio downloads and configures them the way Visual Studio does. On a cloud-hosted or VHD environment there is nothing to do.\n[Connect to Environment](command:xpp.connectEnvironment)\n[Select an Environment](command:xpp.selectEnvironment)",
             "media": {
-              "image": "media/icon.png",
-              "altText": "F&O Studio"
+              "markdown": "media/walkthrough/connect.md"
             },
             "completionEvents": [
               "onCommand:xpp.connectEnvironment",
@@ -296,8 +317,7 @@
             "title": "Open or create a D365FO project",
             "description": "Projects (.rnrproj) are shared with Visual Studio. The project's model is where new elements go.\n[Open Project](command:xpp.selectProject)\n[Create Project](command:xpp.createProject)",
             "media": {
-              "image": "media/icon.png",
-              "altText": "F&O Studio"
+              "markdown": "media/walkthrough/project.md"
             },
             "completionEvents": [
               "onCommand:xpp.selectProject",
@@ -310,8 +330,8 @@
             "title": "Find an element",
             "description": "The Application Explorer lists every model's elements. Open one by name, or browse by type or model.\n[Open Element](command:xpp.openObject)",
             "media": {
-              "image": "media/icon.png",
-              "altText": "F&O Studio"
+              "image": "media/walkthrough/explore.png",
+              "altText": "The Application Explorer: element types grouped by category, with the tables and extended data types of each model."
             },
             "completionEvents": [
               "onCommand:xpp.openObject",
@@ -323,8 +343,7 @@
             "title": "Build your project",
             "description": "Builds with the same compiler as Visual Studio; errors and warnings go to the Problems view.\n[Build Project](command:xpp.buildProject)",
             "media": {
-              "image": "media/icon.png",
-              "altText": "F&O Studio"
+              "markdown": "media/walkthrough/build.md"
             },
             "completionEvents": [
               "onCommand:xpp.buildProject",
@@ -336,8 +355,7 @@
             "title": "Look at the data",
             "description": "Browse a table's rows with enum names and a company filter, or run a read-only SQL query. A unified environment's database needs temporary credentials, which F&O Studio requests for you.\n[Browse Table Data](command:xpp.database.browseTable)\n[New SQL Query](command:xpp.database.newQuery)",
             "media": {
-              "image": "media/icon.png",
-              "altText": "F&O Studio"
+              "markdown": "media/walkthrough/data.md"
             },
             "completionEvents": [
               "onCommand:xpp.database.browseTable",
@@ -371,15 +389,81 @@
       {
         "view": "xpp.project",
         "when": "xpp.hasProject",
-        "contents": "The project has no objects yet. Add objects with Add to Project in the Application Explorer or create them with the agent tools. To switch projects, use Open, Open Recent or Create D365FO Project in this view's title bar."
+        "contents": "The project has no elements yet.\n[New Element](command:xpp.newElement)\nOr add existing elements with Add to Project in the Application Explorer, or ask Copilot to create them."
+      },
+      {
+        "view": "xpp.results",
+        "contents": "Checks of your code appear here, with findings you can click.\n[Review My Changes](command:xpp.reviewChanges)\n[Pre-Deploy Checklist](command:xpp.preDeployChecklist)\n[Upgrade Readiness](command:xpp.upgradeReadiness)"
+      },
+      {
+        "view": "xpp.infolog",
+        "contents": "Messages (info, warnings, errors) from the code you debug appear here, as in Visual Studio's Infolog window.\n[Launch Debugger](command:xpp.debug.start)"
+      },
+      {
+        "view": "xpp.activity",
+        "contents": "The F&O Studio tools Copilot calls, and the elements it creates or changes, appear here.\n[Open Chat](command:workbench.action.chat.open)"
       }
     ],
     "commands": [
       {
         "command": "xpp.openObject",
-        "title": "Open Object…",
+        "title": "Open Element…",
         "category": "F&O Studio",
         "icon": "$(search)"
+      },
+      {
+        "command": "xpp.newElement",
+        "title": "New Element…",
+        "category": "F&O Studio",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xpp.results.rerun",
+        "title": "Run Again",
+        "category": "F&O Studio",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "xpp.results.copy",
+        "title": "Copy Report as Markdown",
+        "category": "F&O Studio",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "xpp.results.export",
+        "title": "Export Report…",
+        "category": "F&O Studio",
+        "icon": "$(save)"
+      },
+      {
+        "command": "xpp.results.clear",
+        "title": "Clear Results",
+        "category": "F&O Studio",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "xpp.designer.viewCode",
+        "title": "View Code",
+        "category": "F&O Studio",
+        "icon": "$(code)"
+      },
+      {
+        "command": "xpp.designer.formLayout",
+        "title": "Form Layout",
+        "category": "F&O Studio",
+        "icon": "$(layout)"
+      },
+      {
+        "command": "xpp.designer.refresh",
+        "title": "Refresh Designer",
+        "category": "F&O Studio",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "xpp.designer.createExtension",
+        "title": "Create Extension",
+        "category": "F&O Studio",
+        "icon": "$(extensions)"
       },
       {
         "command": "xpp.openDesigner",
@@ -681,7 +765,7 @@
       },
       {
         "command": "xpp.upgradeReadiness",
-        "title": "Upgrade Readiness (Obsolete API Uses)",
+        "title": "Upgrade Readiness",
         "category": "F&O Studio"
       },
       {
@@ -825,298 +909,116 @@
         "category": "F&O Studio"
       },
       {
-        "command": "xpp.goTo.ExtendedDataType",
-        "title": "Go to Extended Data Type",
+        "command": "xpp.goTo.referenced",
+        "title": "Go to Referenced Element…",
         "category": "F&O Studio"
       },
       {
-        "command": "xpp.goTo.EnumType",
-        "title": "Go to Enum",
+        "command": "xpp.cleanUpOldVersions",
+        "title": "Clean Up Old Application Versions…",
         "category": "F&O Studio"
       },
       {
-        "command": "xpp.goTo.BaseEdt",
-        "title": "Go to Base Extended Data Type",
+        "command": "xpp.checkVersion",
+        "title": "Check Environment Application Version",
         "category": "F&O Studio"
       },
       {
-        "command": "xpp.goTo.BaseTable",
-        "title": "Go to Base Table",
+        "command": "xpp.openTeamRepository",
+        "title": "Open Team Repository…",
+        "category": "F&O Studio",
+        "icon": "$(repo-clone)"
+      },
+      {
+        "command": "xpp.verifyInRunningApp",
+        "title": "Verify Changes in the Running App (Copilot)",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.standardCodeDrift",
+        "title": "Standard Code Drift of Wrapped Methods…",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.agent.startCheckpoint",
+        "title": "Start Copilot Checkpoint",
+        "category": "F&O Studio",
+        "icon": "$(history)"
+      },
+      {
+        "command": "xpp.agent.revertCheckpoint",
+        "title": "Revert Copilot Changes Since the Checkpoint…",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.agent.endCheckpoint",
+        "title": "End Copilot Checkpoint (Keep Changes)",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.agent.checkpointMenu",
+        "title": "Copilot Checkpoint…",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.agent.setScope",
+        "title": "Set Copilot Scope…",
+        "category": "F&O Studio",
+        "icon": "$(lock)"
+      },
+      {
+        "command": "xpp.tryEntity",
+        "title": "Try Data Entity (OData)…",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.tryService",
+        "title": "Try Service Operation…",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.newBusinessEvent",
+        "title": "New Business Event…",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.addNumberSequence",
+        "title": "Add Number Sequence…",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.newFeature",
+        "title": "New Feature (Feature Management)…",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.showFeatureUsage",
+        "title": "Show Feature Usage",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.generateAtlTests",
+        "title": "Generate SysTest Class with Test Data (ATL)",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.reportProblem",
+        "title": "Report a Problem…",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.environment.menu",
+        "title": "Environment…",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.codeIntel.configure",
+        "title": "Configure Code Intelligence…",
         "category": "F&O Studio"
       },
       {
         "command": "xpp.goTo.BaseObject",
         "title": "Go to Base Object",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.Table",
-        "title": "Go to Table",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.RelatedTable",
-        "title": "Go to Related Table",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.ReferenceTable",
-        "title": "Go to Reference Table",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.MappingTable",
-        "title": "Go to Mapping Table",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.PrimaryTable",
-        "title": "Go to Primary Table",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.StagingTable",
-        "title": "Go to Staging Table",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.MenuItem",
-        "title": "Go to Menu Item",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.Form",
-        "title": "Go to Form",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.Class",
-        "title": "Go to Class",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.Report",
-        "title": "Go to Report",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.Query",
-        "title": "Go to Query",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.Part",
-        "title": "Go to Part",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.Document",
-        "title": "Go to Document Class",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.DocumentMenuItem",
-        "title": "Go to Document Menu Item",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.ActionMenuItem",
-        "title": "Go to Action Menu Item",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.SubmitToWorkflowMenuItem",
-        "title": "Go to Submit Menu Item",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.ResubmitMenuItem",
-        "title": "Go to Resubmit Menu Item",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.DelegateMenuItem",
-        "title": "Go to Delegate Menu Item",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.CancelMenuItem",
-        "title": "Go to Cancel Menu Item",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.FormRef",
-        "title": "Go to Form Ref Menu Item",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.ListPageRef",
-        "title": "Go to List Page Ref Menu Item",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.ReportRef",
-        "title": "Go to Report Ref Menu Item",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.PreviewPartRef",
-        "title": "Go to Preview Part Menu Item",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.HyperLinkMenuItem",
-        "title": "Go to Hyperlink Menu Item",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.SourceEDT",
-        "title": "Go to Source Extended Data Type",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.EnumTypeParameter",
-        "title": "Go to Enum Type Parameter",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.Privilege",
-        "title": "Go to Privilege",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.Duty",
-        "title": "Go to Duty",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.Role",
-        "title": "Go to Role",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.DataEntity",
-        "title": "Go to Data Entity",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.Service",
-        "title": "Go to Service",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.Menu",
-        "title": "Go to Menu",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.Tile",
-        "title": "Go to Tile",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.KPI",
-        "title": "Go to KPI",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.WorkflowElement",
-        "title": "Go to Workflow Element",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.WorkflowType",
-        "title": "Go to Workflow Type",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.WorkflowCategory",
-        "title": "Go to Workflow Category",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.ProviderClass",
-        "title": "Go to Provider Class",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.PresenceClass",
-        "title": "Go to Presence Class",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.ControlClass",
-        "title": "Go to Control Class",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.InteractionClass",
-        "title": "Go to Interaction Class",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.FeatureClass",
-        "title": "Go to Feature Class",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.StartedEventHandler",
-        "title": "Go to Started Event Handler",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.CompletedEventHandler",
-        "title": "Go to Completed Event Handler",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.CanceledEventHandler",
-        "title": "Go to Canceled Event Handler",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.WorkItemsCreatedEventHandler",
-        "title": "Go to Work Items Created Event Handler",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.ConfigDataChangeEventHandler",
-        "title": "Go to Config Data Change Event Handler",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.ExecutionEventHandler",
-        "title": "Go to Execution Event Handler",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.EventHandler",
-        "title": "Go to Event Handler",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.ConfigurationKey",
-        "title": "Go to Configuration Key",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.CountryConfigurationKey",
-        "title": "Go to Country Configuration Key",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.ParentKey",
-        "title": "Go to Parent Configuration Key",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.LicenseCode",
-        "title": "Go to License Code",
-        "category": "F&O Studio"
-      },
-      {
-        "command": "xpp.goTo.Label",
-        "title": "Go to Label",
         "category": "F&O Studio"
       },
       {
@@ -1168,7 +1070,7 @@
       },
       {
         "command": "xpp.createProject",
-        "title": "Create D365FO Project?",
+        "title": "Create D365FO Project…",
         "category": "F&O Studio",
         "icon": "$(new-folder)"
       },
@@ -1221,7 +1123,7 @@
       },
       {
         "command": "xpp.codeIntel.showExtensions",
-        "title": "Show Extensions and Handlers?",
+        "title": "Show Extensions and Handlers…",
         "category": "F&O Studio",
         "icon": "$(extensions)"
       },
@@ -1319,6 +1221,16 @@
         "icon": "$(edit)"
       }
     ],
+    "submenus": [
+      {
+        "id": "xpp.project.projectMenu",
+        "label": "Project"
+      },
+      {
+        "id": "xpp.project.checkMenu",
+        "label": "Check"
+      }
+    ],
     "menus": {
       "explorer/context": [
         {
@@ -1327,21 +1239,63 @@
           "group": "navigation@20"
         }
       ],
-      "view/title": [
+      "xpp.project.projectMenu": [
+        {
+          "command": "xpp.selectProject",
+          "group": "1_open@1"
+        },
+        {
+          "command": "xpp.openRecentProject",
+          "group": "1_open@2"
+        },
+        {
+          "command": "xpp.createProject",
+          "group": "1_open@3"
+        },
+        {
+          "command": "xpp.closeProject",
+          "group": "2_close@1"
+        }
+      ],
+      "xpp.project.checkMenu": [
         {
           "command": "xpp.bestPractice",
-          "when": "view == xpp.project && xpp.hasProject",
-          "group": "3_check@1"
+          "group": "1_check@1"
         },
         {
           "command": "xpp.reviewChanges",
-          "when": "view == xpp.project && xpp.hasProject",
-          "group": "3_check@2"
+          "group": "1_check@2"
         },
         {
           "command": "xpp.preDeployChecklist",
-          "when": "view == xpp.project && xpp.hasProject",
-          "group": "3_check@3"
+          "group": "1_check@3"
+        },
+        {
+          "command": "xpp.runTests",
+          "when": "!xpp.localEnvironment",
+          "group": "2_test@1"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "xpp.results.rerun",
+          "when": "view == xpp.results && xpp.results.canRerun",
+          "group": "navigation@1"
+        },
+        {
+          "command": "xpp.results.copy",
+          "when": "view == xpp.results && xpp.results.hasRun",
+          "group": "navigation@2"
+        },
+        {
+          "command": "xpp.results.export",
+          "when": "view == xpp.results && xpp.results.hasRun",
+          "group": "navigation@3"
+        },
+        {
+          "command": "xpp.results.clear",
+          "when": "view == xpp.results && xpp.results.hasRun",
+          "group": "navigation@4"
         },
         {
           "command": "xpp.infolog.filter",
@@ -1409,49 +1363,49 @@
           "group": "navigation@4"
         },
         {
-          "command": "xpp.openObject",
-          "when": "view == xpp.project",
+          "command": "xpp.newElement",
+          "when": "view == xpp.project && xpp.hasProject",
           "group": "navigation@1"
         },
         {
-          "command": "xpp.build",
-          "when": "view == xpp.project",
-          "group": "navigation@2"
-        },
-        {
           "command": "xpp.buildProject",
-          "when": "view == xpp.project",
+          "when": "view == xpp.project && xpp.hasProject",
           "group": "navigation@2"
         },
         {
-          "command": "xpp.runTests",
-          "when": "view == xpp.project && !xpp.localEnvironment",
-          "group": "navigation@3"
-        },
-        {
-          "command": "xpp.refreshProject",
+          "command": "xpp.openObject",
           "when": "view == xpp.project",
           "group": "navigation@3"
         },
         {
           "command": "xpp.selectProject",
-          "when": "view == xpp.project",
+          "when": "view == xpp.project && !xpp.hasProject",
           "group": "navigation@4"
-        },
-        {
-          "command": "xpp.openRecentProject",
-          "when": "view == xpp.project",
-          "group": "navigation@4"
-        },
-        {
-          "command": "xpp.closeProject",
-          "when": "view == xpp.project && xpp.hasProject",
-          "group": "navigation@6"
         },
         {
           "command": "xpp.createProject",
-          "when": "view == xpp.project",
+          "when": "view == xpp.project && !xpp.hasProject",
           "group": "navigation@5"
+        },
+        {
+          "submenu": "xpp.project.projectMenu",
+          "when": "view == xpp.project && xpp.hasProject",
+          "group": "1_project@1"
+        },
+        {
+          "submenu": "xpp.project.checkMenu",
+          "when": "view == xpp.project && xpp.hasProject",
+          "group": "1_project@2"
+        },
+        {
+          "command": "xpp.build",
+          "when": "view == xpp.project",
+          "group": "2_build@1"
+        },
+        {
+          "command": "xpp.refreshProject",
+          "when": "view == xpp.project",
+          "group": "3_view@1"
         },
         {
           "command": "xpp.security.filter",
@@ -1541,6 +1495,16 @@
           "group": "navigation@6"
         },
         {
+          "command": "xpp.newElement",
+          "when": "view == xpp.project && viewItem == xppProjectFolder",
+          "group": "inline"
+        },
+        {
+          "command": "xpp.newElement",
+          "when": "view == xpp.project && viewItem == xppProjectFolder",
+          "group": "navigation@1"
+        },
+        {
           "command": "xpp.duplicateObject",
           "when": "(view == xpp.project || view == xpp.aot) && viewItem =~ /xppElement/",
           "group": "2_project@2"
@@ -1627,8 +1591,28 @@
         },
         {
           "command": "xpp.analyzePerformance",
-          "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\b(class|table|form)\\b/",
+          "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\b(class|table|form|entity)\\b/",
           "group": "4_refs@6"
+        },
+        {
+          "command": "xpp.tryEntity",
+          "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\bentity\\b/",
+          "group": "5_run@5"
+        },
+        {
+          "command": "xpp.tryService",
+          "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\bservice\\b/",
+          "group": "5_run@5"
+        },
+        {
+          "command": "xpp.showFeatureUsage",
+          "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\bclass\\b/",
+          "group": "4_refs@9"
+        },
+        {
+          "command": "xpp.standardCodeDrift",
+          "when": "view == xpp.aot && viewItem == 'xppModel custom'",
+          "group": "4_refs@2"
         },
         {
           "command": "xpp.telemetryQueries",
@@ -1691,6 +1675,11 @@
           "group": "5_run@4"
         },
         {
+          "command": "xpp.generateAtlTests",
+          "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\bclass\\b/",
+          "group": "5_run@4"
+        },
+        {
           "command": "xpp.openDesigner",
           "when": "view == xpp.security && viewItem =~ /^xppSec (role|duty|privilege|access)$/",
           "group": "navigation@1"
@@ -1743,299 +1732,9 @@
       ],
       "webview/context": [
         {
-          "command": "xpp.goTo.ExtendedDataType",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_ExtendedDataType",
+          "command": "xpp.goTo.referenced",
+          "when": "webviewId == 'xppElementDesigner' && xppRefCount",
           "group": "0_goto@1"
-        },
-        {
-          "command": "xpp.goTo.EnumType",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_EnumType",
-          "group": "0_goto@2"
-        },
-        {
-          "command": "xpp.goTo.BaseEdt",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_BaseEdt",
-          "group": "0_goto@3"
-        },
-        {
-          "command": "xpp.goTo.BaseTable",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_BaseTable",
-          "group": "0_goto@4"
-        },
-        {
-          "command": "xpp.goTo.BaseObject",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_BaseObject",
-          "group": "0_goto@5"
-        },
-        {
-          "command": "xpp.goTo.Table",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_Table",
-          "group": "0_goto@6"
-        },
-        {
-          "command": "xpp.goTo.RelatedTable",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_RelatedTable",
-          "group": "0_goto@7"
-        },
-        {
-          "command": "xpp.goTo.ReferenceTable",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_ReferenceTable",
-          "group": "0_goto@8"
-        },
-        {
-          "command": "xpp.goTo.MappingTable",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_MappingTable",
-          "group": "0_goto@9"
-        },
-        {
-          "command": "xpp.goTo.PrimaryTable",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_PrimaryTable",
-          "group": "0_goto@10"
-        },
-        {
-          "command": "xpp.goTo.StagingTable",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_StagingTable",
-          "group": "0_goto@11"
-        },
-        {
-          "command": "xpp.goTo.MenuItem",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_MenuItem",
-          "group": "0_goto@12"
-        },
-        {
-          "command": "xpp.goTo.Form",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_Form",
-          "group": "0_goto@13"
-        },
-        {
-          "command": "xpp.goTo.Class",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_Class",
-          "group": "0_goto@14"
-        },
-        {
-          "command": "xpp.goTo.Report",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_Report",
-          "group": "0_goto@15"
-        },
-        {
-          "command": "xpp.goTo.Query",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_Query",
-          "group": "0_goto@16"
-        },
-        {
-          "command": "xpp.goTo.Part",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_Part",
-          "group": "0_goto@17"
-        },
-        {
-          "command": "xpp.goTo.Document",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_Document",
-          "group": "0_goto@18"
-        },
-        {
-          "command": "xpp.goTo.DocumentMenuItem",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_DocumentMenuItem",
-          "group": "0_goto@19"
-        },
-        {
-          "command": "xpp.goTo.ActionMenuItem",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_ActionMenuItem",
-          "group": "0_goto@20"
-        },
-        {
-          "command": "xpp.goTo.SubmitToWorkflowMenuItem",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_SubmitToWorkflowMenuItem",
-          "group": "0_goto@21"
-        },
-        {
-          "command": "xpp.goTo.ResubmitMenuItem",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_ResubmitMenuItem",
-          "group": "0_goto@22"
-        },
-        {
-          "command": "xpp.goTo.DelegateMenuItem",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_DelegateMenuItem",
-          "group": "0_goto@23"
-        },
-        {
-          "command": "xpp.goTo.CancelMenuItem",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_CancelMenuItem",
-          "group": "0_goto@24"
-        },
-        {
-          "command": "xpp.goTo.FormRef",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_FormRef",
-          "group": "0_goto@25"
-        },
-        {
-          "command": "xpp.goTo.ListPageRef",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_ListPageRef",
-          "group": "0_goto@26"
-        },
-        {
-          "command": "xpp.goTo.ReportRef",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_ReportRef",
-          "group": "0_goto@27"
-        },
-        {
-          "command": "xpp.goTo.PreviewPartRef",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_PreviewPartRef",
-          "group": "0_goto@28"
-        },
-        {
-          "command": "xpp.goTo.HyperLinkMenuItem",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_HyperLinkMenuItem",
-          "group": "0_goto@29"
-        },
-        {
-          "command": "xpp.goTo.SourceEDT",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_SourceEDT",
-          "group": "0_goto@30"
-        },
-        {
-          "command": "xpp.goTo.EnumTypeParameter",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_EnumTypeParameter",
-          "group": "0_goto@31"
-        },
-        {
-          "command": "xpp.goTo.Privilege",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_Privilege",
-          "group": "0_goto@32"
-        },
-        {
-          "command": "xpp.goTo.Duty",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_Duty",
-          "group": "0_goto@33"
-        },
-        {
-          "command": "xpp.goTo.Role",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_Role",
-          "group": "0_goto@34"
-        },
-        {
-          "command": "xpp.goTo.DataEntity",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_DataEntity",
-          "group": "0_goto@35"
-        },
-        {
-          "command": "xpp.goTo.Service",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_Service",
-          "group": "0_goto@36"
-        },
-        {
-          "command": "xpp.goTo.Menu",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_Menu",
-          "group": "0_goto@37"
-        },
-        {
-          "command": "xpp.goTo.Tile",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_Tile",
-          "group": "0_goto@38"
-        },
-        {
-          "command": "xpp.goTo.KPI",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_KPI",
-          "group": "0_goto@39"
-        },
-        {
-          "command": "xpp.goTo.WorkflowElement",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_WorkflowElement",
-          "group": "0_goto@40"
-        },
-        {
-          "command": "xpp.goTo.WorkflowType",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_WorkflowType",
-          "group": "0_goto@41"
-        },
-        {
-          "command": "xpp.goTo.WorkflowCategory",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_WorkflowCategory",
-          "group": "0_goto@42"
-        },
-        {
-          "command": "xpp.goTo.ProviderClass",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_ProviderClass",
-          "group": "0_goto@43"
-        },
-        {
-          "command": "xpp.goTo.PresenceClass",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_PresenceClass",
-          "group": "0_goto@44"
-        },
-        {
-          "command": "xpp.goTo.ControlClass",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_ControlClass",
-          "group": "0_goto@45"
-        },
-        {
-          "command": "xpp.goTo.InteractionClass",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_InteractionClass",
-          "group": "0_goto@46"
-        },
-        {
-          "command": "xpp.goTo.FeatureClass",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_FeatureClass",
-          "group": "0_goto@47"
-        },
-        {
-          "command": "xpp.goTo.StartedEventHandler",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_StartedEventHandler",
-          "group": "0_goto@48"
-        },
-        {
-          "command": "xpp.goTo.CompletedEventHandler",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_CompletedEventHandler",
-          "group": "0_goto@49"
-        },
-        {
-          "command": "xpp.goTo.CanceledEventHandler",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_CanceledEventHandler",
-          "group": "0_goto@50"
-        },
-        {
-          "command": "xpp.goTo.WorkItemsCreatedEventHandler",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_WorkItemsCreatedEventHandler",
-          "group": "0_goto@51"
-        },
-        {
-          "command": "xpp.goTo.ConfigDataChangeEventHandler",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_ConfigDataChangeEventHandler",
-          "group": "0_goto@52"
-        },
-        {
-          "command": "xpp.goTo.ExecutionEventHandler",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_ExecutionEventHandler",
-          "group": "0_goto@53"
-        },
-        {
-          "command": "xpp.goTo.EventHandler",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_EventHandler",
-          "group": "0_goto@54"
-        },
-        {
-          "command": "xpp.goTo.ConfigurationKey",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_ConfigurationKey",
-          "group": "0_goto@55"
-        },
-        {
-          "command": "xpp.goTo.CountryConfigurationKey",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_CountryConfigurationKey",
-          "group": "0_goto@56"
-        },
-        {
-          "command": "xpp.goTo.ParentKey",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_ParentKey",
-          "group": "0_goto@57"
-        },
-        {
-          "command": "xpp.goTo.LicenseCode",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_LicenseCode",
-          "group": "0_goto@58"
-        },
-        {
-          "command": "xpp.goTo.Label",
-          "when": "webviewId == 'xppElementDesigner' && xppRef_Label",
-          "group": "0_goto@59"
         },
         {
           "command": "xpp.findReferences",
@@ -2245,6 +1944,38 @@
       ],
       "commandPalette": [
         {
+          "command": "xpp.results.rerun",
+          "when": "xpp.results.canRerun"
+        },
+        {
+          "command": "xpp.results.copy",
+          "when": "xpp.results.hasRun"
+        },
+        {
+          "command": "xpp.results.export",
+          "when": "xpp.results.hasRun"
+        },
+        {
+          "command": "xpp.results.clear",
+          "when": "xpp.results.hasRun"
+        },
+        {
+          "command": "xpp.designer.viewCode",
+          "when": "activeWebviewPanelId == xppElementDesigner && xpp.designer.hasCode"
+        },
+        {
+          "command": "xpp.designer.formLayout",
+          "when": "activeWebviewPanelId == xppElementDesigner && xpp.designer.isForm"
+        },
+        {
+          "command": "xpp.designer.refresh",
+          "when": "activeWebviewPanelId == xppElementDesigner"
+        },
+        {
+          "command": "xpp.designer.createExtension",
+          "when": "activeWebviewPanelId == xppElementDesigner && xpp.designer.canExtend"
+        },
+        {
           "command": "xpp.database.menu",
           "when": "false"
         },
@@ -2361,239 +2092,31 @@
           "when": "false"
         },
         {
-          "command": "xpp.goTo.ExtendedDataType",
+          "command": "xpp.goTo.referenced",
           "when": "false"
         },
         {
-          "command": "xpp.goTo.EnumType",
+          "command": "xpp.agent.checkpointMenu",
           "when": "false"
         },
         {
-          "command": "xpp.goTo.BaseEdt",
+          "command": "xpp.tryEntity",
           "when": "false"
         },
         {
-          "command": "xpp.goTo.BaseTable",
+          "command": "xpp.tryService",
           "when": "false"
+        },
+        {
+          "command": "xpp.cleanUpOldVersions",
+          "when": "!xpp.localEnvironment"
+        },
+        {
+          "command": "xpp.checkVersion",
+          "when": "!xpp.localEnvironment"
         },
         {
           "command": "xpp.goTo.BaseObject",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.Table",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.RelatedTable",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.ReferenceTable",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.MappingTable",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.PrimaryTable",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.StagingTable",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.MenuItem",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.Form",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.Class",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.Report",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.Query",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.Part",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.Document",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.DocumentMenuItem",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.ActionMenuItem",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.SubmitToWorkflowMenuItem",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.ResubmitMenuItem",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.DelegateMenuItem",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.CancelMenuItem",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.FormRef",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.ListPageRef",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.ReportRef",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.PreviewPartRef",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.HyperLinkMenuItem",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.SourceEDT",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.EnumTypeParameter",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.Privilege",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.Duty",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.Role",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.DataEntity",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.Service",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.Menu",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.Tile",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.KPI",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.WorkflowElement",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.WorkflowType",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.WorkflowCategory",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.ProviderClass",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.PresenceClass",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.ControlClass",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.InteractionClass",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.FeatureClass",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.StartedEventHandler",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.CompletedEventHandler",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.CanceledEventHandler",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.WorkItemsCreatedEventHandler",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.ConfigDataChangeEventHandler",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.ExecutionEventHandler",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.EventHandler",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.ConfigurationKey",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.CountryConfigurationKey",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.ParentKey",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.LicenseCode",
-          "when": "false"
-        },
-        {
-          "command": "xpp.goTo.Label",
           "when": "false"
         },
         {
@@ -2622,6 +2145,26 @@
         }
       ],
       "editor/title": [
+        {
+          "command": "xpp.designer.createExtension",
+          "when": "activeWebviewPanelId == xppElementDesigner && xpp.designer.canExtend",
+          "group": "navigation@1"
+        },
+        {
+          "command": "xpp.designer.viewCode",
+          "when": "activeWebviewPanelId == xppElementDesigner && xpp.designer.hasCode",
+          "group": "navigation@2"
+        },
+        {
+          "command": "xpp.designer.formLayout",
+          "when": "activeWebviewPanelId == xppElementDesigner && xpp.designer.isForm",
+          "group": "navigation@3"
+        },
+        {
+          "command": "xpp.designer.refresh",
+          "when": "activeWebviewPanelId == xppElementDesigner",
+          "group": "navigation@4"
+        },
         {
           "command": "xpp.runSnippet",
           "when": "editorLangId == xpp && resourceScheme == untitled",
@@ -2657,7 +2200,7 @@
         "key": "ctrl+alt+o"
       },
       {
-        "command": "xpp.build",
+        "command": "xpp.buildProject",
         "key": "ctrl+shift+b",
         "when": "resourceScheme == xpp || resourceExtname == .rnrproj"
       },
@@ -2668,7 +2211,7 @@
       }
     ],
     "configuration": {
-      "title": "X++",
+      "title": "F&O Studio",
       "properties": {
         "xpp.project": {
           "type": "string",
@@ -2695,6 +2238,11 @@
           "type": "boolean",
           "default": false,
           "description": "Run AppChecker rules during the build."
+        },
+        "xpp.build.saveBeforeBuild": {
+          "type": "boolean",
+          "default": true,
+          "description": "Save unsaved X++ code views before a build, so the compiler sees your latest changes."
         },
         "xpp.pacPath": {
           "type": "string",
