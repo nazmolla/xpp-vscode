@@ -32,7 +32,7 @@ async function run() {
 
     await check('commands registered', async () => {
         const all = new Set(await vscode.commands.getCommands(true));
-        const wanted = ['xpp.goTo.ExtendedDataType', 'xpp.goTo.EnumType', 'xpp.goTo.BaseObject', 'xpp.goTo.ActionMenuItem', 'xpp.goTo.Label',
+        const wanted = ['xpp.goTo.ExtendedDataType', 'xpp.goTo.EnumType', 'xpp.goTo.BaseObject', 'xpp.goTo.ActionMenuItem', 'xpp.goTo.Label', 'xpp.goTo.referenced',
             'xpp.openReference', 'xpp.designer.rename', 'xpp.designer.duplicate', 'xpp.designer.moveUp', 'xpp.designer.moveDown',
             'xpp.duplicateObject', 'xpp.copyName', 'xpp.copyReference', 'xpp.openDesignerToSide', 'xpp.revealInAot'];
         const missing = wanted.filter(c => !all.has(c));

@@ -126,6 +126,17 @@ namespace XppVsCode.Server.MetaModel
     public interface IExtensionCompatibility
     {
         string ExtensionCompatibilityJson(string modelName);
+        string WrapperDriftJson(string modelName, string previousFolder);
+        string ExtensionCollisionsJson(string modelName);
+    }
+
+    /// <summary>Copilot's writes under the user's control: scope lock and checkpoints (see MetaModelBridge.AgentSession).</summary>
+    public interface IAgentSession
+    {
+        string AgentScopeDenial(string objectType, string objectName);
+        void BeforeAgentWrite(string objectType, string objectName);
+        string CheckpointEntriesJson(string id);
+        string RevertCheckpointJson(string id);
     }
 
     /// <summary>The services the request dispatcher routes to (composed in Program).</summary>
@@ -144,5 +155,9 @@ namespace XppVsCode.Server.MetaModel
         public IPerformanceAnalysis Performance { get; set; }
         public IExtensionCompatibility Compatibility { get; set; }
         public IWritePolicy Policy { get; set; }
+        /// <summary>Set only in the agent's (MCP) server process: its writes follow the user's scope and checkpoint.</summary>
+        public IAgentSession AgentWrites { get; set; }
+        /// <summary>Checkpoint listing and revert, for the extension's own process.</summary>
+        public IAgentSession Checkpoints { get; set; }
     }
 }

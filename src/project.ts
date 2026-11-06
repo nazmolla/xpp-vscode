@@ -3,7 +3,7 @@ import { promises as fs, watch as fsWatch, FSWatcher } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { elementContextValue, elementOpenCommand, iconFor as aotIcon, listModels } from './aot';
+import { elementContextValue, elementOpenCommand, iconFor as aotIcon, listModels, typeName } from './aot';
 import { objectUri } from './codeView';
 
 export interface ProjectItem {
@@ -342,11 +342,12 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode>
             const item = new vscode.TreeItem(node.folder, vscode.TreeItemCollapsibleState.Expanded);
             item.iconPath = vscode.ThemeIcon.Folder;
             item.description = String(node.items.length);
+            item.contextValue = 'xppProjectFolder';
             return item;
         }
         const { objectType, objectName } = node.item;
         const item = new vscode.TreeItem(objectName, vscode.TreeItemCollapsibleState.None);
-        item.description = objectType;
+        item.description = typeName(objectType);
         // Project items always belong to the project's own (custom) model.
         item.contextValue = elementContextValue(objectType, true);
         item.iconPath = new vscode.ThemeIcon(iconFor(objectType));

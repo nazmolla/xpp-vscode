@@ -81,6 +81,15 @@ body.has-preview main {
 table.props { border-collapse: collapse; width: 100%; }
 table.props td { border-bottom: 1px solid var(--vscode-panel-border); padding: 2px 6px; vertical-align: top; }
 .prop-name { width: 40%; color: var(--vscode-descriptionForeground); white-space: nowrap; }
+.prop-name.modified { color: var(--vscode-foreground); font-weight: 600; }
+.prop-name.modified::before { content: '\25CF'; margin-right: 4px; color: var(--vscode-gitDecoration-modifiedResourceForeground, var(--vscode-focusBorder)); font-size: 0.7em; vertical-align: middle; }
+tr.prop-category th { text-align: left; font-weight: 600; padding: 4px 6px 2px; background: var(--vscode-sideBarSectionHeader-background, transparent); border-bottom: 1px solid var(--vscode-panel-border); }
+.props-toolbar { display: flex; gap: 4px; align-items: center; padding: 4px 8px; border-bottom: 1px solid var(--vscode-panel-border); }
+.props-toolbar input[type=search] { flex: 1; min-width: 0; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); padding: 2px 4px; font: inherit; }
+.props-toolbar button.toggle { padding: 2px 4px; background: transparent; color: var(--vscode-icon-foreground); border: 1px solid transparent; }
+.props-toolbar button.toggle[aria-pressed=true] { background: var(--vscode-inputOption-activeBackground); border-color: var(--vscode-inputOption-activeBorder, transparent); color: var(--vscode-inputOption-activeForeground, inherit); }
+.props-footer { padding: 6px 8px; border-top: 1px solid var(--vscode-panel-border); color: var(--vscode-descriptionForeground); min-height: 2.6em; }
+.muted { color: var(--vscode-descriptionForeground); }
 .prop-value input, .prop-value select {
     width: 100%;
     box-sizing: border-box;

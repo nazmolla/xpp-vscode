@@ -1579,6 +1579,45 @@ Tables: PascalCase noun. EDTs: PascalCase descriptive. Enums: PascalCase noun.
 10. Keep extension classes focused — one CoC extension class per base object, per model.
 11. Test with SysTestCase / SysTestSuite.
 
+== TESTS WITH THE ACCEPTANCE TEST LIBRARY (ATL) ==
+
+Business-process tests need data (customers, vendors, items, warehouses). Create it with Microsoft's Acceptance Test
+Library instead of inserting records by hand: the data is complete and valid, and it is rolled back after the test.
+
+Model references: AtlFoundation and AtlApplicationSuite (add them to the model's ModuleReferences first).
+
+Pattern:
+    [SysTestTarget(classStr(MyPostingService), UtilElementType::Class)]
+    public final class MyPostingServiceTest extends SysTestCase
+    {
+        AtlDataRootNode data;
+
+        public void setUp()
+        {
+            super();
+            data = AtlDataRootNode::construct();
+        }
+
+        [SysTestMethod]
+        public void testPostsForCustomer()
+        {
+            // Arrange
+            CustTable customer = data.cust().customers().default().record();
+            InventTable item = data.products().items().default();
+            InventLocation warehouse = data.invent().warehouses().default();
+            // Act
+            MyPostingService::construct().post(customer.AccountNum, item.ItemId, warehouse.InventLocationId);
+            // Assert
+            this.assertTrue(MyPostingJournal::existForCustomer(customer.AccountNum), 'A journal is created for the customer');
+        }
+    }
+
+Entry points (AtlDataRootNode): cust().customers(), vend().vendors(), products().items(), invent().warehouses(),
+invent().sites(). default() returns a ready record (customers and
+vendors: an entity whose record() is the CustTable/VendTable). Read AtlDataRootNode and the AtlData* classes with
+xpp_read_object for more (search_code 'AtlDataRootNode::construct()' for precedents in the Atl* packages).
+Run the tests with xpp_run_tests after deploying.
+
 == SSRS REPORT PATTERNS ==
 
 D365FO reports use the RDP (Report Data Provider) pattern. There are TWO approaches

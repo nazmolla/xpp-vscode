@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import { XppServerClient } from './serverClient';
+import { stateAttribute } from './webviewState';
 
 /**
  * Label editor for an AxLabelFile: the label entries (ID, text per language, comment) with search, the file's other
@@ -26,6 +27,12 @@ export class LabelEditor {
             localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media')],
         });
         LabelEditor.panels.set(key, new LabelEditor(context, server, labelFile, panel, showProperties, search));
+        panel.onDidDispose(() => LabelEditor.panels.delete(key));
+    }
+
+    static revive(context: vscode.ExtensionContext, server: XppServerClient, panel: vscode.WebviewPanel, state: { labelFile: string }, showProperties: () => void): void {
+        const key = state.labelFile.toLowerCase();
+        LabelEditor.panels.set(key, new LabelEditor(context, server, state.labelFile, panel, showProperties, ''));
         panel.onDidDispose(() => LabelEditor.panels.delete(key));
     }
 
@@ -103,7 +110,7 @@ export class LabelEditor {
 <link href="${media('labelEditor.css')}" rel="stylesheet">
 <link href="${media('a11y.css')}" rel="stylesheet">
 </head>
-<body data-search="${search.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`)}">
+<body data-search="${search.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`)}"${stateAttribute({ labelFile: this.labelFile })}>
 <div id="toolbar">
   <span id="title"></span>
   <span id="badge"></span>

@@ -1,202 +1,343 @@
 ﻿# F&O Studio for VS Code
 
-A full Dynamics 365 Finance & Operations development environment in VS Code, with AI built in: Application Explorer, designers, code editing, build, deploy, debugging, data, performance and security analysis, plus agent tools for Copilot. It works against a unified developer environment (UDE), or on a cloud-hosted or VHD environment, with the same metadata API, compiler and scripts as Visual Studio, so projects and models move freely between the two.
+Develop Dynamics 365 Finance & Operations X++ code in VS Code, without Visual Studio. F&O Studio is for X++ developers on Windows who work on unified developer environments (UDE), cloud-hosted environments or VHD environments.
 
-## What's new
-
-### 0.12
-- **Data:** Browse Table Data and a SQL query panel with Explain Plan. Temporary database credentials on unified developer environments (requested from VS Code, kept in secret storage), the local AxDB on cloud-hosted and VHD. Copilot reads data with `xpp_query_data` after your confirmation.
-- **Performance:** Analyze Performance finds slow X++ patterns (queries in loops, set-based statements that fall back to row by row, missing indexes, cache settings). Live insights show missing indexes, the most expensive queries, batch job history and number sequences.
-- **Trace analysis:** Analyze Trace reads a trace from the web client with F&O Studio's own parser, no Trace Parser or database import: requests on a timeline, call trees, hot methods, SQL per method and pauses, each method one click from its code.
-- **Upgrade readiness:** obsolete API uses, plus Chain of Command wrappers, event handlers and table, form and enum extensions that no longer match the installed application.
-- **Wizards:** New Report, New Approval Workflow, New Custom Service and New Batch Job create complete standard patterns that compile without warnings.
-- **Review and release:** best-practice checks (xppbp), Review My Changes with a pull request summary, a Pre-Deploy Checklist, git change marks in the project view, Synchronize Tables.
-- **Copilot:** the `@fno` chat participant (`/design`, `/extend`, `/explain`, `/review`, `/support`, `/performance`), a Copilot Activity view with the changes agents make, team rules for agents, and new tools for best practice, branch changes, packages, performance, traces and upgrade readiness.
-- **Editing:** Rename for methods, label hover with actions, Translate Missing Labels, Find Unused Labels, undo and redo in the element designer.
-- **Build and test:** SysTest classes in Test Explorer, build tasks, status bar items for the project, the server and the database.
-- **Look and feel:** one product name (F&O Studio), a Get Started walkthrough, an X++ file icon, an accessibility pass on every panel, error messages that say what to do next.
-
-### 0.11
-- **Designer:** Go To referenced elements, F12 links in code, View History of an element, rename, duplicate and move nodes, drag and drop from the Application Explorer with Visual Studio's drop rules.
-- **Projects:** each project opens in its own workspace with its project and model folders; Open Recent and Close Project.
-- **Security review:** every write is checked on the server against your models, plus a documentation allow-list and stricter input validation.
-
-## Features
-
-### Application Explorer
-- **Classic view** (elements of all models grouped by category and type) and **model view** (each model by display name), with a name filter.
-- Click a class to open its code; a label file opens the **label editor**; any other element opens its designer.
-- **Right-click actions:**
-  - Open Designer, View Code, Open Form Layout.
-  - Add to Project, Create Extension, Create Code Extension (Chain of Command).
-  - Find References, View References (every reference opens the code at its line), View Hierarchy, View Entity Relationship Diagram (tables).
-  - Compare Code, Compare Metadata.
-  - Open in Browser, Open Table Browser.
+- **No Visual Studio needed.** You get the Application Explorer, element and form designers, X++ code navigation (including Chain of Command implementations), build, best practice checks, deployment packages, deploy, database sync and the debugger. They use the same metadata API, compiler and scripts as Visual Studio, and projects (`.rnrproj`, `.axpp`) open in both.
+- **Copilot works on the real metadata.** The agent tools read, create, extend and build elements through the metadata API. They change only your own models, every write is all or nothing, and you can revert a whole Copilot session.
+- **Tools Visual Studio doesn't have:** table data and SQL with query plans, static and live performance analysis, a built-in trace (`.etl`) analyzer, license and segregation-of-duties analysis, upgrade readiness and a pre-deploy checklist.
 
 ![Application Explorer filtered on CustGroup](images/aot.png)
 
+## What's new in 0.13
+
+Features marked *preview* have not yet been verified on a live environment.
+
+**Daily loop**
+- **Code folding** for methods, statements, `case` blocks, comments and `// region` blocks.
+- **Build Project** from an X++ editor with `Ctrl+Shift+B`. Unsaved code is saved first, and a failed build offers **Show Problems**.
+- **New Element…** works like Visual Studio's Add New Item. It covers every element and extension type plus the wizards, from `+` on the project view.
+- **Open Element…** (`Ctrl+Alt+O`) shows recent elements and filters by type prefix (`t:` tables, `c:` classes, `f:` forms).
+- **F&O Studio panel:** Results, Infolog and Copilot Activity in one place.
+  - Review My Changes, the Pre-Deploy Checklist and Upgrade Readiness show their findings in Results. Click a finding to open it; use **Run Again**, **Copy Report as Markdown** or **Export Report…**.
+- **Dynamics 365 view grouped by task:** Environment, Create, Build and check, Deploy, Data, Analyze, Find, Security, Labels, Model and project, Copilot, Debug.
+- **Properties grid:** filter, categories, changed values marked, a label picker that finds or creates labels, and element pickers (`Alt+Down`). **Go to Referenced Element…** replaces the separate Go to commands.
+- **Browse Table Data** has a record inspector that follows relations to the related rows.
+- Element and form designers, the label editor, data tabs and trace tabs come back after a restart.
+
+**Environment and team**
+- **Version drift guard** (*preview*): you get a warning when the environment runs a newer application version than the metadata on this machine.
+  - **Update Metadata** downloads the new version.
+  - **Clean Up Old Application Versions…** frees disk space and keeps the newest older version for Standard Code Drift.
+- **Environment setup** shows its steps in the Dynamics 365 view and can retry a failed step. Switching environments no longer needs a window reload.
+- **Open Team Repository…** (*preview*) clones a repository, links its packages into your metadata folder and builds them in dependency order.
+- **Deployed or not:** the project's status bar item shows when the build is newer than the last deploy from this machine. Run Tests, the debugger and `xpp_run_tests` warn first and offer **Deploy First**.
+
+**Upgrades and review**
+- **Standard Code Drift of Wrapped Methods…** shows the standard methods your Chain of Command code wraps that changed between two installed versions, with a diff for each.
+- **Upgrade Readiness** also reports collisions with other models' extensions: the same field, index, field group, enum value or form control, and several wrappers of one method.
+- **Data entity readiness** in Analyze Performance, Review My Changes and the Pre-Deploy Checklist: public names, keys, staging fields, mandatory fields and set-based processing.
+- The **Pre-Deploy Checklist** fails while Run Snippet's scratch class is still in the model.
+
+**Create and test**
+- New wizards: **New Business Event…**, **Add Number Sequence…** and **New Feature (Feature Management)…**. **Show Feature Usage** finds where a feature is checked in code.
+- **Generate SysTest Class with Test Data (ATL)** builds test data (customers, vendors, items, warehouses) with the Acceptance Test Library and adds the model references it needs.
+- **Try Data Entity (OData)…** and **Try Service Operation…** (*preview*) call the active environment and save each request as an `.http` file. Service calls ask first, and the access token is never written to the file.
+
+**Copilot**
+- **Checkpoints:** **Start Copilot Checkpoint**, then **Revert Copilot Changes Since the Checkpoint…** to undo every element, label and project change Copilot made.
+- **Set Copilot Scope…** limits the elements Copilot may change. The server enforces the scope.
+- **Verify Changes in the Running App (Copilot)** (*preview*) turns your changed elements into check steps. Copilot agent mode then runs them with the Dynamics 365 ERP MCP server, which you set up separately.
+
+**Support**
+- **Report a Problem…** builds a redacted diagnostics bundle for you to preview and send yourself; nothing is sent automatically. Every command error offers it.
+- **Configure Code Intelligence…** turns code intelligence features on or off in one place.
+- Kusto snippets (`fno-forms`, `fno-slowforms`, `fno-exceptions`, `fno-events`) for Finance and Operations telemetry in Application Insights.
+
+### Earlier releases
+- **0.12:** Browse Table Data and SQL queries (temporary UDE credentials, local AxDB), Analyze Performance with live database insights, Analyze Trace, Upgrade Readiness, wizards (batch job, report, approval workflow, custom service), best practice checks, Review My Changes, the Pre-Deploy Checklist, `@fno` in chat, Copilot Activity, team rules, Test Explorer, build tasks and an accessibility pass.
+- **0.11:** Go to referenced elements, F12 in code, element history, drag and drop from the Application Explorer, one workspace per project, server-side write checks.
+
+Full history: [github.com/nazmolla/xpp-vscode](https://github.com/nazmolla/xpp-vscode).
+
+## Features
+
+### Application Explorer and projects
+- **Classic view** shows all models' elements by category and type. **Model view** shows each model by display name. Both have a name filter.
+- **Clicking an element:**
+  - a class opens its code;
+  - a label file opens the label editor;
+  - any other element opens its designer.
+- **Right-click actions:**
+  - Open Designer, View Code, Open Form Layout…, Add to Project
+  - Create Extension, Create Code Extension (Chain of Command)
+  - Find References, View References, View Hierarchy, View Entity Relationship Diagram (ERD)
+  - Browse Table Data, Analyze Performance
+  - Try Data Entity (OData)…, Try Service Operation…, Show Feature Usage
+  - Compare Code…, Compare Metadata…, Open in Browser, Open Table Browser
+  - On your own models: Upgrade Readiness and Standard Code Drift of Wrapped Methods…
+- **Projects** (optional):
+  - **Open D365FO Project…**, **Open Recent D365FO Project…**, **Create D365FO Project…** (writes `.rnrproj` and `.slnx` like Visual Studio), **Export Project…** and **Import Project…** (`.axpp`, the same format as Visual Studio).
+  - Each project opens in its own workspace with its project and model folders.
+  - The project view follows the `.rnrproj`, so elements added by Copilot or Visual Studio show up on their own. It marks git changes.
+  - **Exclude from Project** keeps the element in the model. **Delete** removes it from the model (your own models only).
+- **Models:** **Create Model…**, **Update Model Parameters…**, **View Model Dependencies…**.
+
+### Create elements
+- **New Element…** (`+` on the project view and its folders) is Visual Studio's Add New Item: classes, tables, EDTs, enums, forms, menu items, security objects and every extension type.
+- **Wizards** create complete standard patterns in your project's model. Each one is all or nothing, and each result compiles without warnings.
+  - **New Batch Job:** SysOperation contract, service and controller, plus an action menu item and a privilege.
+  - **New Report:** TempDB table, optional date contract, report data provider, controller, report with a ready-to-run design, output menu item and privilege.
+  - **New Approval Workflow** on one of your tables: status, document, category, type, approval, event handlers, menu items, privileges and the form's workflow settings.
+  - **New Custom Service:** request and response contracts, service class, service, service group and privilege.
+  - **New Business Event…:** event and contract classes, a trigger, and labels for the catalog.
+  - **Add Number Sequence…:** the module's number sequence reference, the parameters method and the number fetched on insert.
+  - **New Feature (Feature Management)…:** the feature class and its labels.
+
 ### Element designer
-- **Node tree and Properties grid** for every element type, generated from the metadata classes Visual Studio's designer uses.
-- **Looks like Visual Studio's designer:** the same node order and icons for every element type; a class lists its methods, an enum its values.
-- **Right-click on the element itself** offers the Application Explorer actions (references, extensions, compare, ERD...).
-- **Events nodes** on tables, data entities, forms, form data sources, fields and controls: **Copy Event Handler Method** (or double-click) puts Visual Studio's handler on the clipboard; on a method it writes a Pre/Post handler or a delegate subscriber. **Find Event Handlers** lists the existing handlers.
-- **Entity relationship diagram** (ERD) of a table and its related tables: choose the levels, outgoing/incoming relations and the fields shown; double-click a table to centre on it; export SVG or Mermaid.
-- **Right-click actions:** New (any node type a folder accepts, such as fields, field groups, indexes, relations, data sources and controls), New Method, Override Method, Delete.
-- **Forms:** a preview rendered like the web client, with Table of Contents and FastTab patterns, column layout, field labels from EDTs and toggles for Yes/No fields.
-- **Extensions** show the base element's nodes with the extension's own nodes in bold; the base nodes are read-only.
-- **Read-only for others' elements:** elements outside your models can be viewed but not changed; extend them instead.
-- **Label editor:** label ID, text and comment, with search and the label file's other languages side by side; New label, Edit, Delete (every language) and Copy @reference for your own label files. Properties opens the property grid.
+- **Node tree and Properties grid** for every element type. They are built from the same metadata classes as Visual Studio's designer, with the same node order and icons.
+- **Properties grid:** filter, categories, changed values marked, label picker (find or create) and element pickers (`Alt+Down`). **Go to Referenced Element…** opens what a property points to.
+- **Editing:** New (any node type a folder accepts), New Method…, Override Method…, Rename…, Duplicate…, Move Up and Move Down, Delete, and **Add from Application Explorer…** (or drag and drop, with Visual Studio's drop rules). Undo with `Ctrl+Z` and redo with `Ctrl+Y`.
+- **Events:** **Copy Event Handler Method** (or double-click) puts Visual Studio's handler code on the clipboard. **Find Event Handlers** lists the existing ones.
+- **Forms:** a preview drawn like the web client, with Table of Contents and FastTab patterns, columns and field labels.
+- **Extensions** show the base element's nodes; the extension's own nodes are in bold. Elements outside your models are read-only, and the editor title offers **Create Extension**.
+- **Entity relationship diagram:** choose the levels, the direction and the fields shown. Export it as SVG or Mermaid.
+- **Label editor:** search, other languages side by side, New, Edit and Delete in every language, and Copy @reference.
 
 ![Form designer: CustGroup with the rendered preview](images/form-designer.png)
 
 ### Code
-- **Code view** shows a class the way Visual Studio does: the declaration, then the methods inside its braces. Objects in your own models are editable.
-- **Methods of nested nodes** (data sources, fields, controls) open in their own editor.
-- **Navigation:** Go to / Peek Definition (F12) for element names and members: `Type::method`, `this.`, `super.`, `variable.method()` (the variable's declared type), and calls to methods of the object or its base classes. **Find All References** (Shift+F12) uses the cross-reference database. Hover shows the element or the method signature.
+- **Code view:** a class looks the way Visual Studio shows it, with the declaration and then the methods inside its braces. Methods of data sources, fields and controls open in their own editor.
+- **Code folding** for methods, statements, `case` blocks, block and doc comments, and `// region` blocks.
+- **Navigation:**
+  - Go to and Peek Definition (`F12`) on element names, `Type::method`, `this.`, `super.` and `variable.method()`.
+  - **Find All References** (`Shift+F12`) uses the cross-reference database.
+  - Hover shows the element, the label text or the method signature.
 
 ### Code intelligence
-Each feature can be turned on or off under **Code intelligence** in the Dynamics 365 view, or with the `xpp.codeIntelligence.*` settings. Features marked *slow* use more CPU or disk.
-- **Outline** and breadcrumbs for classes, tables and forms; **Go to Symbol in Workspace** (`Ctrl+T`) for elements and `Class.method`.
-- **Chain of Command:** **Go to Implementations** (`Ctrl+F12`) on a class or method lists overrides, CoC extension classes, the CoC methods that wrap it, and Pre/Post and event handlers (form and data events too). The index is built from the cross-reference database in a few seconds and kept on disk, so asking "what extends this method" never blocks the editor. **Show Extensions** and **Rebuild Extension Index** are in the Dynamics 365 view.
-- **Code lens** above each class and method: references, overrides, CoC classes and handlers.
-- **Call hierarchy** and **type hierarchy** (base classes and subclasses).
-- **Completion** after `.` and `::` (fields, methods of the type and its base types, methods added by CoC extensions), `@` labels and keywords; **signature help** for method calls.
-- **Hover** shows label text, EDT details and enum values.
-- **Syntax errors** while typing (X++ compiler parser), **compile on save** (*slow*, off by default), **formatting** (Format Document / Selection) and **semantic highlighting** (*slow*, off by default).
-- **Event handler index** (*slow*): scans class files for form and data event handlers, which the cross-reference database doesn't contain.
-- **Obsolete API warnings:** calls to methods and uses of classes and tables marked `[SysObsolete]` show in Problems.
+Turn each feature on or off with **Configure Code Intelligence…**, or with the `xpp.codeIntelligence.*` settings.
+- **Outline and breadcrumbs.** **Go to Symbol in Workspace** (`Ctrl+T`) finds elements and `Class.method`.
+- **Go to Implementations** (`Ctrl+F12`) lists overrides, Chain of Command classes and methods, and pre/post and event handlers. **Show Extensions and Handlers…** and **Rebuild Extension Index** run from the command palette.
+- **Code lens** above classes and methods shows references, overrides, Chain of Command classes and handlers.
+- **Call hierarchy** and **type hierarchy**.
+- **Completion** after `.` and `::` (including methods added by Chain of Command), for `@` labels and for keywords, plus **signature help**.
+- **Checks and formatting:**
+  - syntax errors while you type (the X++ compiler's parser);
+  - warnings on `[SysObsolete]` APIs;
+  - Format Document;
+  - optional compile on save and semantic highlighting (both slower, off by default);
+  - an event handler index for form and data events, which the cross-reference database doesn't record.
 
 ![Peek Implementations on SalesFormLetter.run: the Chain of Command extensions and handlers](images/implementations.png)
 
 ### Productivity
-- **Search Code in All Packages** (`Ctrl+Shift+Alt+F`): text or regex search over the X++ code of every package; a result opens the method at the matching line.
+- **Search Code in All Packages** (`Ctrl+Shift+Alt+F`): text or regex search over every package's X++ code.
 - **Find Similar Standard Implementations:** standard elements like the selected one, or matching a description such as "batch job with contract".
-- **Find Message Source:** paste an error, warning or info message as the user saw it, values included. It finds the labels whose text matches (placeholders match any value) and the code that raises them, from the cross-reference database; a result opens the line. Also on every message in the Infolog view.
-- **Quick fixes** (`Ctrl+.`): Extract to label, Generate find() and exist() on your tables, Implement missing interface methods, Create Chain of Command wrapper on methods of standard objects.
-- **Add to Privilege** for menu items, **Generate SysTest Class** for classes, and **Run Snippet in Environment** (runs a `main` method from an untitled X++ editor through a scratch class in your model).
-- **Snippets** for Chain of Command, event handlers, SysOperation, RunBaseBatch, find/exist, parm methods, transactions with retry and SysTest.
+- **Find Message Source:** paste an error, warning or info message as the user saw it, values included, to find the labels and the code that raises it. It's also on every Infolog message.
+- **Quick fixes** (`Ctrl+.`):
+  - extract to label;
+  - generate `find()` and `exist()`;
+  - implement missing interface methods;
+  - create a Chain of Command wrapper.
+- **Add to Privilege…**, **Generate SysTest Class**, **Generate SysTest Class with Test Data (ATL)**, and **Run Snippet in Environment**, which runs a `main` method through a scratch class in your model.
+- **Snippets** for Chain of Command, event handlers, SysOperation, find/exist, parm methods, transactions with retry and SysTest, plus Kusto snippets for telemetry.
 
-### Security and licensing
-- **Security view:** the roles of your models and the standard roles they extend, each with its user license, and all roles (with a name filter). Expand a role to see its sub-roles, duties, privileges and entry points with their grant and license.
-- **Analyze License** on a role, duty or privilege: the license it needs (from the View or Maintain user license of the menu items it grants, depending on the access), the entry points per license, the menu items that drive it and through which duties and privileges, the menu items where read-only access would lower it, and missing objects.
-- **Who Can Access** on a menu item, form, table or data entity: the privileges that grant it, with their duties and roles, and the licenses of its menu items.
-- **Find Security Gaps** in your models (for example menu items no privilege grants), grouped by severity.
-- **Segregation of Duties:** finds roles that combine conflicting duties. The rules are editable: **Edit Segregation of Duties Rules** writes the built-in rules to `.xpp/sod-rules.json` and uses that file (`xpp.security.sodRulesFile`).
-- **Security Report** for sign-off: roles, duties, privileges, entry points and licenses as Markdown or CSV.
-- Results open in a panel with clickable objects, Copy as Markdown and Export.
-
-### Build, deploy and debug
-- **Build Model** with the X++ compiler (`Ctrl+Shift+B`), and **Build Project**, which reports only the problems in the project's objects. Errors appear in the Problems panel at the right line. A compiler crash (Fatal) or a missing output assembly fails the build.
-- **Run Tests:** runs SysTest test classes on the environment the way Visual Studio's Test Explorer does, and shows each test's result. Tests run against the deployed code, so build and deploy first. The project's test classes also appear in VS Code's **Test Explorer**.
-- **Build tasks:** `{ "type": "xpp", "action": "buildProject" }` (or `buildModel`) in `tasks.json` runs the same build, to chain it with other tasks.
-- **Status bar:** the project with its last build result (click to build), the X++ server while it starts or after it stopped (click to restart), and the database.
-- **Create Deployment Package** (the same script Visual Studio runs), Deploy Models and Synchronize Database (with `pac`).
-- **Launch Debugger:** attaches to the environment through the FinOps tools' debugger proxy, as Visual Studio does. Breakpoints can be set in the code view.
-- **Infolog:** messages raised by the code being debugged; **Find Message Source** on a message opens the code that raised it.
+### Build, test, deploy and debug
+- **Build:**
+  - **Build Project** (`Ctrl+Shift+B` in an X++ editor, or the status bar) reports only the project's problems. **Build Model** covers the whole model.
+  - Builds use xppc and LabelC, and errors go to Problems at the right line.
+  - Unsaved code is saved first (`xpp.build.saveBeforeBuild`). A failed build offers **Show Problems**.
+- **Build tasks:** `{ "type": "xpp", "action": "buildProject" }` (or `buildModel`) in `tasks.json`.
+- **Run Tests:**
+  - runs SysTest classes on the environment, like Visual Studio's Test Explorer;
+  - the project's test classes also appear in VS Code's **Test Explorer**;
+  - tests run the deployed code, and you get a warning when your build is newer than the last deploy.
+- **Deploy:**
+  - **Create Deployment Package…** (the same script Visual Studio runs);
+  - **Deploy Models to Environment (pac)**, **Synchronize Database (pac)**, **Initialize Deployment Solution (pac)**;
+  - **Synchronize Tables** syncs only your project's tables on cloud-hosted and VHD environments.
+- **Debugging:**
+  - **Launch Debugger** attaches through the FinOps debugger proxy, as Visual Studio does, and you can set breakpoints in the code view.
+  - **Infolog** shows the debugged code's messages, each linked to Find Message Source.
+- **Status bar:** project and last build result, deployed state, X++ server state (click to restart) and database.
 
 ### Data
-- **Browse Table Data** (right-click a table, or in its designer): the table's rows with enum names next to their values, a company filter, an as-of date for date-effective tables, column filters, sorting, a row limit and Export CSV. **Open as SQL** turns the view into an editable query; **Open in SQL Server Management Studio** opens SSMS on the same database.
-- **New SQL Query:** read-only by default (one SELECT, run in a transaction that is always rolled back). **Allow changes** commits the batch after a confirmation each run; changes made in SQL skip X++ business logic (insert/update methods, validation, database log, events, caches).
-- **Cloud-hosted and VHD environments** use the local AxDB with Windows authentication. **Unified developer and sandbox environments** use temporary credentials: **Request Database Credentials** asks for a reason, the allowed IPv4 address (prefilled) and Reader or Writer access, the same request Visual Studio's "SQL Credentials for Dynamics 365 FinOps" makes (System administrator role needed). New credentials replace earlier ones, Visual Studio's included. They are kept in VS Code's secret storage until they expire and are never written to settings or logs. The status bar shows the database and when access expires.
+- **Browse Table Data** (right-click a table, or from its designer):
+  - enum names next to their values;
+  - company filter, and an as-of date for date-effective tables;
+  - column filters, sorting, a row limit and Export CSV;
+  - a record inspector that follows relations.
+  - **Open as SQL** turns the view into an editable query.
+- **New SQL Query:**
+  - read-only by default: one SELECT, always rolled back;
+  - **Explain Plan** shows the query plan;
+  - **Allow changes** commits after a confirmation each run, with a warning that X++ business logic is skipped.
+- **Database access:**
+  - Cloud-hosted and VHD environments use the local AxDB with Windows authentication.
+  - Unified developer and sandbox environments use temporary credentials from **Request Database Credentials**, the same request Visual Studio makes. They are kept in VS Code's secret storage until they expire.
+  - **Open Database in SQL Server Management Studio** opens SSMS on the same database.
 
-### Dynamics 365 tools
-- **Analyze Performance** (classes, tables, forms; also in the code view's context menu): queries and row-by-row writes inside loops, single-row lookups inside `while select`, `while select` of every field, `forupdate` without a write, unbalanced transactions, unlimited `crossCompany`, and `insert_recordset` / `update_recordset` / `delete_from` that silently run row by row (overridden methods, delete actions, date-effective tables). Findings go to the Problems view with the fix.
-- **Upgrade Readiness** (right-click one of your models): every use of an obsolete (`[SysObsolete]`) class, table or method, with the replacement the attribute names; and every extension of the model checked against the installed application: Chain of Command wrappers whose method is gone, changed its signature or can no longer be wrapped (private, final, `Wrappable(false)`, `Hookable(false)`, internal), event handlers whose class, method, delegate or table is gone, and table, form and enum extensions whose base element, fields, field groups or controls are gone. Run it on the version you upgrade to, before building.
-- **Model management:** Create Model, Update Model Parameters, View Model Dependencies.
-- **Projects:** Open Project, **Open Recent Project**, Close Project, **Create D365FO Project** (for one of your models; writes the `.rnrproj` and `.slnx` like Visual Studio), Export Project and Import Project (`.axpp`, compatible with Visual Studio). Opening a project opens its own workspace with the project folder and the model folder; other windows have no project, and VS Code starts without one (File > Open Recent lists project workspaces too). The project view follows the `.rnrproj`, so elements added by agents or other editors appear by themselves. In the project view, **Exclude from Project** keeps an element in the model; **Delete** removes it from the model (your own models only).
-- **Search:** Find Labels, Find Tag References, Metadata Search, Find References, Search Code, Find Similar Standard Implementations, Find Message Source.
-- **Environment:** Connect to Environment (downloads metadata, restores the cross-reference database, configures the machine), Select Environment, Check Connection, Sign in.
-- **Several environments:** connect to each one once; **Select Environment** (also in the status bar) switches between them. Each workspace remembers its own environment, so two windows can work with two environments at the same time. The choice is kept out of the workspace's settings files, since every developer has an environment of their own; `xpp.environmentUrl` is the default for workspaces that haven't chosen one. Metadata, cross references, build, MCP tools, deploy, database sync, tests, debugging and Open in Browser all follow the selected environment. **Sign In (pac)** creates a pac profile named after the environment, which deploy and database sync select first, so environments in different tenants keep their own accounts. If the selected environment's metadata isn't on this machine, the tools fall back to the machine-wide configuration (shared with Visual Studio) and the status bar shows a warning.
-- **Cloud-hosted and VHD environments:** with no unified developer environment configured, the extension uses `K:\AosService\PackagesLocalDirectory` (cloud-hosted) or `C:\AosService\PackagesLocalDirectory` (VHD, which has only a C: drive) with no connection step. Database, cross-reference database and web client URL come from the AOS `web.config`. Your models are the ones in packages not published by Microsoft; only those can be edited, by you or by agents. ISV packages there count as yours too. Build writes to the local AOS and **Synchronize Database** runs SyncEngine against the local database; deploy (pac), Run Tests and the debugger are UDE features and are hidden there.
-
-### Review and release
-- **Best Practice Check** (`xppbp`, the checker Visual Studio runs): warnings of your model in the Problems view.
-- **Review My Changes:** the elements changed on your branch against `xpp.git.baseBranch`, each with its best-practice and performance findings, and a pull request summary to copy.
-- **Pre-Deploy Checklist:** build, best practice, performance, security gaps, unlabelled texts and uncommitted changes in one report before you create a deployment package.
-- **Synchronize Tables:** synchronizes only the tables of your project with the local database (cloud-hosted and VHD).
-- **Live insights** (with database access): missing indexes, the most expensive queries from Query Store, batch job history and number sequences that slow posting (continuous or without preallocation).
-- **Explain Plan** in the SQL query panel.
-- **Analyze Trace** (also on `.etl` files in the Explorer): reads a trace taken in the web client (Settings > Trace) with F&O Studio's own parser, no Trace Parser or SQL import needed. Shows each request (web request or batch task) with its call tree, inclusive and exclusive time and SQL per method; methods by exclusive time; SQL statements with the X++ method that ran them; and pauses where a request or the whole server logged nothing. Every method opens in the code view. Agents get the same as `xpp_analyze_trace`.
+### Performance and traces
+- **Analyze Performance** (classes, tables, forms, data entities) puts findings in Problems with the fix. It finds:
+  - queries and row-by-row writes inside loops;
+  - lookups inside `while select`, and `while select` of every field;
+  - `forupdate` without a write, and unbalanced transactions;
+  - unlimited `crossCompany`;
+  - set-based statements that silently run row by row;
+  - missing indexes and cache settings;
+  - data entity readiness problems.
+- **Database Performance Insights** (needs database access): missing indexes, the most expensive queries, batch job history, and number sequences that slow posting.
+- **Analyze Trace…** reads a web client trace (`.etl`) with F&O Studio's own parser; no Trace Parser and no import database. It shows:
+  - requests on a timeline;
+  - call trees, hot methods and SQL per method;
+  - pauses;
+  - each method one click from its code.
+- **Telemetry Queries (Application Insights KQL):** the most used and slowest forms, X++ exceptions and custom events. On a form, the queries are filtered to that form.
 
 ![Analyze Trace: requests on a timeline, the slowest request's hot spots and call tree](images/trace.png)
-- **Telemetry Queries:** KQL for the telemetry Finance and Operations sends to Application Insights (most opened and slowest forms, X++ exceptions, custom events); on a form, filtered to that form.
+
+### Review, release and upgrades
+- **Run Best Practice Checks on Project** runs xppbp, the checker Visual Studio runs, and puts its warnings in Problems.
+- **Review My Changes** lists the elements changed against `xpp.git.baseBranch`, each with its best-practice and performance findings, plus a pull request summary to copy. **Show Changed Elements** lists the same elements.
+- **Pre-Deploy Checklist** checks, in one report:
+  - build, best practice and performance;
+  - security gaps and unlabelled text;
+  - uncommitted changes;
+  - Run Snippet's scratch class left in the model.
+- **Upgrade Readiness:**
+  - uses of `[SysObsolete]` APIs, with the replacement the attribute names;
+  - Chain of Command wrappers, event handlers, and table, form and enum extensions that no longer match the installed application;
+  - collisions with other models' extensions.
+- **Standard Code Drift of Wrapped Methods…** compares the standard methods you wrap between two installed versions, with diffs.
+
+### Security and licensing
+- **Security view:** your models' roles and the standard roles they extend, each with its user license. Expand a role down to its entry points and grants.
+- **Analyze License** shows the license a role, duty or privilege needs, what drives it, and where read-only access would lower it.
+- **Who Can Access** shows the privileges, duties and roles that reach a menu item, form, table or data entity.
+- **Find Security Gaps** and **Check Segregation of Duties**. **Edit Segregation of Duties Rules** writes the rules to a file you can change.
+- **Security Report…** for sign-off, as Markdown or CSV.
+
+### Integration
+- **Try Data Entity (OData)…** (*preview*) queries an entity on the active environment.
+- **Try Service Operation…** (*preview*) calls a custom service with a request body filled from its data contract.
+- Both save the request as an `.http` file. The access token is never written to the file.
 
 ### Labels and refactoring
-- **Translate Missing Labels:** fills the languages a label file lacks with a language model; you review every translation before it is saved.
-- **Find Unused Labels:** labels of your label files that neither code nor metadata use.
-- **Rename** (`F2`) on a method of your models renames it and its calls, after a preview; methods of standard models are refused.
-- **Hover** on an element name shows its label and links to its designer and references.
+- **Find Labels…**, **Translate Missing Labels…** (you review each translation before it is saved) and **Find Unused Labels…**.
+- **Rename…** (`F2`) on a method of your models updates its calls, after a preview.
+
+### Environments
+- **Connect to Environment…** downloads the metadata, restores the cross-reference database and configures the machine. It shows each step and can retry a failed one.
+- **Select Environment…** (also from the status bar) switches environments without a reload.
+  - Each workspace remembers its own environment, so two windows can work with two environments.
+  - **Sign In to Environment (pac)** keeps one pac profile per environment.
+- **Version drift guard** (*preview*): you get a warning when the environment runs a newer application version. **Update Metadata** downloads it, and **Clean Up Old Application Versions…** removes old versions after a confirmation.
+- **Open Team Repository…** (*preview*): clone or pick a repository, link its packages into the metadata folder and build them in dependency order.
+- **Cloud-hosted and VHD environments** work without a connection step. F&O Studio uses the local PackagesLocalDirectory, AOS and AxDB. Deploy (pac), Run Tests and the debugger are UDE-only and are hidden there.
 
 ### Copilot
-- **@fno** in Copilot Chat: `/design` (solution design with standard precedents), `/extend` (how to extend a standard object), `/explain`, `/review`, `/support` (from an error message to the code) and `/performance`.
-- **Copilot Activity** view: every tool call agents make, with arguments, duration and result; changes link to the element.
-- **Team rules:** `.xpp/agent-rules.md` (created by **Create Team Rules**) is added to the agent instructions of everyone working in the repository.
-- **Wizards** that create complete, compiling standard patterns in your project's model (all or nothing):
-  - **New Batch Job:** contract, service and controller (SysOperation), action menu item and privilege.
-  - **New Report:** a report over a table's fields: TempDB table, optional From/To date contract, report data provider filling it set-based, controller, the report with its data set and a ready-to-run table design, output menu item and privilege.
-  - **New Approval Workflow** on one of your tables: status enum and field, `canSubmitToWorkflow`, document query and class, workflow category, type and approval, event handlers, submit/resubmit class, the workflow action menu items, privileges for submitters and approvers, and the form's workflow settings.
-  - **New Custom Service:** request and response contracts, service class, service, service group and a privilege for the operation.
+- **@fno** in Copilot Chat: `/design`, `/extend`, `/explain`, `/review`, `/support`, `/performance`.
+- **Copilot Activity** shows every tool call agents make, with arguments, duration and result. Changed elements link to their designer.
+- **Checkpoints and scope:**
+  - **Start Copilot Checkpoint**, then **Revert Copilot Changes Since the Checkpoint…** or **End Copilot Checkpoint (Keep Changes)**;
+  - **Set Copilot Scope…** limits the elements Copilot may change. The server enforces both.
+- **Create Team Rules for Copilot** creates `.xpp/agent-rules.md`, which is added to the agent instructions of everyone working in the repository.
+- **Verify Changes in the Running App (Copilot)** (*preview*) plans checks from your changes and runs them through the Dynamics 365 ERP MCP server.
 
 ### AI agent tools (MCP)
-Copilot can:
-- read, create, update and validate metadata. Every create is all-or-nothing, an existing name is never overwritten, and any request that is not fully applied returns an error (`typedMetadata` items take `"$type"` for subtypes, as `xpp_read_object` writes them). Large objects are read as a summary first; ask for parts with `sections`;
-- change existing table fields (EDT, label, help text, properties), and remove fields, indexes, field groups and relations. A field's base type never changes (as in Visual Studio: the database sync cannot convert a column), so a different type needs a new field name, and a removed field name never comes back with another type;
-- report best-practice warnings after every create and update (missing labels or EDTs, literal texts, missing keys, indexes and caching on tables, menu items no privilege grants, Chain of Command class naming, classes that are too large or mix validation with posting); the agent's plan includes a best-practice review of the design and a class diagram with one responsibility per class (validator, reusable services, an orchestrator);
-- find elements and their references; security roles, duties and privileges are also found by their label text;
-- find how standard code does it, which is how X++ is developed: `xpp_find_examples` (standard implementations for a task such as "batch job with a contract" or "number sequence", forms with a pattern, or objects similar to a given one), `xpp_search_code` (text or regex over the code of every package), and `xpp_find_references` with `includeCode` (the calling code lines). The agent's plan names the standard precedent of every object and reuses it, extends it, or copies it only when it cannot be reused;
-- create label files, and many labels with translations in one call, and add elements to the project;
-- form extensions: controls are placed and checked against the form's patterns (a new tab page gets the pattern its place expects, required values are set, unknown pattern versions become the latest; anything the build would reject is refused, and the check takes seconds even on SalesTable), properties of base controls are changed only where D365FO allows it, and the extension's own controls can be updated, moved and removed;
-- create and update menu items, create menu extensions, and work with security privileges, duties and roles;
-- analyze security with `xpp_analyze_security`: the license of a role, duty or privilege and what drives it, who can access an object, the standard roles to give a new duty (requirements name roles by job title: it ranks the roles that already reach the same objects), security gaps, segregation of duties conflicts and the sign-off report;
-- trace a message to the code that raises it with `xpp_find_message_source` (label text with values, then where the label is used);
-- create data entity extensions, including their staging tables, also on entities built on other entities or views; create composite data entities;
-- delete elements of your own models (refused while other elements reference them; their cross-reference entries are removed) or exclude them from the project;
-- select the active project, build the model and read every compiler error;
-- run X++ unit tests on the environment (`xpp_run_tests`);
-- read business data with `xpp_query_data` (one read-only SELECT, row-limited, after your confirmation; the agent never sees the credentials);
-- review performance with `xpp_analyze_performance`, performance traces with `xpp_analyze_trace`, and upgrade readiness with `xpp_find_deprecations`;
-- run the best-practice checker (`xpp_check_best_practice`), list the elements changed on the branch (`xpp_diff_changes`) and create a deployment package (`xpp_package`);
-- search the Microsoft Learn documentation.
+The tools are registered automatically. Copilot can:
+- **Read and write metadata:** read, create, update, validate and delete elements.
+  - Writes are limited to your own models and are all or nothing.
+  - An existing name is never overwritten.
+  - Large objects are read as a summary first.
+- **Extend standard objects:** table, form, enum, EDT, menu, security and data entity extensions. Form controls are placed and checked against the form's patterns. Entity extensions include their staging tables.
+- **Find precedents:** find standard implementations to follow (`xpp_find_examples`), search all code (`xpp_search_code`), and find references with the calling code (`xpp_find_references`).
+- **Check its work:** best-practice warnings come back after every write.
+  - The agent's plan names a standard precedent for each object and includes a class design.
+  - `xpp_build`, `xpp_check_best_practice` and `xpp_analyze_performance` check the result.
+- **Analyze:** security and licenses (`xpp_analyze_security`), messages (`xpp_find_message_source`), traces (`xpp_analyze_trace`), and upgrades and collisions (`xpp_find_deprecations`).
+- **Test and release:** run tests on the environment (`xpp_run_tests`), list branch changes (`xpp_diff_changes`) and create a deployment package (`xpp_package`).
+- **Read data:** `xpp_query_data` runs one read-only, row-limited SELECT after your confirmation. The agent never sees credentials.
+- **Read documentation:** search Microsoft Learn, and load the full development guide on demand (`xpp_get_guide`), including Acceptance Test Library tests.
 
-The agent's instructions are a compact rule set; the full guide with examples (SSRS reports, Chain of Command per object type, event handlers, the X++ language reference, object properties) is read on demand with `xpp_get_guide`, so it does not fill the context of every session.
+## Compared with Visual Studio
 
-The tools are registered automatically.
+**Same** means the same compiler, script, file format or metadata API. **Different** means another way to get the same result.
+
+| Visual Studio | F&O Studio | |
+| --- | --- | --- |
+| Application Explorer (classic and model view) | Application Explorer | Same |
+| Solution Explorer: Add > New Item | New Element… and the wizards | Same element types, plus batch job, report, workflow, service, business event, number sequence and feature wizards |
+| Element designers and the Properties window | Element designer with a filterable, categorized Properties grid and pickers | Same metadata classes |
+| Form designer | Form layout preview, form extensions, element designer for the nodes | Different: no design surface for new forms |
+| Code editor | X++ code view with completion, definitions, references, Chain of Command implementations, code lens, folding and formatting | Same code layout |
+| Build models, build project | Build Model, Build Project; errors in Problems | Same (xppc, LabelC) |
+| Best practice checks | Run Best Practice Checks on Project | Same (xppbp) |
+| Synchronize database | Synchronize Database (pac on UDE, SyncEngine on cloud-hosted and VHD), Synchronize Tables | Same |
+| Create deployment package, deploy | Create Deployment Package…, Deploy Models to Environment (pac) | Same |
+| Model management | Create Model…, Update Model Parameters…, View Model Dependencies… | Same |
+| Import/Export project (.axpp) | Import Project…, Export Project… | Same file format |
+| Find references, metadata search, find labels, tag references | Find References, Open Element…, Find Labels…, Find Tag References… | Same cross-reference database |
+| Compare | Compare Code…, Compare Metadata… in VS Code's diff editor | Different view, same content |
+| Launch debugger (UDE) | Launch Debugger (DebuggerProxy with vsdbg) | Attaches; breakpoint hits not yet verified |
+| Infolog | Infolog in the F&O Studio panel | Same messages |
+| Test Explorer (SysTest) | Test Explorer and Run Tests | Same runner on the environment |
+| DGML diagrams | Hierarchy, references and entity relationship diagrams | Different |
+| Trace Parser | Analyze Trace… (own `.etl` reader, no import database) | Different |
+| Open in browser, table browser | Open in Browser, Open Table Browser, Browse Table Data, SQL queries | More |
+| Report designer (.rdl) | New Report wizard with an automatic design | Not available: design layouts in Visual Studio |
+| Table + form and data entity wizards | New Element… and the agent tools | Planned |
 
 ## Requirements
 
-- Windows.
-- A Dynamics 365 Finance & Operations unified developer environment (**F&O Studio: Connect to Environment** installs the metadata, compiler and FinOps tools), or a cloud-hosted or VHD environment. On a cloud-hosted or VHD environment, run VS Code as administrator, as Visual Studio does, to build into PackagesLocalDirectory.
+- Windows, VS Code 1.101 or later.
+- One of these environments:
+  - **Unified developer environment:** **Connect to Environment…** installs the metadata, compiler and FinOps tools.
+  - **Cloud-hosted or VHD environment:** run VS Code as administrator, as Visual Studio does, to build into PackagesLocalDirectory.
 - SQL Server LocalDB, for cross references.
-- [Power Platform CLI](https://learn.microsoft.com/power-platform/developer/cli/introduction) (`pac`), for deploy and database sync.
+- [Power Platform CLI](https://learn.microsoft.com/power-platform/developer/cli/introduction) (`pac`), for deploy and database sync on a UDE.
+- GitHub Copilot, for `@fno` and the agent tools. Verify Changes in the Running App also needs the Dynamics 365 ERP MCP server.
 
 ## Getting started
 
-1. Open the **X++** view in the activity bar, or the **Get started with F&O Studio** walkthrough.
-2. If the machine isn't set up yet, run **Connect to Environment** from the Dynamics 365 view.
-3. Browse **Application Explorer**, or pick a project with **Open D365FO Project** (or **Create D365FO Project**); a project is optional.
-4. Open elements, build, debug, browse data, or ask Copilot in agent mode (or `@fno` in chat) to work on your model.
+1. Open the **F&O Studio** view in the activity bar, or the **Get started with F&O Studio** walkthrough.
+2. Set up the machine:
+   - **Unified developer environment:** run **Connect to Environment…** from the Environment group of the Dynamics 365 view.
+   - **Cloud-hosted or VHD environment:** there is nothing to set up.
+3. Pick your starting point:
+   - **Team repository:** **Open Team Repository…** links its packages and builds them.
+   - **Your own project:** **Open D365FO Project…** or **Create D365FO Project…**. A project is optional.
+   - **Just browsing:** use the **Application Explorer**.
+4. Open elements (`Ctrl+Alt+O`), build (`Ctrl+Shift+B`), browse data, or ask Copilot in agent mode (or `@fno` in chat). Start a Copilot checkpoint first if you want to be able to revert.
 
 ## Settings
 
 | Setting | Description |
 | --- | --- |
-| `xpp.project` | The project (`.rnrproj`) of a project workspace; written by Open Project, ignored in user settings |
-| `xpp.environmentUrl` | Dataverse URL of your default unified developer environment (**Select Environment** chooses one per workspace) |
-| `xpp.financeAndOperationsUrl` | Web client URL, for Open in Browser and Open Table Browser when the environment's configuration has none |
-| `xpp.auth.clientId` | Optional Entra app ID for sign-in |
+| `xpp.project` | The project (`.rnrproj`) of a project workspace. Open D365FO Project writes it; it is ignored in user settings |
+| `xpp.environmentUrl` | Dataverse URL of your default unified developer environment. Select Environment… picks one per workspace |
+| `xpp.financeAndOperationsUrl` | Web client URL for Open in Browser and Open Table Browser, used when the environment's configuration has none |
+| `xpp.auth.clientId` | Optional Microsoft Entra app ID for sign-in |
 | `xpp.build.crossReference` | Update cross references while building |
 | `xpp.build.runAppCheckerRules` | Run AppChecker rules during the build |
+| `xpp.build.saveBeforeBuild` | Save unsaved X++ code views before a build |
 | `xpp.pacPath` | Path to `pac` |
-| `xpp.debuggerProxyPath` | Path to `Microsoft.Dynamics.AX.DebuggerProxy.exe`, if not in the default location |
-| `xpp.erd.depth`, `xpp.erd.direction`, `xpp.erd.fields` | Defaults for the entity relationship diagram (also changeable in the diagram) |
-| `xpp.security.sodRulesFile` | Segregation of duties rules (JSON); empty uses the built-in rules |
-| `xpp.codeIntelligence.<feature>` | Turn each code intelligence feature on or off (also in the Dynamics 365 view) |
-| `xpp.git.baseBranch` | Branch Review My Changes and Show Changed Elements compare with |
-| `xpp.usageStatistics` | Count command use locally (never sent anywhere); Show Usage Statistics lists them |
+| `xpp.debuggerProxyPath` | Path to `Microsoft.Dynamics.AX.DebuggerProxy.exe`, if it isn't in the default location |
+| `xpp.erd.depth`, `xpp.erd.direction`, `xpp.erd.fields` | Defaults for the entity relationship diagram |
+| `xpp.security.sodRulesFile` | Segregation of duties rules (JSON); leave empty to use the built-in rules |
+| `xpp.codeIntelligence.*` | Turn code intelligence features on or off (`outline`, `navigation`, `workspaceSymbols`, `completion`, `hover`, `codeLens`, `syntaxCheck`, `obsoleteWarnings`, `formatting`, `eventHandlerIndex`, `semanticHighlighting`, `diagnosticsOnSave`) |
+| `xpp.git.baseBranch` | The branch Review My Changes and Show Changed Elements compare with |
+| `xpp.usageStatistics` | Count command use on this machine only; nothing is sent. Show Usage Statistics lists the counts |
 
 ## Status
 
-Preview. The debugger has not yet been verified end to end against a live environment.
+This extension is a preview. Some features have not been verified end to end on a live environment:
+- debugger breakpoint hits;
+- the version drift guard;
+- Open Team Repository on a real team repository;
+- Try Data Entity and Try Service Operation;
+- Verify Changes in the Running App.
+
+To report a problem, use **Report a Problem…** or open an issue on [GitHub](https://github.com/nazmolla/xpp-vscode/issues).
 
 Licensed under the [Apache License 2.0](https://github.com/nazmolla/xpp-vscode/blob/main/LICENSE).
 

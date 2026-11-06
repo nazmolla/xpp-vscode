@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { CodeTypes } from './aot';
+import { CodeTypes, elementOpenCommand, iconFor, typeName } from './aot';
 import { methodUri, objectUri, parseObjectUri, XppScheme } from './codeView';
 import { XppServerClient } from './serverClient';
 import { compilerLineToDocumentLine, methodSpans } from './xppSource';
@@ -263,44 +263,102 @@ export function declaredType(document: vscode.TextDocument, variable: string, po
     return best ?? fallback;
 }
 
-/** Quick pick over metadata: type at least 3 characters, pick an object, open its code or designer. */
-export async function openObject(server: XppServerClient): Promise<void> {
-    const pick = vscode.window.createQuickPick<vscode.QuickPickItem & { match?: Match }>();
-    pick.title = 'Open X++ object';
-    pick.placeholder = 'Object name (at least 3 characters), e.g. CustTable';
+const RecentElementsKey = 'xpp.openObject.recent';
+
+/** Type prefixes in Open Element: "t:cust" finds tables. */
+const TypePrefixes: Record<string, string[]> = {
+    c: ['AxClass'], t: ['AxTable'], f: ['AxForm'], e: ['AxEdt'], n: ['AxEnum'], q: ['AxQuery'], v: ['AxView'], d: ['AxDataEntityView'],
+    m: ['AxMenuItemDisplay', 'AxMenuItemAction', 'AxMenuItemOutput'], s: ['AxSecurityRole', 'AxSecurityDuty', 'AxSecurityPrivilege'],
+    x: ['AxTableExtension', 'AxFormExtension', 'AxEnumExtension', 'AxEdtExtension', 'AxDataEntityViewExtension'],
+};
+
+type ElementPick = vscode.QuickPickItem & { match?: Match; create?: boolean };
+
+const CodeButton: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('code'), tooltip: 'View Code' };
+const SideButton: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('split-horizontal'), tooltip: 'Open to the Side' };
+const AddButton: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('add'), tooltip: 'Add to Project' };
+
+/**
+ * Open Element: recent elements first; type at least 3 characters (optionally after a type prefix such as "t:") and pick one.
+ * Elements open the way an Application Explorer click does.
+ */
+export async function openObject(server: XppServerClient, context: vscode.ExtensionContext): Promise<void> {
+    const pick = vscode.window.createQuickPick<ElementPick>();
+    pick.title = 'Open Element';
+    pick.placeholder = 'Element name, e.g. CustTable; prefixes: c: class, t: table, f: form, e: EDT, n: enum, m: menu item, q: query, v: view, d: entity, s: security, x: extension';
+    pick.matchOnDescription = true;
+    const recent = () => context.workspaceState.get<Match[]>(RecentElementsKey, []);
+    const toItem = (m: Match): ElementPick => ({
+        label: `$(${iconFor(m.objectType)}) ${m.objectName}`,
+        description: `${typeName(m.objectType)} · ${m.modelName}${m.isCustom ? ' (yours)' : ''}`,
+        buttons: [...CodeTypes.has(m.objectType) && m.objectType !== 'AxClass' ? [CodeButton] : [], SideButton, ...m.isCustom ? [AddButton] : []],
+        match: m,
+    });
+    const showRecent = () => {
+        const items = recent().map(toItem);
+        pick.items = items.length ? [{ label: 'Recently opened', kind: vscode.QuickPickItemKind.Separator }, ...items] : [];
+    };
+    showRecent();
     let timer: NodeJS.Timeout | undefined;
     pick.onDidChangeValue(value => {
         clearTimeout(timer);
-        if (value.trim().length < 3) {
-            pick.items = [];
+        const prefixed = /^([a-z]):\s*(.*)$/i.exec(value.trim());
+        const types = prefixed ? TypePrefixes[prefixed[1].toLowerCase()] : undefined;
+        const name = (types ? prefixed![2] : value).trim();
+        if (name.length < 3) {
+            if (!value.trim()) {
+                showRecent();
+            } else {
+                pick.items = [];
+            }
             return;
         }
         timer = setTimeout(async () => {
             pick.busy = true;
             try {
-                const result = await server.bridge('find_object', { objectName: value.trim(), exactMatch: false, maxResults: 50 });
-                pick.items = (result.matches ?? []).map((m: Match) => ({
-                    label: m.objectName,
-                    description: m.objectType,
-                    detail: m.modelName + (m.isCustom ? ' (yours)' : ''),
-                    match: m,
-                }));
+                const result = await server.bridge('find_object', { objectName: name, exactMatch: false, maxResults: 50, ...types?.length === 1 ? { objectType: types[0] } : {} });
+                const matches = ((result.matches ?? []) as Match[]).filter(m => !types || types.includes(m.objectType));
+                // Keep VS Code's own filtering from hiding results whose text doesn't contain the prefix.
+                pick.items = matches.length
+                    ? matches.map(m => ({ ...toItem(m), alwaysShow: true }))
+                    : [{ label: `$(add) New Element named '${name}'…`, alwaysShow: true, create: true }];
             } finally {
                 pick.busy = false;
             }
         }, 300);
     });
+    const remember = (m: Match) => void context.workspaceState.update(RecentElementsKey,
+        [m, ...recent().filter(r => r.objectType !== m.objectType || r.objectName !== m.objectName)].slice(0, 15));
+    pick.onDidTriggerItemButton(async e => {
+        const m = e.item.match;
+        if (!m) {
+            return;
+        }
+        remember(m);
+        if (e.button === CodeButton) {
+            pick.hide();
+            await vscode.commands.executeCommand('vscode.open', objectUri(m.objectType, m.objectName));
+        } else if (e.button === SideButton) {
+            pick.hide();
+            await vscode.commands.executeCommand('xpp.openDesignerToSide', { item: { objectType: m.objectType, objectName: m.objectName } });
+        } else if (e.button === AddButton) {
+            await vscode.commands.executeCommand('xpp.addToProject', { item: { objectType: m.objectType, objectName: m.objectName } });
+        }
+    });
     pick.onDidAccept(() => {
-        const match = pick.selectedItems[0]?.match;
+        const selected = pick.selectedItems[0];
         pick.hide();
+        if (selected?.create) {
+            void vscode.commands.executeCommand('xpp.newElement');
+            return;
+        }
+        const match = selected?.match;
         if (!match) {
             return;
         }
-        if (match.objectType === 'AxForm') {
-            void vscode.commands.executeCommand('xpp.openFormDesigner', match.objectName);
-        } else {
-            void vscode.window.showTextDocument(objectUri(match.objectType, match.objectName));
-        }
+        remember(match);
+        const open = elementOpenCommand(match.objectType, match.objectName);
+        void vscode.commands.executeCommand(open.command, ...(open.arguments ?? []));
     });
     pick.onDidHide(() => pick.dispose());
     pick.show();

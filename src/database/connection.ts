@@ -106,8 +106,9 @@ export class DatabaseAccess implements vscode.Disposable {
         // Cleared after the await: of overlapping refreshes, only the last one keeps a timer.
         clearTimeout(this.expiryTimer);
         if (!target) {
-            this.status.text = '$(database) No database access';
-            this.status.tooltip = 'Request temporary credentials for the environment\'s database';
+            // Requested from the Dynamics 365 view or on first use; no status bar item until there is access.
+            this.status.hide();
+            return;
         } else if (!target.credentials) {
             this.status.text = `$(database) ${target.database}`;
             this.status.tooltip = `${target.database} on ${target.server} (Windows authentication)`;

@@ -1,6 +1,9 @@
 // Label editor webview: renders label entries and sends load/save/delete/copy requests to the extension.
 (function () {
     const vscode = acquireVsCodeApi();
+    if (document.body.dataset.xppState) {
+        vscode.setState({ xpp: JSON.parse(document.body.dataset.xppState) });
+    }
     const $ = id => document.getElementById(id);
     let data = null;
     let languages = null;      // null = server default

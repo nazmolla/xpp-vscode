@@ -1,6 +1,9 @@
 // Form designer webview: renders the merged form tree and forwards edit actions to the extension.
 (function () {
     const vscode = acquireVsCodeApi();
+    if (document.body.dataset.xppState) {
+        vscode.setState({ xpp: JSON.parse(document.body.dataset.xppState) });
+    }
     const toolbar = document.getElementById('toolbar');
     const outline = document.getElementById('outline');
     const canvas = document.getElementById('canvas');

@@ -55,9 +55,13 @@ namespace XppVsCode.Server.MetaModel
             _performance = services.Performance ?? throw new ArgumentNullException(nameof(services.Performance));
             _compatibility = services.Compatibility ?? throw new ArgumentNullException(nameof(services.Compatibility));
             _policy = services.Policy ?? throw new ArgumentNullException(nameof(services.Policy));
+            _agentWrites = services.AgentWrites;
+            _checkpoints = services.Checkpoints;
         }
 
         private readonly IWritePolicy _policy;
+        private readonly IAgentSession _agentWrites;
+        private readonly IAgentSession _checkpoints;
 
         // Actions that change an existing object (objectType/objectName) and actions that create objects in a model (modelName).
         private static readonly HashSet<string> EditActions = new HashSet<string>(StringComparer.Ordinal)
@@ -69,9 +73,17 @@ namespace XppVsCode.Server.MetaModel
 
         private string WriteDenial(string action, string body)
         {
-            if (EditActions.Contains(action) && !"true".Equals(ExtractJsonString(body, "checkOnly"), StringComparison.OrdinalIgnoreCase))
-                return _policy.EditDenial(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
-            return CreateActions.Contains(action) ? _policy.TargetModelDenial(ExtractJsonString(body, "modelName")) : null;
+            bool checkOnly = "true".Equals(ExtractJsonString(body, "checkOnly"), StringComparison.OrdinalIgnoreCase);
+            string denial = EditActions.Contains(action) && !checkOnly
+                ? _policy.EditDenial(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"))
+                : CreateActions.Contains(action) ? _policy.TargetModelDenial(ExtractJsonString(body, "modelName")) : null;
+            if (denial != null || _agentWrites == null || checkOnly || !(EditActions.Contains(action) || action == "create_object"))
+                return denial;
+            string objectType = ExtractJsonString(body, "objectType"), objectName = ExtractJsonString(body, "objectName");
+            denial = _agentWrites.AgentScopeDenial(objectType, objectName);
+            if (denial == null)
+                _agentWrites.BeforeAgentWrite(objectType, objectName);
+            return denial;
         }
 
         public string Dispatch(string action, string body)
@@ -150,6 +162,14 @@ namespace XppVsCode.Server.MetaModel
                     return _performance.AnalyzePerformanceJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
                 case "extension_compatibility":
                     return _compatibility.ExtensionCompatibilityJson(ExtractJsonString(body, "modelName"));
+                case "wrapper_drift":
+                    return _compatibility.WrapperDriftJson(ExtractJsonString(body, "modelName"), ExtractJsonString(body, "previousFolder"));
+                case "extension_collisions":
+                    return _compatibility.ExtensionCollisionsJson(ExtractJsonString(body, "modelName"));
+                case "checkpoint_entries":
+                    return _checkpoints == null ? "{\"success\":false,\"message\":\"Not available in this process.\"}" : _checkpoints.CheckpointEntriesJson(ExtractJsonString(body, "id"));
+                case "revert_checkpoint":
+                    return _checkpoints == null ? "{\"success\":false,\"message\":\"Not available in this process.\"}" : _checkpoints.RevertCheckpointJson(ExtractJsonString(body, "id"));
                 case "type_members":
                     return _discovery.TypeMembersJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
                 case "label_file_entries":

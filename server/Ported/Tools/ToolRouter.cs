@@ -514,11 +514,12 @@ namespace XppVsCode.Server.Tools
     },
     {
       ""name"": ""xpp_find_deprecations"",
-      ""description"": ""Upgrade readiness of a model: (1) every place its code uses a class, table or method marked [SysObsolete], with the attribute's message (often the replacement to use) and whether it is marked as an error (it will stop compiling), read from the cross-reference database; (2) its extensions checked against the installed application: Chain of Command wrappers whose target method is gone, changed its signature (static, return type, parameters) or is no longer wrappable (private, final, Wrappable/Hookable(false), internal); event handlers whose class, method, delegate or table is gone; table, form and enum extensions whose base element, fields, field groups or controls are gone. Run it after installing a new version (or on the version you upgrade to) and before building."",
+      ""description"": ""Upgrade readiness of a model: (1) every place its code uses a class, table or method marked [SysObsolete], with the attribute's message (often the replacement to use) and whether it is marked as an error (it will stop compiling), read from the cross-reference database; (2) its extensions checked against the installed application: Chain of Command wrappers whose target method is gone, changed its signature (static, return type, parameters) or is no longer wrappable (private, final, Wrappable/Hookable(false), internal); event handlers whose class, method, delegate or table is gone; table, form and enum extensions whose base element, fields, field groups or controls are gone. With previousPackagesFolder (the PackagesLocalDirectory of the version before the update) it also lists wrapped methods whose standard code changed, so behaviour around next may differ. Run it after installing a new version (or on the version you upgrade to) and before building."",
       ""inputSchema"": {
         ""type"": ""object"",
         ""properties"": {
-          ""modelName"": { ""type"": ""string"", ""description"": ""The model to check (its package's code is read)."" }
+          ""modelName"": { ""type"": ""string"", ""description"": ""The model to check (its package's code is read)."" },
+          ""previousPackagesFolder"": { ""type"": ""string"", ""description"": ""Optional: the PackagesLocalDirectory folder of the earlier application version (under %LOCALAPPDATA%/Microsoft/Dynamics365/<version>)."" }
         },
         ""required"": [""modelName""]
       }
@@ -537,11 +538,11 @@ namespace XppVsCode.Server.Tools
     },
     {
       ""name"": ""xpp_analyze_performance"",
-      ""description"": ""Static performance review of the X++ methods of a class, table or form (no environment needed): queries and row-by-row insert/update/delete inside loops, select firstonly inside while select (use a join or exists join), while select of every field, select forupdate without a write, unbalanced ttsbegin/ttscommit, crossCompany queries, and insert_recordset/update_recordset/delete_from that quietly run row by row because the table overrides insert/update/delete, has delete actions or is date-effective. Each finding gives the method, line, why it is slow and the fix. Findings are heuristics: confirm before changing code. Database log and alerts, which also force row-by-row, are environment setup and are not checked."",
+      ""description"": ""Static performance review of the X++ methods of a class, table or form (no environment needed): queries and row-by-row insert/update/delete inside loops, select firstonly inside while select (use a join or exists join), while select of every field, select forupdate without a write, unbalanced ttsbegin/ttscommit, crossCompany queries, and insert_recordset/update_recordset/delete_from that quietly run row by row because the table overrides insert/update/delete, has delete actions or is date-effective. Each finding gives the method, line, why it is slow and the fix. Findings are heuristics: confirm before changing code. Database log and alerts, which also force row-by-row, are environment setup and are not checked. For a data entity (AxDataEntityView) it also checks readiness for OData and data management: public entity and collection names, an entity key, staging table fields missing for entity fields, mandatory fields of the root table that are not mapped, and set-based processing over views, entities or temporary tables."",
       ""inputSchema"": {
         ""type"": ""object"",
         ""properties"": {
-          ""objectType"": { ""type"": ""string"", ""enum"": [""AxClass"", ""AxTable"", ""AxForm""] },
+          ""objectType"": { ""type"": ""string"", ""enum"": [""AxClass"", ""AxTable"", ""AxForm"", ""AxDataEntityView""] },
           ""objectName"": { ""type"": ""string"" }
         },
         ""required"": [""objectType"", ""objectName""]
@@ -648,6 +649,7 @@ namespace XppVsCode.Server.Tools
         private string HandleFindDeprecations(string idToken, string json)
         {
             string model = JsonHelpers.ExtractArgString(JsonHelpers.ExtractToolArgumentsObject(json), "modelName");
+            string previous = JsonHelpers.ExtractArgString(JsonHelpers.ExtractToolArgumentsObject(json), "previousPackagesFolder");
             if (string.IsNullOrWhiteSpace(model))
                 return JsonHelpers.BuildToolResult(idToken, "Pass modelName.", isError: true);
             // The cross-reference database groups code by package; a model's package usually has its name.
@@ -656,8 +658,44 @@ namespace XppVsCode.Server.Tools
             string package = (info == null ? null : JsonHelpers.ExtractJsonString(info, "package") ?? JsonHelpers.ExtractJsonString(info, "Package")) ?? model;
             string report = new DeprecationReport(_xref, Examples).Report(package);
             if (_bridge.IsAvailable())
-                report += "\n\n" + CompatibilityText(_bridge.Call("extension_compatibility", body));
+                report += "\n\n" + CompatibilityText(_bridge.Call("extension_compatibility", body))
+                    + "\n\n" + CollisionsText(_bridge.Call("extension_collisions", body));
+            if (_bridge.IsAvailable() && !string.IsNullOrWhiteSpace(previous))
+                report += "\n\n" + DriftText(_bridge.Call("wrapper_drift", new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(
+                    new Dictionary<string, string> { ["modelName"] = model, ["previousFolder"] = Environment.ExpandEnvironmentVariables(previous) })));
             return JsonHelpers.BuildToolResult(idToken, report);
+        }
+
+        /// <summary>Clashes with other models' extensions of the same elements.</summary>
+        internal static string CollisionsText(string resultJson)
+        {
+            var result = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue }.Deserialize<Dictionary<string, object>>(resultJson);
+            if (!(result.TryGetValue("success", out object ok) && ok is bool success && success))
+                return "Collisions with other models: " + (result.TryGetValue("message", out object m) ? m : "not checked") + ".";
+            var findings = ((System.Collections.ArrayList)result["findings"]).Cast<Dictionary<string, object>>().ToList();
+            var sb = new StringBuilder();
+            sb.Append("Collisions with other models: ").Append(result["extensions"]).Append(" extension(s) compared with the other installed models' extensions of the same elements; ")
+              .Append(findings.Count == 0 ? "no clashes." : findings.Count + " finding(s):");
+            foreach (var f in findings.Take(200))
+                sb.Append("\n- ").Append(f["severity"]).Append(" ").Append(f["rule"]).Append(": ").Append(f["objectName"])
+                  .Append(f["member"] is string member && member.Length > 0 ? "." + member : "").Append(": ").Append(f["message"]);
+            return sb.ToString();
+        }
+
+        /// <summary>Wrapped standard methods whose code changed since the earlier version (names and size of the change; no code).</summary>
+        internal static string DriftText(string resultJson)
+        {
+            var result = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue }.Deserialize<Dictionary<string, object>>(resultJson);
+            if (!(result.TryGetValue("success", out object ok) && ok is bool success && success))
+                return "Standard code drift: " + (result.TryGetValue("message", out object m) ? m : "not checked") + ".";
+            var changed = ((System.Collections.ArrayList)result["changed"]).Cast<Dictionary<string, object>>().ToList();
+            var sb = new StringBuilder();
+            sb.Append("Standard code drift: ").Append(result["wrappers"]).Append(" wrapper(s); ").Append(changed.Count).Append(" target method(s) changed since the earlier version, ")
+              .Append(result["unchanged"]).Append(" unchanged").Append(Convert.ToInt32(result["notFound"]) > 0 ? ", " + result["notFound"] + " not found in one of the versions" : "").Append('.');
+            foreach (var c in changed.Take(100))
+                sb.Append("\n- ").Append(c["className"]).Append('.').Append(c["method"]).Append(" wraps ").Append(c["target"]).Append('.').Append(c["method"])
+                  .Append(": ").Append(c["changedLines"]).Append(" line(s) differ; read both versions and check the logic around next.");
+            return sb.ToString();
         }
 
         /// <summary>Readable extension compatibility findings (Chain of Command, handlers, metadata extensions).</summary>

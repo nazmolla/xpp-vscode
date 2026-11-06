@@ -612,4 +612,4 @@ factory (SysExtension, SysPlugin, SysOperation) | X++ LANGUAGE REFERENCE (data t
 classes, select, deep joins, set-based operations, transactions, exceptions, query framework,
 collections, strings, global functions, attributes, common patterns) | OBJECT TYPES & THEIR PROPERTIES |
 DISPLAY & EDIT METHODS | DECISION TREE: FULL (OWNERSHIP-FIRST) | NAMING CONVENTIONS | BEST PRACTICES |
-SSRS REPORT PATTERNS (approach A contract-based, approach B query-based, combined, UI builder).
+TESTS WITH THE ACCEPTANCE TEST LIBRARY (ATL) | SSRS REPORT PATTERNS (approach A contract-based, approach B query-based, combined, UI builder).

@@ -6,9 +6,9 @@ import { methodSpans } from './xppSource';
 
 interface Finding { rule: string; severity: string; method: string; line: number; message: string; fix: string }
 
-const CodeTypes = ['AxClass', 'AxTable', 'AxForm'];
+const CodeTypes = ['AxClass', 'AxTable', 'AxForm', 'AxDataEntityView'];
 
-/** F&O Studio: Analyze Performance: static performance findings of a class, table or form, shown in the Problems view on its code. */
+/** F&O Studio: Analyze Performance: static performance findings of a class, table, form or data entity (with its readiness for OData and data management), shown in the Problems view on its code. */
 export function registerPerformance(context: vscode.ExtensionContext, command: (id: string, handler: (...args: any[]) => unknown) => void, server: XppServerClient): void {
     const diagnostics = vscode.languages.createDiagnosticCollection('xpp-performance');
     context.subscriptions.push(diagnostics);

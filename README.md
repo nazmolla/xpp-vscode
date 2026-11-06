@@ -33,7 +33,7 @@ The full list is in the [feature reference](https://github.com/nazmolla/xpp-vsco
 
 1. Open the **X++** view in the activity bar.
 2. If the machine isn't set up yet, run **Connect to Environment** from the Dynamics 365 view.
-3. Browse **Application Explorer**, or pick a project with **Select D365FO Project** (or **Create D365FO Project**); a project is optional.
+3. Browse **Application Explorer**, or pick a project with **Open D365FO Project…** (or **Create D365FO Project…**); a project is optional.
 4. Open elements, build, debug, or ask Copilot in agent mode to work on your model.
 
 ## Settings

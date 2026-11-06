@@ -7,6 +7,7 @@ import { Dataverse } from './dataverse';
 import { readActiveEnvironment } from './environment';
 import { findActiveProject, readProject } from './project';
 import { XppServerClient } from './serverClient';
+import { DeployState } from './deployState';
 
 /**
  * Runs X++ SysTest tests on the unified developer environment's cloud runtime, the way Visual Studio's Test Explorer
@@ -266,7 +267,7 @@ interface RunTestsInput {
 }
 
 /** Registers the agent tool and the command; both use the same runner. */
-export function registerTests(context: vscode.ExtensionContext, server: XppServerClient): void {
+export function registerTests(context: vscode.ExtensionContext, server: XppServerClient, deployState: DeployState): void {
     const output = vscode.window.createOutputChannel('X++ Tests');
     context.subscriptions.push(output);
 
@@ -283,7 +284,9 @@ export function registerTests(context: vscode.ExtensionContext, server: XppServe
             try {
                 const result = await runTests(server, options.input, line => { lines.push(line); output.appendLine(line); }, token);
                 output.appendLine(result.summary);
-                return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(result.summary)]);
+                const stale = await deployState.staleMessage();
+                const summary = stale ? `WARNING: ${stale} The tests ran against the deployed code; deploy (Dynamics 365 > Deploy) and run them again to test the latest build.\n${result.summary}` : result.summary;
+                return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(summary)]);
             } catch (err) {
                 const message = `TEST RUN FAILED: ${(err as Error).message}\n${lines.slice(-5).join('\n')}`;
                 output.appendLine(message);
@@ -294,6 +297,9 @@ export function registerTests(context: vscode.ExtensionContext, server: XppServe
 
     context.subscriptions.push(vscode.commands.registerCommand('xpp.runTests', async (arg?: { objectName?: string; objectType?: string }) => {
         const classes = arg?.objectType === 'AxClass' && arg.objectName ? [arg.objectName] : undefined;
+        if (!await deployState.confirmCurrent('Running tests')) {
+            return;
+        }
         output.show(true);
         await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Running X++ tests', cancellable: true }, async (_progress, token) => {
             try {

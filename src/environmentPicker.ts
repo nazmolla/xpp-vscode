@@ -5,6 +5,8 @@ import {
     selectedEnvironmentUrl, useDefaultEnvironment, useEnvironment, XppEnvironment,
 } from './environment';
 import { resolveDataverseUrl, validateDataverseUrl, normalizeDataverseUrl } from './ude';
+import { onDidChangeSetup, PhaseState, setupStatus } from './setup';
+import { VersionGuard } from './versionGuard';
 
 type EnvironmentItem = vscode.QuickPickItem & { env?: EnvironmentConfig; action?: 'connect' | 'default' };
 
@@ -47,8 +49,7 @@ export async function selectEnvironment(): Promise<void> {
         return;
     }
     await useEnvironment(dataverseUrl);
-    void vscode.window.showInformationMessage(`X++ environment: ${picked.env.org} (${picked.env.applicationVersion}). Reload the window to refresh open designers and code views.`, 'Reload')
-        .then(choice => choice === 'Reload' ? vscode.commands.executeCommand('workbench.action.reloadWindow') : undefined);
+    vscode.window.setStatusBarMessage(`$(server-environment) X++ environment: ${picked.env.org} (${picked.env.applicationVersion})`, 5000);
 }
 
 /** A configuration only names the org; its Dataverse host is found by region, or asked for. */
@@ -75,22 +76,43 @@ export class EnvironmentStatus implements ToolsContribution, vscode.Disposable {
     private readonly subscription: vscode.Disposable;
     private current: XppEnvironment | undefined;
     readonly onDidChange = this.changed.event;
+    readonly slot = 'environment';
 
-    constructor() {
+    constructor(private readonly guard: VersionGuard) {
         this.item.name = 'X++ Environment';
-        this.item.command = 'xpp.selectEnvironment';
-        this.subscription = onDidChangeEnvironment(() => void this.update());
+        this.item.command = 'xpp.environment.menu';
+        this.subscription = vscode.Disposable.from(onDidChangeEnvironment(() => void this.update()), onDidChangeSetup(() => this.changed.fire()),
+            guard.onDidChange(() => void this.update()));
         void this.update();
     }
 
     nodes(): ToolNode[] {
+        const setup = setupStatus();
+        if (setup) {
+            const icons: Record<PhaseState, string> = { pending: 'circle-outline', running: 'sync~spin', done: 'pass', failed: 'error' };
+            return [{
+                label: 'Environment', icon: 'server-environment', expanded: true,
+                description: setup.running ? `Connecting ${orgName(setup.dataverseUrl)}…` : setup.error ? 'setup failed' : `${orgName(setup.dataverseUrl)} connected`,
+                children: [
+                    ...setup.phases.map(p => ({ label: p.label, icon: icons[p.state], description: p.detail, tooltip: `${p.label}: ${p.state}${p.detail ? `\n${p.detail}` : ''}` })),
+                    ...setup.running ? [] : [
+                        ...setup.error ? [{ label: 'Retry', icon: 'debug-restart', command: 'xpp.connectEnvironment', commandArgs: [setup.dataverseUrl] }] : [],
+                        { label: 'Done', icon: 'check', command: 'xpp.environment.clearSetup' },
+                    ],
+                ],
+            }];
+        }
+        const drift = this.guard.drift;
         return [{
-            label: 'Environment', icon: 'server-environment', description: this.current?.name, tooltip: this.tooltip(),
+            label: 'Environment', icon: drift ? 'warning' : 'server-environment', description: drift ? `${this.current?.name} · ${drift.remote} available` : this.current?.name,
+            tooltip: this.tooltip(), expanded: !this.current || !!drift,
             children: [
+                ...drift ? [{ label: `Update Metadata to ${drift.remote}…`, icon: 'cloud-download', command: 'xpp.connectEnvironment', commandArgs: [drift.dataverseUrl], description: `this machine: ${drift.local}` }] : [],
                 { label: 'Select Environment…', icon: 'arrow-swap', command: 'xpp.selectEnvironment' },
                 { label: 'Connect to Environment…', icon: 'plug', command: 'xpp.connectEnvironment' },
                 { label: 'Check Environment Connection', icon: 'pulse', command: 'xpp.checkEnvironment' },
                 { label: 'Show Active Configuration', icon: 'info', command: 'xpp.showEnvironment' },
+                { label: 'Clean Up Old Versions…', icon: 'trash', command: 'xpp.cleanUpOldVersions', udeOnly: true },
                 { label: 'Sign In (pac)', icon: 'account', command: 'xpp.pac.signIn', udeOnly: true },
             ],
         }];
@@ -98,6 +120,28 @@ export class EnvironmentStatus implements ToolsContribution, vscode.Disposable {
 
     hides(node: ToolNode): boolean {
         return !!node.udeOnly && !!this.current?.local;
+    }
+
+    /** Everything about the environment in one menu (the status bar item). */
+    async menu(): Promise<void> {
+        const drift = this.guard.drift;
+        const items = [
+            ...drift ? [{ label: `$(cloud-download) Update Metadata to ${drift.remote}…`, command: 'xpp.connectEnvironment', args: [drift.dataverseUrl] }] : [],
+            { label: '$(arrow-swap) Select Environment…', command: 'xpp.selectEnvironment' },
+            { label: '$(plug) Connect to Environment…', command: 'xpp.connectEnvironment' },
+            { label: '$(pulse) Check Environment Connection', command: 'xpp.checkEnvironment' },
+            ...this.current?.local ? [] : [
+                { label: '$(versions) Check Application Version', command: 'xpp.checkVersion' },
+                { label: '$(trash) Clean Up Old Versions…', command: 'xpp.cleanUpOldVersions' },
+                { label: '$(account) Sign In (pac)', command: 'xpp.pac.signIn' },
+            ],
+            { label: '$(database) Database…', command: 'xpp.database.menu' },
+            { label: '$(info) Show Active Configuration', command: 'xpp.showEnvironment' },
+        ] as { label: string; command: string; args?: unknown[] }[];
+        const picked = await vscode.window.showQuickPick(items, { title: this.current ? `Environment ${this.current.name}${this.current.applicationVersion ? ` (${this.current.applicationVersion})` : ''}` : 'Environment' });
+        if (picked) {
+            await vscode.commands.executeCommand(picked.command, ...(picked.args ?? []));
+        }
     }
 
     dispose(): void {
@@ -110,7 +154,7 @@ export class EnvironmentStatus implements ToolsContribution, vscode.Disposable {
         this.current = await readActiveEnvironment().catch(() => undefined);
         void vscode.commands.executeCommand('setContext', 'xpp.localEnvironment', !!this.current?.local);
         if (this.current) {
-            this.item.text = `$(${this.mismatch() ? 'warning' : 'server-environment'}) ${this.current.name}`;
+            this.item.text = `$(${this.mismatch() || this.guard.drift ? 'warning' : 'server-environment'}) ${this.current.name}`;
             this.item.tooltip = this.tooltip();
             this.item.show();
         } else {
@@ -131,15 +175,17 @@ export class EnvironmentStatus implements ToolsContribution, vscode.Disposable {
             return undefined;
         }
         const mismatch = this.mismatch();
+        const drift = this.guard.drift;
         return [
             `X++ environment: ${env.name}`,
             env.applicationVersion && `Application ${env.applicationVersion}`,
+            drift && `The environment now runs ${drift.remote}: update the metadata (Dynamics 365 view > Environment).`,
             env.finOpsUrl,
             mismatch
                 ? `${mismatch} has no metadata on this machine; this is the machine-wide configuration. Connect to Environment downloads it.`
                 : env.local ? 'Cloud-hosted or VHD environment (local AOS and PackagesLocalDirectory)'
                 : !env.dataverseUrl && 'Machine-wide configuration (shared with Visual Studio)',
-            'Click to switch.',
+            'Click for the environment menu.',
         ].filter(Boolean).join('\n');
     }
 }

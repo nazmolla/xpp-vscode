@@ -2,6 +2,9 @@
 (function () {
     'use strict';
     const vscode = acquireVsCodeApi();
+    if (document.body.dataset.xppState) {
+        vscode.setState(Object.assign({}, vscode.getState() || {}, { xpp: JSON.parse(document.body.dataset.xppState) }));
+    }
     const saved = (vscode.getState && vscode.getState()) || {};
     const S = {
         report: null,
@@ -21,7 +24,7 @@
     const searchText = new WeakMap();
     const flat = new WeakMap();
     const $ = id => document.getElementById(id);
-    const persist = () => vscode.setState && vscode.setState({ tab: S.tab, showBatch: S.showBatch, includeWaits: S.includeWaits, timelineOpen: S.timelineOpen, reqSort: S.reqSort });
+    const persist = () => vscode.setState && vscode.setState({ xpp: (vscode.getState() || {}).xpp, tab: S.tab, showBatch: S.showBatch, includeWaits: S.includeWaits, timelineOpen: S.timelineOpen, reqSort: S.reqSort });
 
     // ---------- helpers ----------
     function h(tag, props, ...children) {

@@ -2,8 +2,9 @@ import { randomBytes } from 'crypto';
 import { promises as fs } from 'fs';
 import * as vscode from 'vscode';
 import { XppServerClient } from '../serverClient';
+import { stateAttribute } from '../webviewState';
 import { DatabaseAccess, DatabaseTarget } from './connection';
-import { BrowseRequest, DataService, QueryResult, ResultSet } from './dataService';
+import { BrowseFilter, BrowseRequest, DataService, QueryResult, ResultSet } from './dataService';
 
 /** A table's shape from the metadata (bridge action table_data_shape). */
 export interface TableShape {
@@ -16,7 +17,9 @@ export interface TableShape {
     enums: Record<string, { extensible: boolean; values: Record<string, string> }>;
 }
 
-type PanelMode = { kind: 'table'; table: string } | { kind: 'query'; sql: string; autoRun?: boolean };
+type RelatedFilter = BrowseFilter;
+type PanelMode = { kind: 'table'; table: string; filters?: RelatedFilter[]; company?: string } | { kind: 'query'; sql: string; autoRun?: boolean };
+export type { PanelMode };
 
 /**
  * Business data in an editor tab: one table's rows (Browse Data) or the result of a SQL query. Reads are SELECT-only
@@ -26,12 +29,17 @@ export class DataPanel {
     private running: vscode.CancellationTokenSource | undefined;
     private lastResult: QueryResult | undefined;
 
-    static openTable(context: vscode.ExtensionContext, server: XppServerClient, data: DataService, access: DatabaseAccess, table: string): void {
-        new DataPanel(context, server, data, access, { kind: 'table', table });
+    static openTable(context: vscode.ExtensionContext, server: XppServerClient, data: DataService, access: DatabaseAccess, table: string, filters?: RelatedFilter[], company?: string): void {
+        new DataPanel(context, server, data, access, { kind: 'table', table, filters, company });
     }
 
     static openQuery(context: vscode.ExtensionContext, server: XppServerClient, data: DataService, access: DatabaseAccess, sql = '', autoRun = false): void {
         new DataPanel(context, server, data, access, { kind: 'query', sql, autoRun });
+    }
+
+    /** Reopens a data tab after a window reload; queries are not run again by themselves. */
+    static revive(context: vscode.ExtensionContext, server: XppServerClient, data: DataService, access: DatabaseAccess, panel: vscode.WebviewPanel, mode: PanelMode): void {
+        new DataPanel(context, server, data, access, mode.kind === 'query' ? { ...mode, autoRun: false } : mode, panel);
     }
 
     private readonly panel: vscode.WebviewPanel;
@@ -42,8 +50,9 @@ export class DataPanel {
         private readonly data: DataService,
         private readonly access: DatabaseAccess,
         private readonly mode: PanelMode,
+        panel?: vscode.WebviewPanel,
     ) {
-        this.panel = vscode.window.createWebviewPanel('xppData', mode.kind === 'table' ? `${mode.table} [Data]` : 'SQL query', vscode.ViewColumn.Active, {
+        this.panel = panel ?? vscode.window.createWebviewPanel('xppData', mode.kind === 'table' ? `${mode.table} [Data]` : 'SQL query', vscode.ViewColumn.Active, {
             enableScripts: true,
             retainContextWhenHidden: true,
             localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media')],
@@ -60,7 +69,7 @@ export class DataPanel {
                     await this.post({ type: 'init', mode: this.mode });
                     if (this.mode.kind === 'table') {
                         await this.loadShape(this.mode.table);
-                        await this.browse({ table: this.mode.table, maxRows: 200 });
+                        await this.browse({ table: this.mode.table, maxRows: 200, filters: this.mode.filters, company: this.mode.company });
                     } else if (this.mode.autoRun && this.mode.sql) {
                         await this.query(this.mode.sql, 500, false);
                     }
@@ -80,6 +89,9 @@ export class DataPanel {
                     return;
                 case 'openAsQuery':
                     DataPanel.openQuery(this.context, this.server, this.data, this.access, String(msg.sql ?? ''));
+                    return;
+                case 'openRelated':
+                    DataPanel.openTable(this.context, this.server, this.data, this.access, String(msg.table), msg.filters as RelatedFilter[], msg.company || undefined);
                     return;
                 case 'export':
                     await this.exportCsv(Number(msg.index) || 0);
@@ -103,6 +115,12 @@ export class DataPanel {
             throw new Error(`${shape.table} is a temporary table (${shape.tableType}); its rows exist only while code runs.`);
         }
         await this.post({ type: 'shape', shape });
+        // Relations with field constraints: the record inspector follows them to the related rows.
+        const erd = await this.server.bridge('table_erd', { tables: [shape.table] }).catch(() => undefined);
+        const relations = ((erd?.tables?.[0]?.relations ?? []) as { name: string; relatedTable: string; constraints: { field?: string; relatedField?: string; value?: string }[] }[])
+            .map(r => ({ name: r.name, relatedTable: r.relatedTable, constraints: r.constraints.filter(c => c.field && c.relatedField) }))
+            .filter(r => r.relatedTable && r.constraints.length);
+        await this.post({ type: 'relations', relations });
     }
 
     private async target(): Promise<DatabaseTarget> {
@@ -207,7 +225,7 @@ export class DataPanel {
 <link href="${media('dataPanel.css')}" rel="stylesheet">
 <link href="${media('a11y.css')}" rel="stylesheet">
 </head>
-<body>
+<body${stateAttribute(this.mode)}>
 <div id="toolbar" role="toolbar"></div>
 <div id="filters" hidden></div>
 <div id="editor" hidden>

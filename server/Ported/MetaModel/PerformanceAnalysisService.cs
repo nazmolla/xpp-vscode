@@ -35,6 +35,8 @@ namespace XppVsCode.Server.MetaModel
                 findings.AddRange(TableCacheFindings(_core.MetaService.GetTable(objectName)));
             if (objectType == "AxForm")
                 findings.AddRange(DisplayMethodFindings(_core.MetaService.GetForm(objectName), methods));
+            if (objectType == "AxDataEntityView")
+                findings.AddRange(EntityReadinessFindings(_core.MetaService.GetDataEntityView(objectName), methods));
             return json.Serialize(new Dictionary<string, object>
             {
                 ["success"] = true,
@@ -71,8 +73,13 @@ namespace XppVsCode.Server.MetaModel
                     declaration = form?.SourceCode?.Declaration;
                     source = form?.Methods;
                     break;
+                case "AxDataEntityView":
+                    var entity = _core.MetaService.GetDataEntityView(objectName);
+                    declaration = MetaModelBridge.GetStringProperty(entity, "Declaration");
+                    source = entity == null ? null : (IEnumerable<AxMethod>)entity.Methods ?? Enumerable.Empty<AxMethod>();
+                    break;
                 default:
-                    problem = "Performance analysis covers classes, tables and forms; " + objectType + " has no code to analyze.";
+                    problem = "Performance analysis covers classes, tables, forms and data entities; " + objectType + " has no code to analyze.";
                     return false;
             }
             if (source == null)
@@ -126,6 +133,108 @@ namespace XppVsCode.Server.MetaModel
             else if (group == "Main" && cache == "None")
                 yield return Finding("Info", table.Name + " (TableGroup Main) has CacheLookup None: find() lookups by key go to the database every time.",
                     "Use Found so lookups by a unique index are cached.");
+        }
+
+        /// <summary>Data entity readiness for OData, DMF and dual-write: public names, keys, staging fields, mandatory fields, set-based processing.</summary>
+        private IEnumerable<PerformanceFinding> EntityReadinessFindings(AxDataEntityView entity, List<KeyValuePair<string, string>> methods)
+        {
+            if (entity == null) yield break;
+            PerformanceFinding Finding(string rule, string severity, string message, string fix) =>
+                new PerformanceFinding { Rule = rule, Severity = severity, Method = "(entity)", Line = 0, Message = message, Fix = fix };
+            string Prop(string name) => MetaModelBridge.GetStringProperty(entity, name) ?? "";
+            bool Yes(string name) => Prop(name) == "Yes" || Prop(name) == "True";
+
+            if (Yes("IsPublic") && (Prop("PublicEntityName") == "" || Prop("PublicCollectionName") == ""))
+                yield return Finding("EntityPublicNames", "Warning", entity.Name + " is public but has no " + (Prop("PublicEntityName") == "" ? "PublicEntityName" : "PublicCollectionName") + ": OData can't expose it.",
+                    "Set PublicEntityName (singular) and PublicCollectionName (plural).");
+
+            var keys = Items(entity.GetType().GetProperty("Keys")?.GetValue(entity)).ToList();
+            if (keys.Count == 0)
+                yield return Finding("EntityKey", "Warning", entity.Name + " has no entity key: OData updates and data management imports need one.",
+                    "Add a key (Keys node) on the natural key fields of the root data source.");
+
+            var fields = Items(entity.GetType().GetProperty("Fields")?.GetValue(entity)).ToList();
+            var fieldNames = new HashSet<string>(fields.Select(f => MetaModelBridge.GetStringProperty(f, "Name")).Where(n => !string.IsNullOrEmpty(n)), StringComparer.OrdinalIgnoreCase);
+
+            string staging = Prop("DataManagementStagingTable");
+            if (Yes("DataManagementEnabled") && staging == "")
+                yield return Finding("EntityStaging", "Warning", entity.Name + " is enabled for data management but has no staging table.", "Generate the staging table (right-click the entity > Regenerate staging table).");
+            else if (staging != "")
+            {
+                var stagingTable = _core.MetaService.GetTable(staging);
+                if (stagingTable == null)
+                    yield return Finding("EntityStaging", "Warning", "Staging table " + staging + " of " + entity.Name + " does not exist.", "Regenerate the staging table.");
+                else
+                {
+                    var stagingFields = new HashSet<string>((stagingTable.Fields ?? Enumerable.Empty<AxTableField>()).Select(f => f.Name), StringComparer.OrdinalIgnoreCase);
+                    foreach (string ext in MetaModelBridge.GetExtensionNames(_core.MetadataProvider.TableExtensions.GetPrimaryKeys(), staging))
+                        foreach (var f in Items(_core.MetadataProvider.TableExtensions.Read(ext)?.Fields))
+                            stagingFields.Add(MetaModelBridge.GetStringProperty(f, "Name"));
+                    // RecId references (Int64) and computed or unmapped fields are not staged.
+                    var dsTables = RootDataSources(entity).ToDictionary(ds => MetaModelBridge.GetStringProperty(ds, "Name") ?? "", ds => MetaModelBridge.GetStringProperty(ds, "Table"), StringComparer.OrdinalIgnoreCase);
+                    bool Staged(object f)
+                    {
+                        if (!f.GetType().Name.Contains("Mapped") || f.GetType().Name.Contains("Unmapped")) return false;
+                        string ds = MetaModelBridge.GetStringProperty(f, "DataSource"), dataField = MetaModelBridge.GetStringProperty(f, "DataField");
+                        var tableField = ds != null && dsTables.TryGetValue(ds, out string t) && t != null
+                            ? _core.MetaService.GetTable(t)?.Fields?.FirstOrDefault(tf => string.Equals(tf.Name, dataField, StringComparison.OrdinalIgnoreCase)) : null;
+                        // System fields (RecId, ValidFrom, DataAreaId) are not in the table's field list and are not staged either.
+                        return tableField != null && !(tableField is AxTableFieldInt64);
+                    }
+                    var missing = fields.Where(Staged).Select(f => MetaModelBridge.GetStringProperty(f, "Name"))
+                        .Where(n => !string.IsNullOrEmpty(n) && !stagingFields.Contains(n)).OrderBy(n => n).ToList();
+                    if (missing.Count > 0)
+                        yield return Finding("EntityStagingFields", "Warning", "Staging table " + staging + " lacks " + missing.Count + " field(s) of " + entity.Name + ": " + string.Join(", ", missing.Take(15)) + (missing.Count > 15 ? ", ..." : "") + ". Imports and exports of these fields fail.",
+                            "Add the fields to the staging table (or a staging table extension) with the same names and types.");
+                }
+            }
+
+            var dataSources = RootDataSources(entity).ToList();
+            var root = dataSources.FirstOrDefault();
+            string rootName = root == null ? null : MetaModelBridge.GetStringProperty(root, "Name");
+            string rootTable = root == null ? null : MetaModelBridge.GetStringProperty(root, "Table");
+            var table = string.IsNullOrEmpty(rootTable) ? null : _core.MetaService.GetTable(rootTable);
+            if (table != null)
+            {
+                var mapped = new HashSet<string>(fields.Where(f => string.Equals(MetaModelBridge.GetStringProperty(f, "DataSource"), rootName, StringComparison.OrdinalIgnoreCase))
+                    .Select(f => MetaModelBridge.GetStringProperty(f, "DataField")).Where(n => !string.IsNullOrEmpty(n)), StringComparer.OrdinalIgnoreCase);
+                var unmappedMandatory = (table.Fields ?? Enumerable.Empty<AxTableField>())
+                    .Where(f => "Yes".Equals(MetaModelBridge.GetStringProperty(f, "Mandatory"), StringComparison.OrdinalIgnoreCase) && !mapped.Contains(f.Name))
+                    .Select(f => f.Name).ToList();
+                if (unmappedMandatory.Count > 0)
+                    yield return Finding("EntityMandatoryFields", "Warning", entity.Name + " does not map mandatory field(s) of " + rootTable + ": " + string.Join(", ", unmappedMandatory.Take(10)) + ". Inserts through the entity fail unless code sets them.",
+                        "Map the fields, or default them in the entity's initValue/mapEntityToDataSource.");
+            }
+
+            if (Yes("EnableSetBasedSqlOperations"))
+            {
+                var blockers = dataSources.Select(ds => MetaModelBridge.GetStringProperty(ds, "Table")).Where(t => !string.IsNullOrEmpty(t))
+                    .Where(t => _core.MetaService.GetView(t) != null || _core.MetaService.GetDataEntityView(t) != null
+                        || !"Regular".Equals(_core.MetaService.GetTable(t)?.TableType.ToString() ?? "Regular", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (blockers.Count > 0)
+                    yield return Finding("EntitySetBased", "Warning", entity.Name + " enables set-based processing but reads " + string.Join(", ", blockers) + " (a view, entity or temporary table): imports fall back to row by row or fail.",
+                        "Turn off EnableSetBasedSqlOperations, or use regular tables only.");
+                var overrides = methods.Select(m => m.Key).Where(n => n.Equals("insertEntityDataSource", StringComparison.OrdinalIgnoreCase) || n.Equals("updateEntityDataSource", StringComparison.OrdinalIgnoreCase)
+                    || n.Equals("insert", StringComparison.OrdinalIgnoreCase) || n.Equals("update", StringComparison.OrdinalIgnoreCase)).ToList();
+                if (overrides.Count > 0)
+                    yield return Finding("EntitySetBased", "Info", entity.Name + " enables set-based processing and overrides " + string.Join(", ", overrides) + ": set-based imports skip this code.",
+                        "Move the logic to the staging-to-target step, or turn off set-based processing.");
+            }
+        }
+
+        /// <summary>The entity's query data sources, root first, depth first.</summary>
+        private static IEnumerable<object> RootDataSources(AxDataEntityView entity)
+        {
+            var viewMetadata = entity.GetType().GetProperty("ViewMetadata")?.GetValue(entity);
+            var stack = new Stack<object>(Items(viewMetadata?.GetType().GetProperty("DataSources")?.GetValue(viewMetadata)).Reverse());
+            while (stack.Count > 0)
+            {
+                var ds = stack.Pop();
+                yield return ds;
+                foreach (var child in Items(ds.GetType().GetProperty("DataSources")?.GetValue(ds)).Reverse())
+                    stack.Push(child);
+            }
         }
 
         /// <summary>Display methods shown in a grid run once per visible row unless the data source caches them with cacheAddMethod.</summary>

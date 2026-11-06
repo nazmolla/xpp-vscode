@@ -108,3 +108,65 @@ Static checks need no environment; live checks use the database connection (DB3)
 | P9 | Batch job analyzer: task split, bundling | Static + live | Done: batch job history (live) |
 | P10 | Application Insights KQL helper | Live | Done: Telemetry Queries (documented F&O pageViews and exceptions) |
 | P11 | Number sequence review: continuous sequences, preallocation | Static | Done (live, from NUMBERSEQUENCETABLE) |
+
+## 7. Second review round (R2)
+
+From `docs/reviews/2026-11-product-review.md` (PM) and `docs/reviews/2026-11-ux-review.md` (UX). Work order: quick
+wins, build loop and navigation, views, designers, then the lifecycle features.
+
+### Quick wins (QW)
+
+| ID | Item | Status |
+|---|---|---|
+| QW1 | Text polish: "…" instead of "?" in titles and progress, settings section "F&O Studio", README command names, code folding in FEATURES.md | Done |
+| QW2 | Welcome text for the empty Infolog and Copilot Activity views | Done (Infolog also shows itself on the first message of a debug session) |
+| QW3 | Friendly type names (Class, Table) instead of `AxClass` in the project view and Open Object | Done |
+| QW4 | Walkthrough steps with real screenshots and alt text | Done: Application Explorer screenshot; the other steps have short pages (`media/walkthrough/*.md`) |
+| QW5 | Element designer actions in the editor title (View Code, Form Layout, Refresh, Create Extension on read-only elements) | Done |
+| QW6 | Ctrl+Shift+B and the project status bar item run the same build | Done (project build; a model build without a project) |
+
+### User experience (UX)
+
+| ID | Item | Status |
+|---|---|---|
+| UX1 | New Element: Visual Studio's "Add New Item" as a quick pick (types grouped, recent first, name check, wizards) | Done (`src/scaffolding/newElement.ts`; `+` on the project view and its folders) |
+| UX2 | Task-based Dynamics 365 view (Environment, Create, Build and check, Deploy, Data, Analyze, Find, Security, Labels, ...) | Done (Data shows the credential state) |
+| UX3 | Build–fix loop: save before build, no Output focus, failed-build notification with Show Problems, error badges on project items | Done (`xpp.build.saveBeforeBuild`; error badges come from VS Code's problem decorations on the items' URIs) |
+| UX4 | Project view title bar: New, Build, Open Object; the rest in submenus | Done (Project and Check submenus) |
+| UX5 | One Open Element: recent items, type prefixes, item buttons (code, to the side, add to project), opens like Application Explorer | Done |
+| UX6 | Property grid: filter, categories, modified markers, description, reference and label pickers | Done: categories and "modified" from the server (`get_element_properties`), label find-or-create picker, element pickers (Alt+Down) |
+| UX7 | Results view (panel) for Review My Changes, Pre-Deploy Checklist and Upgrade Readiness: clickable findings, rerun, export | Done (`src/results.ts`) |
+| UX8 | Environment setup as a step checklist with retry; switching without reload; webview tabs survive a reload | Done: steps in the Environment group with Retry; designers and code views reload on a switch; element/form designers, label editor, data and trace tabs are restored after a reload (ERD, diagrams and security reports are not) |
+| UX9 | Panel home for Infolog and Copilot Activity; quieter status bar outside F&O workspaces | Done (F&O Studio panel: Results, Infolog, Copilot Activity) |
+| UX10 | Record inspector with relation drill-down in Browse Data | Done (relations from `table_erd`; opens the related table filtered) |
+
+### Product (PM)
+
+| ID | Item | Status |
+|---|---|---|
+| PM1 | Environment version drift guard: warn when the UDE runs a newer version than local metadata; Update Metadata; Clean Up Old Versions | Done (`src/versionGuard.ts`): compared without a sign-in prompt; Clean Up keeps the newest older version by default. Not verified live (no serviced UDE here) |
+| PM2 | Open Team Repository: clone, junction packages into the custom metadata folder, build in dependency order, `.xpp/workspace.json` | Done (`src/teamRepository.ts`; clones through VS Code's Git extension). Not run against a real team repository yet |
+| PM3 | Deployed-state awareness: built vs deployed per model, status bar, warnings before tests and debugging | Done (`src/deployState.ts`): deploys from this machine (pac) are recorded; Run Tests, the debugger and the test tool warn. Reading deployments from Dataverse (`msprov_fnopackage`) is not done (undocumented) |
+| PM4 | Verify in the running app: smoke check plan from the change set, run through the Dynamics 365 ERP MCP server | Done: Verify Changes in the Running App builds the steps from the changed elements and hands them to Copilot agent mode, which runs them with the ERP MCP tools |
+| PM5 | Standard-code drift report for wrapped methods between two installed versions | Done: `wrapper_drift` (earlier version read through its own disk provider), Standard Code Drift with diffs, `previousPackagesFolder` on `xpp_find_deprecations` |
+| PM6 | Agent session checkpoints (revert a session's writes) and scope lock enforced on the server | Done: the MCP server reads `agentSession.json` before every write (scope refusal, state before the first change); revert through the metadata API plus the project and label files; `scripts/checkpoint-test.js` |
+| PM7 | Integration Try It: OData entity queries and custom service calls, saved as `.http` | Done (`src/integration.ts`): active environment only, service calls ask first, the token is never written. Not verified against a live environment |
+| PM8 | Data entity readiness rules (staging, mandatory fields, public names, keys, set-based) | Done in `analyze_performance` for data entities (Analyze Performance, Review My Changes, Pre-Deploy Checklist, `xpp_analyze_performance`); no findings on standard entities |
+| PM9 | New Business Event wizard | Done (precedent HireActionBusinessEvent); compiles without warnings (`scripts/scaffold-test.js`) |
+| PM10 | Add Number Sequence to Table wizard | Done (precedent NumberSeqModuleCustomer.loadModule); compiles without warnings |
+| PM11 | New Feature (feature management) wizard and Show Feature Usage | Done; compiles without warnings. The opt-in Review rule for ungated changes is not done |
+| PM12 | Generate tests with the Acceptance Test Library (ATL) | Done: Generate SysTest Class with Test Data (customers, vendors, items, warehouses, sites; adds the ATL references); `xpp_get_guide` topic "ATL" |
+| PM13 | Extension collision report across models | Done: `extension_collisions` (fields, indexes, field groups, enum values, form controls; several wrappers of one method) in Upgrade Readiness and `xpp_find_deprecations` |
+| PM14 | Report a Problem with a redacted diagnostics bundle | Done (`src/reportProblem.ts`; also on every command error) |
+| PM15 | Visual Studio parity table in FEATURES.md | Done (Compared with Visual Studio) |
+
+### Cut or simplify (CS)
+
+| ID | Item | Status |
+|---|---|---|
+| CS1 | Replace the "Go to <X>" commands with Open Referenced Element and a picker | Done: one Go to Referenced Element… in the designer menu; the per-reference commands stay registered (no longer contributed) |
+| CS2 | One environment menu on the status bar item; `pac` init on first deploy | Done |
+| CS3 | Code intelligence toggles: settings plus one Configure command | Done (Configure Code Intelligence…) |
+| CS4 | Telemetry Queries as snippets/documentation unless they run | Partly: the queries are also Kusto snippets (`fno-…`); the command stays for the form-specific queries |
+| CS5 | Usage statistics feed Report a Problem (PM14) | Done |
+| CS6 | Run Snippet's scratch runner excluded from packages and flagged by the Pre-Deploy Checklist | Done: the checklist fails while the runner is in the model |

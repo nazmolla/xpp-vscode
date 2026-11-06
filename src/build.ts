@@ -28,8 +28,15 @@ export class XppBuilder {
     private readonly bestPracticeDiagnostics = vscode.languages.createDiagnosticCollection('xpp-bp');
     private readonly finished = new vscode.EventEmitter<BuildResult>();
     readonly onDidFinish = this.finished.event;
+    lastResult: BuildResult | undefined;
 
-    constructor(private readonly output: vscode.OutputChannel) { }
+    constructor(private readonly output: vscode.OutputChannel) {
+        this.onDidFinish(result => this.lastResult = result);
+    }
+
+    showOutput(): void {
+        this.output.show(true);
+    }
 
     dispose(): void {
         this.diagnostics.dispose();
@@ -47,7 +54,6 @@ export class XppBuilder {
         await fs.mkdir(logDir, { recursive: true });
         const xmlLog = path.join(logDir, `Dynamics.AX.${model}.xppbp.xml`);
         await fs.rm(xmlLog, { force: true });
-        this.output.show(true);
         this.output.appendLine(`=== Best practice checks ${model} (${new Date().toLocaleTimeString()}) ===`);
         // Custom metadata as the source, the reference packages for everything the model uses.
         await this.run(path.join(env.binDirectory, 'xppbp.exe'), [
@@ -77,7 +83,6 @@ export class XppBuilder {
 
         const logDir = path.join(packageFolder, 'BuildLogs');
         await fs.mkdir(logDir, { recursive: true });
-        this.output.show(true);
         this.output.appendLine(`=== Build ${model} (${new Date().toLocaleTimeString()}) ===`);
 
         const bin = env.binDirectory;

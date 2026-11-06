@@ -1,12 +1,14 @@
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
-import { baseElementOf, CodeTypes, elementContextValue, intrinsicReference, typeLabel, WhereUsedTypes } from './aot';
+import { baseElementOf, CodeTypes, elementContextValue, ExtensionTypes, intrinsicReference, typeLabel, WhereUsedTypes } from './aot';
+import { stateAttribute } from './webviewState';
 import { BridgeAction } from './bridgeContract';
 import { methodUri, objectUri } from './codeView';
 import { addEventNodes, copyEventHandler, EventSpec, eventLabel, handlerQuery } from './events';
 import { pickElement } from './d365Tools';
 import { ElementDragAndDrop, elementsFromUris } from './dragAndDrop';
 import { openElementReference } from './goTo';
+import { pickLabel, pickReference } from './pickers';
 import { XppServerClient } from './serverClient';
 import { methodSpans } from './xppSource';
 
@@ -93,6 +95,19 @@ export class ElementDesigner {
         ElementDesigner.active = designer;
     }
 
+    /** Reopens a designer tab after a window reload. */
+    static revive(services: DesignerServices, panel: vscode.WebviewPanel, state: { objectType: string; objectName: string }): void {
+        const key = `${state.objectType}/${state.objectName}`.toLowerCase();
+        ElementDesigner.panels.set(key, new ElementDesigner(services, state.objectType, state.objectName, panel, key));
+    }
+
+    /** Reloads every open designer (after the environment changed). */
+    static refreshAll(): void {
+        for (const designer of ElementDesigner.panels.values()) {
+            void designer.loadTree().catch(err => designer.post({ type: 'error', message: (err as Error).message }));
+        }
+    }
+
     /** Runs a right-click action on the designer the menu was opened in. */
     static async runAction(action: 'new' | 'newMethod' | 'override' | 'delete' | 'openMethod' | 'copyEventHandler' | 'findEventHandlers'
         | 'rename' | 'duplicate' | 'moveUp' | 'moveDown' | 'addElement',
@@ -147,6 +162,7 @@ export class ElementDesigner {
         panel.onDidChangeViewState(e => {
             if (e.webviewPanel.active) {
                 ElementDesigner.active = this;
+                this.updateContext();
             }
         });
         panel.webview.onDidReceiveMessage(message => this.onMessage(message).catch(err => this.post({ type: 'error', message: (err as Error).message })));
@@ -154,6 +170,28 @@ export class ElementDesigner {
 
     private post(message: object): void {
         void this.panel.webview.postMessage(message);
+    }
+
+    private editable = false;
+
+    /** Context keys for the editor title actions of the active designer. */
+    private updateContext(): void {
+        void vscode.commands.executeCommand('setContext', 'xpp.designer.hasCode', CodeTypes.has(this.objectType));
+        void vscode.commands.executeCommand('setContext', 'xpp.designer.isForm', this.objectType === 'AxForm' || this.objectType === 'AxFormExtension');
+        void vscode.commands.executeCommand('setContext', 'xpp.designer.canExtend', !this.editable && !!ExtensionTypes[this.objectType]);
+    }
+
+    /** Editor title actions: they act on the designer tab that is active. */
+    static async titleAction(action: 'viewCode' | 'formLayout' | 'refresh' | 'createExtension'): Promise<void> {
+        const designer = ElementDesigner.active;
+        if (!designer) {
+            return;
+        }
+        if (action === 'createExtension') {
+            await vscode.commands.executeCommand('xpp.createExtension', { objectType: designer.objectType, entry: { name: designer.objectName } });
+            return;
+        }
+        await designer.onMessage({ command: action });
     }
 
     private async onMessage(message: any): Promise<void> {
@@ -165,6 +203,14 @@ export class ElementDesigner {
                 return this.loadProperties(message.path, message.source ?? undefined);
             case 'setProperty':
                 return this.setProperty(message.path, message.property, message.value);
+            case 'pickReference': {
+                const name = await pickReference(this.server, message.objectTypes, `${message.property}: pick a ${typeLabel(message.objectTypes[0]).replace(/s$/, '').toLowerCase()}`, message.value ?? '');
+                return name === undefined ? undefined : this.setProperty(message.path, message.property, name);
+            }
+            case 'pickLabel': {
+                const label = await pickLabel(this.server, `${message.property}: find or create a label`, message.value ?? '');
+                return label === undefined ? undefined : this.setProperty(message.path, message.property, label);
+            }
             case 'undo':
             case 'redo':
                 return this.undoRedo(message.command);
@@ -198,6 +244,10 @@ export class ElementDesigner {
             }
             addEventNodes(this.objectType, this.objectName, tree.root);
             annotateNodes(this.objectType, this.objectName, tree.root);
+            this.editable = !!tree.editable;
+            if (this.panel.active) {
+                this.updateContext();
+            }
             this.post({
                 type: 'tree',
                 data: tree,
@@ -559,14 +609,11 @@ export class ElementDesigner {
 <link href="${media('element.css')}" rel="stylesheet">
 <link href="${media('a11y.css')}" rel="stylesheet">
 </head>
-<body>
+<body${stateAttribute({ objectType: this.objectType, objectName: this.objectName })}>
 <div id="toolbar">
   <span id="title"></span>
   <span id="badge"></span>
   <span class="spacer"></span>
-  <button id="viewCode" hidden>View code</button>
-  <button id="formLayout" hidden>Form layout</button>
-  <button id="refresh">Refresh</button>
 </div>
 <div id="error" class="error" hidden></div>
 <main>

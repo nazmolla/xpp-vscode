@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { openSearchItem } from './productivity/searchCode';
 import { XppServerClient } from './serverClient';
+import { registerPanelSerializer, stateAttribute } from './webviewState';
 
 interface TraceNode { m: string; n: number; incl: number; excl: number; sqlN?: number; sqlMs?: number; c?: TraceNode[]; hidden?: number }
 
@@ -37,11 +38,18 @@ export function registerTraceAnalyzer(context: vscode.ExtensionContext, command:
         }
         TracePanel.show(context, server, report);
     });
+    registerPanelSerializer<{ file: string }>(context, 'xppTrace', async (panel, state) => {
+        const report = await server.trace<TraceReport>({ path: state.file });
+        if (!report.success) {
+            throw new Error(report.message);
+        }
+        TracePanel.revive(panel, context, server, report);
+    });
 }
 
 class TracePanel {
     private constructor(private readonly panel: vscode.WebviewPanel, private readonly context: vscode.ExtensionContext, private readonly server: XppServerClient, report: TraceReport) {
-        panel.webview.html = this.html();
+        panel.webview.html = this.html(report.file);
         panel.webview.onDidReceiveMessage(message => this.onMessage(message, report).catch(err => vscode.window.showErrorMessage((err as Error).message)));
     }
 
@@ -51,6 +59,10 @@ class TracePanel {
             retainContextWhenHidden: true,
             localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media')],
         });
+        new TracePanel(panel, context, server, report);
+    }
+
+    static revive(panel: vscode.WebviewPanel, context: vscode.ExtensionContext, server: XppServerClient, report: TraceReport): void {
         new TracePanel(panel, context, server, report);
     }
 
@@ -109,7 +121,7 @@ class TracePanel {
 <main id="panel" class="panel" role="tabpanel" tabindex="-1"><div class="empty"><span class="codicon codicon-loading codicon-modifier-spin empty-icon" aria-hidden="true"></span><div class="empty-title">Reading trace…</div></div></main>`;
     }
 
-    private html(): string {
+    private html(file: string): string {
         const webview = this.panel.webview;
         const nonce = randomBytes(16).toString('base64');
         const media = (file: string) => webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', file));
@@ -123,7 +135,7 @@ class TracePanel {
 <link href="${media('trace.css')}" rel="stylesheet">
 <link href="${media('a11y.css')}" rel="stylesheet">
 </head>
-<body class="loading">
+<body class="loading"${stateAttribute({ file })}>
 ${TracePanel.body()}
 <script nonce="${nonce}" src="${media('trace.js')}"></script>
 </body>

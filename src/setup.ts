@@ -5,21 +5,70 @@ import * as path from 'path';
 import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import * as vscode from 'vscode';
-import { dynamics365Folder, readActiveEnvironment, selectedEnvironmentUrl, useEnvironment } from './environment';
+import { dynamics365Folder, notifyEnvironmentChanged, readActiveEnvironment, selectedEnvironmentUrl, useEnvironment } from './environment';
 import { ClientAssets, getAssetDownloadUrl, getDataverseToken, httpFetch, readUdeEnvironment, resolveDataverseUrl, UdeEnvironment, validateDataverseUrl } from './ude';
 
 const ConfigurationsKey = 'HKCU\\Software\\Microsoft\\Dynamics\\AX7\\Development\\Configurations';
 const RequiredFreeBytes = 16 * 1024 ** 3;
 const LocalDb = '(LocalDB)\\MSSQLLocalDB';
 
-type Step = (message: string) => void;
+type Step = (message: string, phase?: PhaseId) => void;
+
+export type PhaseId = 'signIn' | 'sql' | 'download' | 'extract' | 'restore' | 'configure';
+export type PhaseState = 'pending' | 'running' | 'done' | 'failed';
+
+export const SetupPhases: { id: PhaseId; label: string }[] = [
+    { id: 'signIn', label: 'Sign in to Dataverse' },
+    { id: 'sql', label: 'Check SQL Server LocalDB' },
+    { id: 'download', label: 'Download metadata and tools' },
+    { id: 'extract', label: 'Extract PackagesLocalDirectory' },
+    { id: 'restore', label: 'Restore cross-reference database' },
+    { id: 'configure', label: 'Configure this machine' },
+];
+
+/** The last or running Connect to Environment, for the Environment group of the Dynamics 365 view. */
+export interface SetupStatus {
+    dataverseUrl: string;
+    running: boolean;
+    phases: { id: PhaseId; label: string; state: PhaseState; detail?: string }[];
+    error?: string;
+}
+
+const setupChanged = new vscode.EventEmitter<SetupStatus | undefined>();
+export const onDidChangeSetup = setupChanged.event;
+let status: SetupStatus | undefined;
+
+export function setupStatus(): SetupStatus | undefined {
+    return status;
+}
+
+export function clearSetupStatus(): void {
+    status = undefined;
+    setupChanged.fire(undefined);
+}
+
+function setPhase(id: PhaseId, detail?: string): void {
+    if (!status) {
+        return;
+    }
+    const index = status.phases.findIndex(p => p.id === id);
+    status.phases.forEach((p, i) => {
+        if (i < index && p.state !== 'done') {
+            p.state = 'done';
+            p.detail = undefined;
+        }
+    });
+    status.phases[index].state = 'running';
+    status.phases[index].detail = detail;
+    setupChanged.fire(status);
+}
 
 /**
  * F&O Studio: Connect to Environment — the same client setup Visual Studio's Power Platform Tools perform:
  * download system metadata, cross-reference database and FinOps tools, extract, restore, configure.
  */
-export async function connectEnvironment(context: vscode.ExtensionContext, log: vscode.OutputChannel): Promise<boolean> {
-    const input = await vscode.window.showInputBox({
+export async function connectEnvironment(context: vscode.ExtensionContext, log: vscode.OutputChannel, retryUrl?: string): Promise<boolean> {
+    const input = retryUrl ?? await vscode.window.showInputBox({
         title: 'Connect to a unified developer environment',
         prompt: 'Dataverse URL of the environment',
         placeHolder: 'https://yourorg.crm.dynamics.com',
@@ -38,28 +87,63 @@ export async function connectEnvironment(context: vscode.ExtensionContext, log: 
         return false;
     }
     log.show(true);
+    status = { dataverseUrl, running: true, phases: SetupPhases.map(p => ({ ...p, state: 'pending' as PhaseState })) };
+    setupChanged.fire(status);
+    void vscode.commands.executeCommand('xpp.tools.focus').then(undefined, () => undefined);
 
     return (await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'X++ environment setup', cancellable: true },
         async (progress, token) => {
-            const step: Step = message => {
+            const step: Step = (message, phase) => {
                 log.appendLine(`${new Date().toLocaleTimeString()} ${message}`);
-                progress.report({ message });
+                const index = SetupPhases.findIndex(p => p.id === phase);
+                progress.report({ message: index >= 0 ? `Step ${index + 1}/${SetupPhases.length}: ${message}` : message });
+                if (phase) {
+                    setPhase(phase, message);
+                } else if (status) {
+                    const running = status.phases.find(p => p.state === 'running');
+                    if (running) {
+                        running.detail = message;
+                        setupChanged.fire(status);
+                    }
+                }
             };
             try {
                 await runSetup(context, dataverseUrl, step, token);
+                const before = selectedEnvironmentUrl();
                 await useEnvironment(dataverseUrl);
+                // A reconnect of the same environment rewrote its configuration; useEnvironment only fires on a switch.
+                if (before === dataverseUrl) {
+                    notifyEnvironmentChanged();
+                }
+                status!.phases.forEach(p => { p.state = 'done'; p.detail = undefined; });
+                status!.running = false;
+                setupChanged.fire(status);
                 return true;
             } catch (err) {
-                step(`FAILED: ${(err as Error).message}`);
-                vscode.window.showErrorMessage(`Environment setup failed: ${(err as Error).message}`);
+                const message = (err as Error).message;
+                step(`FAILED: ${message}`);
+                const running = status!.phases.find(p => p.state === 'running');
+                if (running) {
+                    running.state = 'failed';
+                    running.detail = message;
+                }
+                status!.running = false;
+                status!.error = message;
+                setupChanged.fire(status);
+                const choice = await vscode.window.showErrorMessage(`Environment setup failed: ${message}`, 'Retry', 'Show Log');
+                if (choice === 'Retry') {
+                    void vscode.commands.executeCommand('xpp.connectEnvironment', dataverseUrl);
+                } else if (choice === 'Show Log') {
+                    log.show(true);
+                }
                 return false;
             }
         })) ?? false;
 }
 
 async function runSetup(context: vscode.ExtensionContext, dataverseUrl: string, step: Step, token: vscode.CancellationToken): Promise<void> {
-    step(`Signing in to ${dataverseUrl}…`);
+    step(`Signing in to ${dataverseUrl}…`, 'signIn');
     const accessToken = await getDataverseToken(dataverseUrl);
     const env = await readUdeEnvironment(dataverseUrl, accessToken);
     if (env.deploymentType?.toLowerCase() !== 'onlinedev' || !env.applicationVersion) {
@@ -73,7 +157,7 @@ async function runSetup(context: vscode.ExtensionContext, dataverseUrl: string, 
     const pld = path.join(versionPath, 'PackagesLocalDirectory');
     const serverExe = context.asAbsolutePath('server/bin/XppVsCode.Server.exe');
 
-    step('Checking SQL Server Express LocalDB…');
+    step('Checking SQL Server Express LocalDB…', 'sql');
     const sql = await runJson(serverExe, ['--sql-check', LocalDb]);
     if (!sql.ok) {
         throw new Error(`SQL Server Express LocalDB is not reachable with Windows authentication (${sql.message}). Install it or run "sqllocaldb create MSSQLLocalDB -s".`);
@@ -94,6 +178,7 @@ async function runSetup(context: vscode.ExtensionContext, dataverseUrl: string, 
     const xrefReady = !!existing.CrossReferencesDatabaseName
         && (await runJson(serverExe, ['--sql-check', LocalDb, existing.CrossReferencesDatabaseName])).exists === true;
 
+    step('Checking what is already on this machine…', 'download');
     for (const asset of ClientAssets) {
         const target = path.join(versionPath, asset.file);
         const done = asset.resource === 'systemmetadata' ? existsSync(pld)
@@ -107,6 +192,7 @@ async function runSetup(context: vscode.ExtensionContext, dataverseUrl: string, 
     }
 
     const zip = path.join(versionPath, 'PackagesLocalDirectory.zip');
+    step('Extracting…', 'extract');
     if (!existsSync(pld) && existsSync(zip)) {
         step('Extracting PackagesLocalDirectory (this takes several minutes)…');
         await extract(zip, pld, token);
@@ -124,6 +210,7 @@ async function runSetup(context: vscode.ExtensionContext, dataverseUrl: string, 
 
     let xrefName = existing.CrossReferencesDatabaseName ?? `XRef_${orgName}${env.applicationVersion.replace(/\./g, '')}`;
     const bak = path.join(versionPath, 'DYNAMICSXREFDB.bak');
+    step(xrefReady ? 'Cross-reference database already restored.' : 'Restoring the cross-reference database…', 'restore');
     if (!xrefReady && existsSync(bak)) {
         xrefName = `XRef_${orgName}${env.applicationVersion.replace(/\./g, '')}`;
         for (let i = 1; (await runJson(serverExe, ['--sql-check', LocalDb, xrefName])).exists && i <= 5; i++) {
@@ -143,7 +230,7 @@ async function runSetup(context: vscode.ExtensionContext, dataverseUrl: string, 
         await fs.rm(bak, { force: true });
     }
 
-    step('Creating runtime package links…');
+    step('Creating runtime package links…', 'configure');
     const runtimeFolder = await createRuntimeLinks(path.join(dynamics365, 'RuntimeSymLinks', orgName), [pld], customFolder, path.join(pld, 'bin'));
 
     step('Writing the development configuration…');

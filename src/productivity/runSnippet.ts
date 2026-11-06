@@ -64,7 +64,7 @@ export async function runSnippet(ctx: ProductivityContext): Promise<void> {
         }
     }
     await openInBrowser({ item: { objectType: 'AxClass', objectName: runner } }, false, ctx.server);
-    vscode.window.showInformationMessage(`Running ${runner} in the browser. When you no longer need it, remove it with Delete in the project view.`);
+    vscode.window.showInformationMessage(`Running ${runner} in the browser. Delete it (project view > Delete) before packaging: the Pre-Deploy Checklist reports it.`);
 }
 
 /** The scratch runner's declaration (members of the snippet's class kept) and the snippet's methods, indented for the class body. */

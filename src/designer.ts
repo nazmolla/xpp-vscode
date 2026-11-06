@@ -2,6 +2,7 @@ import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import { readProject } from './project';
 import { XppServerClient } from './serverClient';
+import { stateAttribute } from './webviewState';
 
 interface DesignerNode {
     name: string;
@@ -53,6 +54,10 @@ export class FormDesigner {
             localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media')],
         });
         FormDesigner.panels.set(formName.toLowerCase(), new FormDesigner(context, server, formName, panel));
+    }
+
+    static revive(context: vscode.ExtensionContext, server: XppServerClient, panel: vscode.WebviewPanel, state: { formName: string }): void {
+        FormDesigner.panels.set(state.formName.toLowerCase(), new FormDesigner(context, server, state.formName, panel));
     }
 
     private constructor(
@@ -230,7 +235,7 @@ export class FormDesigner {
 <link rel="stylesheet" href="${webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'media', 'a11y.css'))}">
 <title>Form designer</title>
 </head>
-<body>
+<body${stateAttribute({ formName: this.formName })}>
 <header id="toolbar"></header>
 <main>
   <nav id="outline" aria-label="Controls"></nav>

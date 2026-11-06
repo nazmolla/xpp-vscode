@@ -11,8 +11,8 @@ export interface ElementReference {
 }
 
 /**
- * Keys of the references the server reports for designer nodes (MetaModelBridge.References.cs). Each has a right-click
- * command xpp.goTo.<key> in package.json, shown only on nodes and property rows that have that reference.
+ * Keys of the references the server reports for designer nodes (MetaModelBridge.References.cs). The designer's context
+ * menu offers Go to Referenced Element when a node or property has any; xpp.goTo.<key> opens one directly.
  */
 export const GoToKeys = [
     'ExtendedDataType', 'EnumType', 'BaseEdt', 'BaseTable', 'BaseObject', 'Table', 'RelatedTable', 'ReferenceTable', 'MappingTable',
@@ -40,10 +40,30 @@ export async function openElementReference(ref: ElementReference): Promise<void>
 }
 
 export function registerGoTo(command: (id: string, handler: (...args: any[]) => unknown) => void, server: XppServerClient): void {
+    // The per-reference commands stay for keybindings; menus show the one picker below.
     for (const key of GoToKeys) {
         command(`xpp.goTo.${key}`, (arg?: GoToContext & TreeArg) => goTo(key, arg));
     }
+    command('xpp.goTo.referenced', (arg?: GoToContext & TreeArg) => goToReferenced(arg));
     command('xpp.openReference', (types: string[], name: string, labelId?: string) => openNamedElement(server, types, name, labelId));
+}
+
+/** Go to Referenced Element: the node's or property's references; one opens directly, several in a picker. */
+async function goToReferenced(arg?: GoToContext & TreeArg): Promise<void> {
+    const refs: Record<string, ElementReference> = arg?.xppRefs ? JSON.parse(arg.xppRefs) : {};
+    const entries = Object.entries(refs);
+    if (entries.length === 1) {
+        await openElementReference(entries[0][1]);
+        return;
+    }
+    const picked = await vscode.window.showQuickPick(entries.map(([key, ref]) => ({
+        label: ref.objectType === 'AxLabelFile' ? `@${ref.objectName}:${ref.labelId}` : ref.objectName,
+        description: key.replace(/([a-z])([A-Z])/g, '$1 $2'),
+        ref,
+    })), { title: 'Go to referenced element' });
+    if (picked) {
+        await openElementReference(picked.ref);
+    }
 }
 
 /** Opens the first existing element among the candidate types (links in code: tableStr(X) may name a table, view or entity). */

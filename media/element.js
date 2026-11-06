@@ -1,6 +1,9 @@
 // Element designer webview: node tree on the left, Properties grid on the right.
 (function () {
     const vscode = acquireVsCodeApi();
+    if (document.body.dataset.xppState) {
+        vscode.setState({ xpp: JSON.parse(document.body.dataset.xppState) });
+    }
     const treeEl = document.getElementById('tree');
     treeEl.setAttribute('role', 'tree');
     treeEl.setAttribute('aria-label', 'Element nodes');
@@ -89,9 +92,6 @@
     const send = (command, data) => vscode.postMessage(Object.assign({ command }, data || {}));
     const pathKey = path => path.join('\u0001');
 
-    document.getElementById('refresh').addEventListener('click', () => send('refresh'));
-    document.getElementById('viewCode').addEventListener('click', () => send('viewCode'));
-    document.getElementById('formLayout').addEventListener('click', () => send('formLayout'));
     errorEl.addEventListener('click', () => { errorEl.hidden = true; });
 
     window.addEventListener('message', event => {
@@ -133,8 +133,6 @@
         const badge = document.getElementById('badge');
         badge.textContent = data.editable ? data.model : `${data.model || 'standard'} · read-only`;
         badge.className = data.editable ? 'badge' : 'badge readonly';
-        document.getElementById('viewCode').hidden = !msg.hasCode;
-        document.getElementById('formLayout').hidden = !msg.isForm;
 
         treeEl.textContent = '';
         treeEl.title = editable ? 'Drag nodes onto other nodes, or Application Explorer elements onto this tree (hold Shift to drop into the designer).' : '';
@@ -188,6 +186,7 @@
         const context = {};
         if (refs && Object.keys(refs).length > 0) {
             for (const key of Object.keys(refs)) context['xppRef_' + key] = true;
+            context.xppRefCount = Object.keys(refs).length;
             context.xppRefs = JSON.stringify(refs);
         }
         return context;
@@ -462,50 +461,213 @@
         }
     });
 
+    // Properties window state, kept while other nodes are selected.
+    let propFilter = '';
+    let modifiedOnly = false;
+    let byCategory = true;
+    let lastProps = null;
+    const PickTypes = {
+        ExtendedDataType: ['AxEdt'], EnumType: ['AxEnum'], Table: ['AxTable'], RelatedTable: ['AxTable'], ConfigurationKey: ['AxConfigurationKey'],
+        Extends: ['AxEdt', 'AxClass'], FormRef: ['AxForm'], MenuItemName: ['AxMenuItemDisplay', 'AxMenuItemAction', 'AxMenuItemOutput'],
+        Query: ['AxQuery'], Form: ['AxForm'], Class: ['AxClass'],
+    };
+    const LabelProps = /^(Label|HelpText|Caption|Description|DeveloperDocumentation|SingularLabel)$/;
+
     function renderProperties(data) {
+        lastProps = data;
         propsEl.innerHTML = '';
         const header = document.createElement('div');
         header.className = 'props-header';
         header.textContent = data.type.replace(/^Ax/, '');
         propsEl.appendChild(header);
 
+        const bar = document.createElement('div');
+        bar.className = 'props-toolbar';
+        const filter = document.createElement('input');
+        filter.type = 'search';
+        filter.id = 'propFilter';
+        filter.placeholder = 'Filter properties (Ctrl+F)';
+        filter.setAttribute('aria-label', 'Filter properties by name or value');
+        filter.value = propFilter;
+        filter.addEventListener('input', () => {
+            propFilter = filter.value;
+            renderRows(table, footer, data);
+        });
+        const modified = toggleButton('codicon-circle-filled', 'Only properties changed from their default', modifiedOnly, on => {
+            modifiedOnly = on;
+            renderRows(table, footer, data);
+        });
+        const grouping = toggleButton('codicon-list-tree', 'Group by category (off: alphabetical)', byCategory, on => {
+            byCategory = on;
+            renderRows(table, footer, data);
+        });
+        bar.append(filter, modified, grouping);
+        propsEl.appendChild(bar);
+
         const table = document.createElement('table');
         table.className = 'props';
-        for (const p of data.properties) {
-            const tr = document.createElement('tr');
-            if (p.reference) {
-                // Right-click on the row offers Go to <what the property names>, next to Cut/Copy/Paste for the value.
-                tr.dataset.vscodeContext = JSON.stringify({
-                    webviewSection: 'xppProperty',
-                    ...refContext({ [p.reference.key]: p.reference }),
-                    preventDefaultContextMenuItems: false,
-                });
-            }
-            const name = document.createElement('td');
-            name.className = 'prop-name';
-            name.textContent = p.name;
-            tr.appendChild(name);
-            const cell = document.createElement('td');
-            cell.className = 'prop-value';
-            const line = document.createElement('div');
-            line.className = 'value-line';
-            line.appendChild(editorFor(p, data.editable && editable && !p.readOnly));
-            enablePropertyDrop(tr, p, data.editable && editable && !p.readOnly);
-            if (p.reference) {
-                line.appendChild(goToButton(p.reference));
-            }
-            cell.appendChild(line);
-            if (p.resolved) {
-                const hint = document.createElement('div');
-                hint.className = 'resolved';
-                hint.textContent = p.resolved;
-                cell.appendChild(hint);
-            }
-            tr.appendChild(cell);
-            table.appendChild(tr);
-        }
+        table.setAttribute('role', 'grid');
+        table.setAttribute('aria-label', 'Properties');
         propsEl.appendChild(table);
+        const footer = document.createElement('div');
+        footer.className = 'props-footer';
+        footer.setAttribute('aria-live', 'polite');
+        propsEl.appendChild(footer);
+        renderRows(table, footer, data);
     }
+
+    function toggleButton(icon, title, on, changed) {
+        const button = document.createElement('button');
+        button.className = `toggle codicon ${icon}`;
+        button.title = title;
+        button.setAttribute('aria-label', title);
+        button.setAttribute('aria-pressed', String(on));
+        button.addEventListener('click', () => {
+            const next = button.getAttribute('aria-pressed') !== 'true';
+            button.setAttribute('aria-pressed', String(next));
+            changed(next);
+        });
+        return button;
+    }
+
+    function describe(footer, p) {
+        footer.textContent = '';
+        const name = document.createElement('strong');
+        name.textContent = p.name;
+        footer.appendChild(name);
+        const text = p.description || (p.modified ? 'Changed from the default.' : '');
+        if (text) {
+            footer.appendChild(document.createTextNode(`: ${text}`));
+        }
+    }
+
+    function renderRows(table, footer, data) {
+        table.textContent = '';
+        const needle = propFilter.trim().toLowerCase();
+        const shown = data.properties.filter(p => (!modifiedOnly || p.modified)
+            && (!needle || p.name.toLowerCase().includes(needle) || String(p.value).toLowerCase().includes(needle)));
+        if (!shown.length) {
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = 2;
+            td.className = 'muted';
+            td.textContent = needle ? `No properties match '${propFilter}'.` : 'No properties changed from their default.';
+            tr.appendChild(td);
+            table.appendChild(tr);
+            return;
+        }
+        const groups = new Map();
+        for (const p of shown) {
+            const key = byCategory ? (p.category || 'Misc') : '';
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(p);
+        }
+        const order = ['Identification', 'Data', 'Appearance', 'Behavior', 'Configuration and security', 'Misc'];
+        const keys = [...groups.keys()].sort((a, b) => {
+            const ia = order.indexOf(a), ib = order.indexOf(b);
+            return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+        });
+        for (const key of keys) {
+            if (key) {
+                const tr = document.createElement('tr');
+                tr.className = 'prop-category';
+                const th = document.createElement('th');
+                th.colSpan = 2;
+                th.scope = 'colgroup';
+                th.textContent = key;
+                tr.appendChild(th);
+                table.appendChild(tr);
+            }
+            for (const p of groups.get(key)) {
+                table.appendChild(propertyRow(p, data, footer));
+            }
+        }
+    }
+
+    function propertyRow(p, data, footer) {
+        const canEdit = data.editable && editable && !p.readOnly;
+        const tr = document.createElement('tr');
+        if (p.reference) {
+            // Right-click on the row offers Go to <what the property names>, next to Cut/Copy/Paste for the value.
+            tr.dataset.vscodeContext = JSON.stringify({
+                webviewSection: 'xppProperty',
+                ...refContext({ [p.reference.key]: p.reference }),
+                preventDefaultContextMenuItems: false,
+            });
+        }
+        tr.addEventListener('focusin', () => describe(footer, p));
+        tr.addEventListener('mouseenter', () => describe(footer, p));
+        const name = document.createElement('td');
+        name.className = 'prop-name' + (p.modified ? ' modified' : '');
+        name.textContent = p.name;
+        if (p.modified) {
+            name.title = `${p.name} (changed from the default)`;
+            name.setAttribute('aria-label', `${p.name}, modified`);
+        }
+        tr.appendChild(name);
+        const cell = document.createElement('td');
+        cell.className = 'prop-value';
+        const line = document.createElement('div');
+        line.className = 'value-line';
+        const editor = editorFor(p, canEdit);
+        line.appendChild(editor);
+        enablePropertyDrop(tr, p, canEdit);
+        const picker = canEdit && p.kind === 'string' ? pickerFor(p) : null;
+        if (picker) {
+            line.appendChild(picker);
+            editor.addEventListener('keydown', e => {
+                if (e.altKey && e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    picker.click();
+                }
+            });
+        }
+        if (p.reference) {
+            line.appendChild(goToButton(p.reference));
+        }
+        cell.appendChild(line);
+        if (p.resolved) {
+            const hint = document.createElement('div');
+            hint.className = 'resolved';
+            hint.textContent = p.resolved;
+            cell.appendChild(hint);
+        }
+        tr.appendChild(cell);
+        return tr;
+    }
+
+    /** The … button: a label search (and create) or an element search, in VS Code's quick pick. */
+    function pickerFor(p) {
+        const isLabel = LabelProps.test(p.name);
+        const types = PickTypes[p.name] || (p.reference && p.reference.objectType && p.reference.objectType !== 'AxLabelFile' ? [p.reference.objectType] : null);
+        if (!isLabel && !types) {
+            return null;
+        }
+        const button = document.createElement('button');
+        button.className = 'goto codicon codicon-ellipsis';
+        button.title = isLabel ? `Find or create a label for ${p.name} (Alt+Down)` : `Pick ${p.name} (Alt+Down)`;
+        button.setAttribute('aria-label', button.title);
+        button.addEventListener('click', () => {
+            if (!selectedPath) return;
+            if (isLabel) {
+                send('pickLabel', { path: selectedPath, property: p.name, value: p.resolved || p.value });
+            } else {
+                send('pickReference', { path: selectedPath, property: p.name, objectTypes: types, value: p.value });
+            }
+        });
+        return button;
+    }
+
+    document.addEventListener('keydown', e => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && lastProps) {
+            const filter = document.getElementById('propFilter');
+            if (filter) {
+                e.preventDefault();
+                filter.focus();
+                filter.select();
+            }
+        }
+    });
 
     function goToButton(reference) {
         const button = document.createElement('button');
