@@ -10,6 +10,8 @@ Develop Dynamics 365 Finance & Operations X++ code in VS Code, without Visual St
 
 ## What's new in 0.13
 
+**0.13.1: Analyze Trace for errors and integrations.** The trace analyzer lists every AOS and session in the trace with its user (dual-write, OData, batch, other users), finds errors and exceptions with their full X++ call stack, shows UTC times to match integration logs, and filters by AOS, session, user, method or time window (also in `xpp_analyze_trace`).
+
 Features marked *preview* have not yet been verified on a live environment.
 
 **Daily loop**
@@ -187,10 +189,13 @@ Turn each feature on or off with **Configure Code Intelligence…**, or with the
   - data entity readiness problems.
 - **Database Performance Insights** (needs database access): missing indexes, the most expensive queries, batch job history, and number sequences that slow posting.
 - **Analyze Trace…** reads a web client trace (`.etl`) with F&O Studio's own parser; no Trace Parser and no import database. It shows:
-  - requests on a timeline;
+  - requests on a timeline, per AOS and thread, with UTC times to match integration logs;
+  - every AOS and session in the trace with its user (other users, dual-write and OData integrations, batch), one click to filter on it;
+  - errors and exceptions with the full X++ call stack (`Global::error`, `checkFailed`, `warning`, and frames unwound by an exception with the method that caught it);
   - call trees, hot methods and SQL per method;
   - pauses;
   - each method one click from its code.
+- `xpp_analyze_trace` takes the same filters for agents: `aos`, `session`, `user`, `method` (requests that reach it, with the path) and `from`/`to` (UTC times).
 - **Telemetry Queries (Application Insights KQL):** the most used and slowest forms, X++ exceptions and custom events. On a form, the queries are filtered to that form.
 
 ![Analyze Trace: requests on a timeline, the slowest request's hot spots and call tree](images/trace.png)
