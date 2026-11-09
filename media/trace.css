@@ -341,3 +341,12 @@ body.vscode-high-contrast .tile, body.vscode-high-contrast-light .tile { border-
 body.vscode-high-contrast .timeline .req, body.vscode-high-contrast-light .timeline .req { stroke: var(--vscode-contrastBorder); }
 body.vscode-high-contrast .trow:hover, body.vscode-high-contrast-light .trow:hover,
 body.vscode-high-contrast table.grid tbody tr:hover, body.vscode-high-contrast-light table.grid tbody tr:hover { outline: 1px dashed var(--vscode-contrastActiveBorder); outline-offset: -1px; }
+
+/* errors and sessions */
+.timeline .req.has-error { stroke: var(--vscode-errorForeground, #f14c4c); stroke-width: 1.5; }
+.error-card { margin: 8px 16px; padding: 8px 10px; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,.35)); border-left: 3px solid var(--vscode-errorForeground, #f14c4c); border-radius: 3px; }
+.error-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.error-head .spacer { flex: 1; }
+.error-stack { margin: 6px 0 0; padding-left: 24px; font-family: var(--vscode-editor-font-family); font-size: 0.92em; }
+.error-stack li:last-child { font-weight: 600; }
+tr.has-error td:nth-child(8), tr.has-error td:nth-child(9) { color: var(--vscode-errorForeground, #f14c4c); }
