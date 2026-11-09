@@ -2,7 +2,7 @@
   "name": "xpp-vscode",
   "displayName": "F&O Studio for VS Code",
   "description": "Dynamics 365 Finance & Operations X++ development without Visual Studio: Application Explorer, designers, X++ code intelligence, build, deploy, debugging, data, performance and trace analysis, and Copilot agent tools on the real metadata API.",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "publisher": "MNazmi",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -263,12 +263,30 @@
         "description": "Ask about Dynamics 365 F&O code; I read the actual metadata",
         "isSticky": true,
         "commands": [
-          { "name": "design", "description": "Technical design document from a requirement" },
-          { "name": "extend", "description": "How to extend standard behaviour (CoC, events, metadata extensions)" },
-          { "name": "explain", "description": "Explain an element, method or process" },
-          { "name": "review", "description": "Review my changes (best practice, performance, CoC, security)" },
-          { "name": "support", "description": "Investigate an error message or call stack" },
-          { "name": "performance", "description": "Find performance problems in an element or process" }
+          {
+            "name": "design",
+            "description": "Technical design document from a requirement"
+          },
+          {
+            "name": "extend",
+            "description": "How to extend standard behaviour (CoC, events, metadata extensions)"
+          },
+          {
+            "name": "explain",
+            "description": "Explain an element, method or process"
+          },
+          {
+            "name": "review",
+            "description": "Review my changes (best practice, performance, CoC, security)"
+          },
+          {
+            "name": "support",
+            "description": "Investigate an error message or call stack"
+          },
+          {
+            "name": "performance",
+            "description": "Find performance problems in an element or process"
+          }
         ]
       }
     ],

@@ -526,12 +526,18 @@ namespace XppVsCode.Server.Tools
     },
     {
       ""name"": ""xpp_analyze_trace"",
-      ""description"": ""Analyzes a performance trace (.etl) taken in the web client (Settings > Trace) or with the trace tools: the slowest requests (each web request or batch task) with their hot call path, methods by exclusive time with their SQL, SQL statements by total time with the X++ method that ran them, and pauses where a request logged nothing (waits, JIT, garbage collection). Use it to find where time goes in a scenario before changing code; then read the methods it names. Times include the tracing overhead."",
+      ""description"": ""Analyzes a trace (.etl) taken in the web client (Settings > Trace) or with the trace tools. A trace covers every AOS and session that ran while it was recorded (other users, dual-write and OData integrations, batch). The report lists the AOS instances and the sessions with their user, UTC time range and errors; errors and exceptions with the full X++ call stack (calls to Global::error/checkFailed/warning, and frames unwound by an exception with the method that caught it); platform messages; the slowest requests with their hot call path; methods by exclusive time; SQL by total time; pauses. To investigate one scenario, call it again with aos, session or user (from the session list), method (requests whose call tree has it) and from/to (UTC times such as 20:05:53), then read the methods it names."",
       ""inputSchema"": {
         ""type"": ""object"",
         ""properties"": {
           ""path"": { ""type"": ""string"", ""description"": ""Full path of the .etl file."" },
-          ""minRequestMs"": { ""type"": ""number"", ""description"": ""Ignore requests shorter than this. Default 50."" }
+          ""minRequestMs"": { ""type"": ""number"", ""description"": ""Ignore requests shorter than this when nothing is filtered. Default 50."" },
+          ""aos"": { ""type"": ""string"", ""description"": ""Only this AOS (machine name, or part of it)."" },
+          ""session"": { ""type"": ""string"", ""description"": ""Only this X++ session id."" },
+          ""user"": { ""type"": ""string"", ""description"": ""Only sessions of this user (user id or GUID, or part of it)."" },
+          ""method"": { ""type"": ""string"", ""description"": ""Only requests whose call tree has a method containing this text (e.g. SalesOrderHeaderCDSEntity or PriceDisc); shows the path to it."" },
+          ""from"": { ""type"": ""string"", ""description"": ""Only requests running at or after this time: UTC time (20:05:50), UTC date and time, or seconds from the start of the trace."" },
+          ""to"": { ""type"": ""string"", ""description"": ""Only requests that started at or before this time (same formats as from)."" }
         },
         ""required"": [""path""]
       }
@@ -638,9 +644,10 @@ namespace XppVsCode.Server.Tools
             double minRequestMs = double.TryParse(min, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : 50;
             try
             {
-                return JsonHelpers.BuildToolResult(idToken, Host.TraceService.AnalyzeText(JsonHelpers.ExtractArgString(args, "path"), minRequestMs));
+                var filter = Host.TraceFilter.Create(key => JsonHelpers.ExtractArgString(args, key));
+                return JsonHelpers.BuildToolResult(idToken, Host.TraceService.AnalyzeText(JsonHelpers.ExtractArgString(args, "path"), minRequestMs, filter));
             }
-            catch (Exception ex) when (ex is ArgumentException || ex is System.IO.IOException || ex is InvalidOperationException || ex is System.ComponentModel.Win32Exception || ex is UnauthorizedAccessException)
+            catch (Exception ex) when (ex is ArgumentException || ex is System.IO.IOException || ex is InvalidOperationException || ex is System.ComponentModel.Win32Exception || ex is UnauthorizedAccessException || ex is FormatException)
             {
                 return JsonHelpers.BuildToolResult(idToken, ex.Message, isError: true);
             }
