@@ -15,7 +15,7 @@
         timelineOpen: saved.timelineOpen !== false,
         reqSort: saved.reqSort || 'slow',
         filter: '',
-        sort: { methods: { key: 'excl', dir: -1 }, sql: { key: 'ms', dir: -1 }, gaps: { key: 'ms', dir: -1 } },
+        sort: { methods: { key: 'excl', dir: -1 }, sql: { key: 'ms', dir: -1 }, gaps: { key: 'ms', dir: -1 }, sessions: { key: 'xppCalls', dir: -1 } },
         expanded: new Map(),
         focusNode: new Map(),
         sqlOpen: new Set(),
@@ -58,7 +58,15 @@
         if (v < 10000) return `${(v / 1000).toFixed(2)} s`;
         return `${(v / 1000).toFixed(1)} s`;
     }
-    const at = v => `${(v / 1000).toFixed(v < 10000 ? 2 : 1)} s`;
+    const at = v => {
+        const r = S.report;
+        if (r && r.startUtc) return new Date(Date.parse(r.startUtc) + v).toISOString().slice(11, 23);
+        return `${(v / 1000).toFixed(v < 10000 ? 2 : 1)} s`;
+    };
+    const multiAos = () => !!(S.report && S.report.aos && S.report.aos.filter(a => a.name).length > 1);
+    /** Thread ids are per AOS: lanes and labels carry the AOS when the trace has several. */
+    const laneKey = q => `${multiAos() ? (q.aos || '?') + ' ' : ''}T${q.thread}`;
+    const sessionLabel = v => v ? v : '(none)';
     const num = v => Number(v || 0).toLocaleString('en-US');
     const pct = (a, b) => b > 0 ? `${Math.round((a / b) * 100)}%` : '';
     const lower = v => (v || '').toLowerCase();
@@ -115,7 +123,7 @@
     function requestText(q) {
         let t = searchText.get(q);
         if (t === undefined) {
-            t = lower(flatten(q).all.map(n => n.m).join('\n'));
+            t = lower([q.aos, q.session, q.user, ...flatten(q).all.map(n => n.m)].filter(Boolean).join('\n'));
             searchText.set(q, t);
         }
         return t;
@@ -157,9 +165,9 @@
         if (!S.timelineOpen) { host.replaceChildren(); return; }
         const list = visibleRequests();
         const lanes = [];
-        for (const { q } of [...list].sort((a, b) => a.q.startMs - b.q.startMs)) if (!lanes.includes(q.thread)) lanes.push(q.thread);
+        for (const { q } of [...list].sort((a, b) => a.q.startMs - b.q.startMs)) if (!lanes.includes(laneKey(q))) lanes.push(laneKey(q));
         const width = Math.max(320, host.clientWidth);
-        const labelW = 64, padR = 12, axisH = 18, laneH = 16, gap = 3;
+        const labelW = multiAos() ? 120 : 64, padR = 12, axisH = 18, laneH = 16, gap = 3;
         const plotW = width - labelW - padR;
         const height = axisH + Math.max(1, lanes.length) * (laneH + gap) + 2;
         const total = r.durationMs || 1;
@@ -178,12 +186,12 @@
             svg.append(s('line', { class: 'grid', x1: px, y1: axisH - 4, x2: px, y2: height }));
             svg.append(s('text', { class: 'tick', x: px + 3, y: 11 }, step < 1000 ? `${(t / 1000).toFixed(1)} s` : `${Math.round(t / 1000)} s`));
         }
-        lanes.forEach((thread, li) => {
+        lanes.forEach((lane, li) => {
             const y = axisH + li * (laneH + gap);
             svg.append(s('rect', { class: 'lane', x: labelW, y, width: plotW, height: laneH }));
-            const kinds = list.filter(e => e.q.thread === thread);
-            const label = s('text', { class: 'lane-label', x: labelW - 8, y: y + laneH - 4, 'text-anchor': 'end' }, `T${thread}`);
-            label.append(s('title', {}, `Thread ${thread}${kinds.every(e => e.q.batch) ? ' (batch)' : ''}`));
+            const kinds = list.filter(e => laneKey(e.q) === lane);
+            const label = s('text', { class: 'lane-label', x: labelW - 8, y: y + laneH - 4, 'text-anchor': 'end' }, lane);
+            label.append(s('title', {}, `Thread ${lane}${kinds.every(e => e.q.batch) ? ' (batch)' : ''}`));
             svg.append(label);
         });
         for (const g of r.gaps.filter(g => !g.thread)) {
@@ -196,12 +204,12 @@
             svg.append(s('rect', { class: 'sel-span', x: x(sel.startMs), y: axisH - 4, width: Math.max(2, x(sel.startMs + sel.ms) - x(sel.startMs)), height: height - axisH + 4 }));
         }
         for (const { q, i } of list) {
-            const li = lanes.indexOf(q.thread);
+            const li = lanes.indexOf(laneKey(q));
             const y = axisH + li * (laneH + gap);
             const w = Math.max(3, x(q.startMs + q.ms) - x(q.startMs));
-            const cls = ['req', q.batch ? 'batch' : 'ui', q.unfinished ? 'unfinished' : '', i === S.sel ? 'selected' : '', S.filter && !requestText(q).includes(S.filter) ? 'dimmed' : ''].join(' ');
+            const cls = ['req', q.batch ? 'batch' : 'ui', q.unfinished ? 'unfinished' : '', q.errors || q.exceptions ? 'has-error' : '', i === S.sel ? 'selected' : '', S.filter && !requestText(q).includes(S.filter) ? 'dimmed' : ''].join(' ');
             const rect = s('rect', { class: cls, x: x(q.startMs), y, width: w, height: laneH, rx: 2, 'data-i': i });
-            rect.append(s('title', {}, `${q.method}\n${dur(q.ms)}${q.unfinished ? ' (unfinished)' : ''} at ${at(q.startMs)} · thread ${q.thread}${q.batch ? ' · batch' : ''}\n${num(q.sqlN)} SQL · ${dur(q.sqlMs)}`));
+            rect.append(s('title', {}, `${q.method}\n${dur(q.ms)}${q.unfinished ? ' (unfinished)' : ''} at ${at(q.startMs)} · ${laneKey(q)}${q.batch ? ' · batch' : ''}\nsession ${sessionLabel(q.session)}${q.user ? ' · ' + q.user : ''}\n${num(q.sqlN)} SQL · ${dur(q.sqlMs)}${q.errors || q.exceptions ? `\n${q.errors || 0} errors · ${q.exceptions || 0} exceptions` : ''}`));
             svg.append(rect);
             if (w > 48) {
                 const name = split(q.method)[1];
@@ -210,8 +218,8 @@
                 svg.append(text);
             }
         }
-        for (const g of r.gaps.filter(g => g.thread && lanes.includes(g.thread))) {
-            const li = lanes.indexOf(g.thread);
+        for (const g of r.gaps.filter(g => g.thread && lanes.includes(laneKey(g)))) {
+            const li = lanes.indexOf(laneKey(g));
             const y = axisH + li * (laneH + gap);
             const rect = s('rect', { class: 'gap', x: x(g.startMs), y: y + laneH - 3, width: Math.max(2, x(g.startMs + g.ms) - x(g.startMs)), height: 3 });
             rect.append(s('title', {}, `Pause of ${dur(g.ms)} at ${at(g.startMs)} in ${g.method || 'thread ' + g.thread}`));
@@ -224,13 +232,15 @@
     // ---------- tabs ----------
     const TABS = [
         ['requests', 'Requests', 'pulse'],
+        ['errors', 'Errors', 'error'],
+        ['sessions', 'Sessions', 'account'],
         ['methods', 'Hot methods', 'flame'],
         ['sql', 'SQL', 'database'],
         ['gaps', 'Pauses', 'debug-pause'],
     ];
     function renderTabs() {
         const r = S.report;
-        const counts = { requests: visibleRequests().length, methods: r.methods.length, sql: r.sql.length, gaps: r.gaps.length };
+        const counts = { requests: visibleRequests().length, errors: (r.errors || []).length, sessions: (r.sessions || []).length, methods: r.methods.length, sql: r.sql.length, gaps: r.gaps.length };
         $('tabs').replaceChildren(...TABS.map(([id, label, ic]) => h('button', {
             role: 'tab', id: `tab-${id}`, class: 'tab', 'aria-selected': String(S.tab === id), 'aria-controls': 'panel', tabindex: S.tab === id ? '0' : '-1',
             onclick: () => setTab(id),
@@ -250,7 +260,7 @@
     function renderPanel() {
         const panel = $('panel');
         panel.className = `panel panel-${S.tab}`;
-        panel.replaceChildren(({ requests: requestsView, methods: methodsView, sql: sqlView, gaps: gapsView })[S.tab]());
+        panel.replaceChildren(({ requests: requestsView, errors: errorsView, sessions: sessionsView, methods: methodsView, sql: sqlView, gaps: gapsView })[S.tab]());
         if (S.tab === 'requests') renderDetail();
     }
 
@@ -271,10 +281,12 @@
                 h('div', { class: 'req-line' }, icon(q.batch ? 'server-process' : 'symbol-event', 'req-icon'), method(q.method, { plain: true }), h('span', { class: 'req-ms num', text: dur(q.ms) })),
                 bar(max ? q.ms / max : 0, q.batch ? 'batch' : 'ui'),
                 h('div', { class: 'req-meta' },
-                    h('span', { text: `T${q.thread} · ${at(q.startMs)}${q.sqlN ? ` · ${num(q.sqlN)} SQL` : ''}` }),
+                    h('span', { text: `${laneKey(q)} · ${at(q.startMs)}${q.sqlN ? ` · ${num(q.sqlN)} SQL` : ''}` }),
+                    q.errors || q.exceptions ? badge(`${(q.errors || 0) + (q.exceptions || 0)} errors`, 'warn', `${q.errors || 0} error calls, ${q.exceptions || 0} exceptions; see the Errors tab`) : null,
                     q.unfinished ? badge('unfinished', 'warn', 'Still running when the trace stopped') : null,
-                    q.batch ? badge('batch', 'muted') : null));
-            item.title = `${q.method}\n${dur(q.ms)} on thread ${q.thread}`;
+                    q.batch ? badge('batch', 'muted') : null),
+                q.user || q.session ? h('div', { class: 'req-meta dim', text: `${q.user || ''}${q.user ? ' · ' : ''}session ${sessionLabel(q.session)}` }) : null);
+            item.title = `${q.method}\n${dur(q.ms)} on ${laneKey(q)}\nsession ${sessionLabel(q.session)}${q.user ? '\nuser ' + q.user : ''}`;
             return item;
         });
         const listbox = h('div', {
@@ -340,7 +352,8 @@
                 q.unfinished ? badge('unfinished', 'warn', 'Still running when the trace stopped; the duration is a minimum') : null, q.batch ? badge('batch task', 'muted') : null),
             h('dl', { class: 'facts' },
                 fact('Duration', (q.unfinished ? '≥ ' : '') + dur(q.ms), q.unfinished ? 'still running at trace end' : null),
-                fact('Started', at(q.startMs), `thread ${q.thread}`),
+                fact('Started', at(q.startMs), laneKey(q)),
+                fact('Session', q.user || sessionLabel(q.session), q.user ? `session ${sessionLabel(q.session)}` : null),
                 fact('SQL', dur(q.sqlMs), `${num(q.sqlN)} statements · ${pct(q.sqlMs, q.ms)}`, 'f-sql'),
                 waitMs ? fact('Waiting', dur(waitMs), `${pct(waitMs, q.ms)} not working`, 'f-wait') : fact('Busy', dur(q.ms - q.sqlMs), 'X++ and kernel')));
         const top = (q.topExclusive || []).slice(0, 8);
@@ -575,6 +588,69 @@
     const check = (label, checked, onchange) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked, onchange: e => onchange(e.target.checked) }), h('span', { text: label }));
     const cellBar = (v, max, cls) => h('td', { class: 'num barcell' }, bar(max ? v / max : 0, cls), h('span', { text: dur(v) }));
 
+    // ---------- errors ----------
+    function showRequest(ri) {
+        if (ri < 0) return;
+        setBatch(S.showBatch || S.report.requests[ri].batch, true);
+        setTab('requests');
+        select(ri, { scroll: true });
+    }
+    function errorsView() {
+        const r = S.report;
+        const all = r.errors || [];
+        const rows = all.filter(e => !S.filter || [e.method, e.caughtBy, e.aos, e.session, e.user, e.requestMethod, ...(e.stack || [])].some(v => v && matches(v)));
+        const head = viewHead('Errors and exceptions', `${num(rows.length)} of ${num(all.length)} · calls to Global::error, checkFailed or warning, and frames left by an exception · call stack outermost first`);
+        if (!rows.length) return h('div', { class: 'view' }, head, empty('pass', 'No errors', S.filter ? 'Nothing matches the filter.' : 'No error calls or exceptions in the traced sessions.'));
+        const cards = rows.map(e => {
+            const what = e.kind === 'exception' ? `Exception in ${e.method}, caught by ${e.caughtBy}` : e.method;
+            return h('section', { class: 'error-card', 'aria-label': what },
+                h('div', { class: 'error-head' },
+                    badge(e.kind, e.kind === 'warning' ? 'muted' : 'warn'),
+                    h('span', { class: 'num', text: at(e.ms) }),
+                    e.kind === 'exception' ? h('span', { text: what }) : method(e.method),
+                    e.count > 1 ? badge(`${e.count}x`, 'muted') : null,
+                    h('span', { class: 'spacer' }),
+                    e.request >= 0 ? h('button', { class: 'link', onclick: () => showRequest(e.request), text: 'Show request' }) : null),
+                h('div', { class: 'req-meta dim', text: `${multiAos() ? (e.aos || '?') + ' · ' : ''}T${e.thread} · session ${sessionLabel(e.session)}${e.user ? ' · ' + e.user : ''} · request ${e.requestMethod}` }),
+                h('ol', { class: 'error-stack' }, (e.stack || []).map(m => h('li', {}, m === '...' ? h('span', { class: 'dim', text: '…' }) : method(m)))));
+        });
+        return h('div', { class: 'view' }, head, h('div', { class: 'scroll' }, cards));
+    }
+
+    // ---------- sessions ----------
+    function sessionsView() {
+        const r = S.report;
+        const all = r.sessions || [];
+        const rows = sortRows(all.filter(x => !S.filter || [x.aos, x.session, x.user, x.userGuid].some(v => v && matches(v))).map(x => Object.assign({ ms: x.endMs - x.startMs }, x)), 'sessions');
+        const aosCount = (r.aos || []).filter(a => a.name).length;
+        const head = viewHead('Sessions', `${num(rows.length)} sessions on ${num(aosCount)} AOS · a trace records every session of the AOS while it runs · pick one to filter the requests`);
+        if (!rows.length) return h('div', { class: 'view' }, head, empty('account', 'No sessions', S.filter ? 'Nothing matches the filter.' : null));
+        return h('div', { class: 'view' }, head, h('div', { class: 'scroll' }, table('sessions', [
+            [null, 'AOS', 'c-where'], [null, 'Session', 'c-method'], [null, 'User', 'c-method'], ['startMs', 'From', 'num'], ['ms', 'Span', 'num'],
+            ['requests', 'Requests', 'num'], ['xppCalls', 'X++ calls', 'num'], ['errors', 'Errors', 'num'], ['exceptions', 'Exceptions', 'num'],
+        ], rows, x => {
+            const pick = () => {
+                const v = x.session || x.user || '';
+                const f = $('filter');
+                f.value = v;
+                f.dispatchEvent(new Event('input'));
+                setTab('requests');
+            };
+            const tr = h('tr', { class: x.errors || x.exceptions ? 'has-error' : '' },
+                h('td', { class: 'c-where', text: x.aos || '(unnamed)' }),
+                h('td', { class: 'c-method' }, h('button', { class: 'link', tabindex: '-1', onclick: pick, title: 'Show the requests of this session', text: sessionLabel(x.session) })),
+                h('td', { class: 'c-method', title: x.userGuid || '', text: x.user || x.userGuid || '' }),
+                h('td', { class: 'num', text: at(x.startMs) }),
+                h('td', { class: 'num', text: dur(x.ms) }),
+                h('td', { class: 'num', text: num(x.requests) }),
+                h('td', { class: 'num', text: num(x.xppCalls) }),
+                h('td', { class: 'num', text: x.errors ? num(x.errors) : '' }),
+                h('td', { class: 'num', text: x.exceptions ? num(x.exceptions) : '' }));
+            tr.onEnter = pick;
+            return tr;
+        }, 'Sessions')));
+    }
+
     // ---------- hot methods ----------
     function methodsView() {
         const all = S.report.methods;
@@ -661,7 +737,7 @@
     // ---------- pauses ----------
     function requestAt(g) {
         const r = S.report;
-        return r.requests.findIndex(q => q.thread === g.thread && g.startMs >= q.startMs - 1 && g.startMs <= q.startMs + q.ms + 1);
+        return r.requests.findIndex(q => q.thread === g.thread && (q.aos || '') === (g.aos || '') && g.startMs >= q.startMs - 1 && g.startMs <= q.startMs + q.ms + 1);
     }
     function gapsView() {
         const r = S.report;
@@ -679,7 +755,7 @@
             const tr = h('tr', {},
                 h('td', { class: 'num', text: at(g.startMs) }),
                 cellBar(g.ms, max, 'pause'),
-                h('td', { class: 'c-where' }, g.thread ? h('span', { text: `Thread ${g.thread}` }) : h('span', { class: 'whole' }, icon('warning'), h('span', { text: 'Whole process' }))),
+                h('td', { class: 'c-where' }, g.thread ? h('span', { text: `Thread ${laneKey(g)}` }) : h('span', { class: 'whole' }, icon('warning'), h('span', { text: multiAos() ? `Whole AOS ${g.aos || ''}` : 'Whole process' }))),
                 h('td', { class: 'c-method' }, g.method ? method(g.method, { tabindex: '-1' }) : h('span', { class: 'dim', text: '—' })),
                 h('td', { class: 'c-action' }, ri >= 0 ? h('button', { class: 'link', tabindex: '-1', onclick: show, text: 'Show request' }) : null));
             tr.onEnter = ri >= 0 ? show : g.method ? () => open(g.method) : null;
