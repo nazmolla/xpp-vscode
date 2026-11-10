@@ -317,7 +317,7 @@ namespace XppVsCode.Server.MetaModel
         {
             if (!Directory.Exists(labelFolder)) return new List<string>();
             return Directory.GetFiles(labelFolder, "*.xml")
-                .Select(f => Regex.Replace(System.IO.Path.GetFileNameWithoutExtension(f), "_[^_]+$", ""))
+                .Select(f => System.IO.Path.GetFileNameWithoutExtension(f))
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         }
 
