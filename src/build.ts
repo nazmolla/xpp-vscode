@@ -8,6 +8,15 @@ import { readActiveEnvironment, XppEnvironment } from './environment';
 import { readProject } from './project';
 import { compilerLineToDocumentLine } from './xppSource';
 
+/** The package (folder in the custom metadata store) holding a model; a package name resolves to itself. */
+async function packageOf(store: string, model: string): Promise<string> {
+    if (existsSync(path.join(store, model, 'Descriptor'))) {
+        return model;
+    }
+    const entries = await fs.readdir(store, { withFileTypes: true }).catch(() => []);
+    return entries.find(e => e.isDirectory() && existsSync(path.join(store, e.name, 'Descriptor', `${model}.xml`)))?.name ?? model;
+}
+
 /** Builds a model the way Visual Studio does: labels with LabelC, then X++ with xppc. */
 function inScope(d: CompilerDiagnostic, scope: Set<string>): boolean {
     const target = diagnosticTarget(d.path);
@@ -50,14 +59,15 @@ export class XppBuilder {
      */
     async bestPractice(model: string, token?: vscode.CancellationToken, projectItems?: { objectType: string; objectName: string }[]): Promise<{ errors: number; warnings: number } | undefined> {
         const env = await readActiveEnvironment();
-        const logDir = path.join(env.modelStoreFolder, model, 'BuildLogs');
+        const pkg = await packageOf(env.modelStoreFolder, model);
+        const logDir = path.join(env.modelStoreFolder, pkg, 'BuildLogs');
         await fs.mkdir(logDir, { recursive: true });
-        const xmlLog = path.join(logDir, `Dynamics.AX.${model}.xppbp.xml`);
+        const xmlLog = path.join(logDir, `Dynamics.AX.${pkg}.xppbp.xml`);
         await fs.rm(xmlLog, { force: true });
         this.output.appendLine(`=== Best practice checks ${model} (${new Date().toLocaleTimeString()}) ===`);
         // Custom metadata as the source, the reference packages for everything the model uses.
         await this.run(path.join(env.binDirectory, 'xppbp.exe'), [
-            `-metadata=${env.modelStoreFolder}`, `-packagesRoot=${env.frameworkDirectory}`, `-module=${model}`, `-model=${model}`, '-all', `-xmlLog=${xmlLog}`,
+            `-metadata=${env.modelStoreFolder}`, `-packagesRoot=${env.frameworkDirectory}`, `-module=${pkg}`, `-model=${model}`, '-all', `-xmlLog=${xmlLog}`,
         ], token);
         if (token?.isCancellationRequested || !existsSync(xmlLog)) {
             return undefined;
@@ -76,7 +86,8 @@ export class XppBuilder {
         if (!model) {
             return false;
         }
-        const packageFolder = path.join(env.modelStoreFolder, model);
+        const pkg = await packageOf(env.modelStoreFolder, model);
+        const packageFolder = path.join(env.modelStoreFolder, pkg);
         if (!existsSync(packageFolder)) {
             throw new Error(`Model '${model}' is not in your custom metadata folder (${env.modelStoreFolder}). Only your own models can be built.`);
         }
@@ -86,12 +97,12 @@ export class XppBuilder {
         this.output.appendLine(`=== Build ${model} (${new Date().toLocaleTimeString()}) ===`);
 
         const bin = env.binDirectory;
-        const labelFiles = await this.labelFileIds(packageFolder, model);
+        const labelFiles = await this.labelFileNames(packageFolder);
         if (labelFiles.length > 0) {
             const ok = await this.run(path.join(bin, 'LabelC.exe'), [
                 `-metadata=${env.modelStoreFolder}`,
                 `-output=${path.join(packageFolder, 'Resources')}`,
-                `-modelmodule=${model}`,
+                `-modelmodule=${pkg}`,
                 `-names=${labelFiles.join(',')}`,
             ], token);
             if (!ok) {
@@ -101,14 +112,14 @@ export class XppBuilder {
             }
         }
 
-        const xmlLog = path.join(logDir, 'Dynamics.AX.' + model + '.xppc.xml');
+        const xmlLog = path.join(logDir, 'Dynamics.AX.' + pkg + '.xppc.xml');
         const args = [
             `-metadata=${env.modelStoreFolder}`,
             `-compilermetadata=${env.runtimePackagesDirectory ?? env.frameworkDirectory}`,
-            `-modelmodule=${model}`,
+            `-modelmodule=${pkg}`,
             `-output=${path.join(packageFolder, 'bin')}`,
             `-xmllog=${xmlLog}`,
-            `-log=${path.join(logDir, 'Dynamics.AX.' + model + '.xppc.log')}`,
+            `-log=${path.join(logDir, 'Dynamics.AX.' + pkg + '.xppc.log')}`,
             `-appBase=${bin}`,
             `-refPath=${bin}`,
             ...env.referencePackagesPaths.map(p => `-referenceFolder=${p}`),
@@ -123,7 +134,7 @@ export class XppBuilder {
         }
 
         await fs.rm(xmlLog, { force: true });
-        const assembly = path.join(packageFolder, 'bin', `Dynamics.AX.${model}.dll`);
+        const assembly = path.join(packageFolder, 'bin', `Dynamics.AX.${pkg}.dll`);
         const assemblyBefore = existsSync(assembly) ? (await fs.stat(assembly)).mtimeMs : 0;
         const compiled = await this.run(path.join(bin, 'xppc.exe'), args, token);
         const scope = projectItems ? new Set(projectItems.map(i => `${i.objectType}/${i.objectName}`.toLowerCase())) : undefined;
@@ -150,14 +161,15 @@ export class XppBuilder {
         return vscode.window.showQuickPick(models, { title: 'Model to build' });
     }
 
-    private async labelFileIds(packageFolder: string, model: string): Promise<string[]> {
-        const folder = path.join(packageFolder, model, 'AxLabelFile');
-        if (!existsSync(folder)) {
-            return [];
+    /** Label file element names of every model in the package, with their language suffix (Id_en-US) as LabelC's -names wants. */
+    private async labelFileNames(packageFolder: string): Promise<string[]> {
+        const descriptors = await fs.readdir(path.join(packageFolder, 'Descriptor')).catch(() => [] as string[]);
+        const names: string[] = [];
+        for (const descriptor of descriptors.filter(d => d.toLowerCase().endsWith('.xml'))) {
+            const files = await fs.readdir(path.join(packageFolder, descriptor.slice(0, -4), 'AxLabelFile')).catch(() => [] as string[]);
+            names.push(...files.filter(f => f.toLowerCase().endsWith('.xml')).map(f => f.slice(0, -4)));
         }
-        const files = await fs.readdir(folder);
-        // Descriptors are <Id>_<lang>.xml; LabelC wants the ids.
-        return [...new Set(files.filter(f => f.endsWith('.xml')).map(f => f.replace(/_[^_]+\.xml$/, '')))];
+        return [...new Set(names)];
     }
 
     private run(exe: string, args: string[], token?: vscode.CancellationToken): Promise<boolean> {
