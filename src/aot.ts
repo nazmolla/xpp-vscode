@@ -89,7 +89,7 @@ export function typeLabel(objectType: string): string {
 
 /** The singular type name: Class, Security Duty, Extended Data Type. */
 export function typeName(objectType: string): string {
-    return typeLabel(objectType).replace(/ies$/, 'y').replace(/(ss|sh|ch|x)es$/, '$1').replace(/s$/, '');
+    return typeLabel(objectType).replace(/(?:ies|(ss|sh|ch|x)es|s)$/, (end, stem) => end === 'ies' ? 'y' : stem ?? '');
 }
 
 /** What clicking an element does in Visual Studio: classes open in the code editor, everything else in its designer. */

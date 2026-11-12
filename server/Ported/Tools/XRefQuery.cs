@@ -216,6 +216,62 @@ namespace XppVsCode.Server.Tools
             }
         }
 
+        /// <summary>
+        /// The elements an element depends on (Visual Studio's dependency diagram): every element its code and metadata
+        /// reference, with the number of references and their kinds. Labels and tags are left out.
+        /// </summary>
+        public string DependenciesJson(string objectType, string objectName, int max)
+        {
+            var json = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+            if (!TypeToFolder.TryGetValue(objectType ?? "", out string folder) || string.IsNullOrWhiteSpace(objectName))
+                return json.Serialize(new Dictionary<string, object> { ["success"] = false, ["message"] = "Dependencies are not available for " + objectType + "." });
+            var health = GetHealth();
+            if (!health.Usable)
+                return json.Serialize(new Dictionary<string, object> { ["success"] = false, ["message"] = health.Problem });
+            string objectPath = "/" + folder + "/" + objectName;
+            var byElement = new Dictionary<string, DependencyRow>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                using (var conn = Open(health.Server, health.Database))
+                using (var cmd = new SqlCommand("SELECT t.Path, r.Kind, COUNT(*) FROM Names s JOIN [References] r ON r.SourceId = s.Id JOIN Names t ON t.Id = r.TargetId "
+                    + "WHERE (s.Path = @p OR s.Path LIKE @prefix) AND t.Path <> @p AND t.Path NOT LIKE @prefix "
+                    + "AND t.Path NOT LIKE '/Labels/%' AND t.Path NOT LIKE '/Tags/%' GROUP BY t.Path, r.Kind", conn) { CommandTimeout = 60 })
+                {
+                    cmd.Parameters.AddWithValue("@p", objectPath);
+                    cmd.Parameters.AddWithValue("@prefix", EscapeLike(objectPath) + "/%");
+                    using (var r = cmd.ExecuteReader())
+                        while (r.Read())
+                        {
+                            var parts = r.GetString(0).TrimStart('/').Split('/');
+                            string type = parts.Length >= 2 ? TypeOfFolder(parts[0]) : null;
+                            if (type == null) continue;
+                            string key = type + "/" + parts[1];
+                            if (!byElement.TryGetValue(key, out var row))
+                                byElement[key] = row = new DependencyRow { Type = type, Name = parts[1] };
+                            row.Kinds.Add(KindName(r.GetByte(1)));
+                            row.Count += r.GetInt32(2);
+                        }
+                }
+            }
+            catch (SqlException ex)
+            {
+                InvalidateHealth();
+                return json.Serialize(new Dictionary<string, object> { ["success"] = false, ["message"] = "Cross-reference query failed: " + ex.Message });
+            }
+            var dependencies = byElement.Values.OrderByDescending(d => d.Count).ThenBy(d => d.Name).Take(max).Select(d => new Dictionary<string, object>
+            {
+                ["objectType"] = d.Type, ["objectName"] = d.Name, ["references"] = d.Count, ["kinds"] = d.Kinds.OrderBy(k => k).ToArray(),
+            }).ToList();
+            return json.Serialize(new Dictionary<string, object> { ["success"] = true, ["dependencies"] = dependencies, ["more"] = byElement.Count > max });
+        }
+
+        private sealed class DependencyRow
+        {
+            public string Type, Name;
+            public int Count;
+            public readonly HashSet<string> Kinds = new HashSet<string>();
+        }
+
         // ── Tags (Dynamics 365 > Find Tag References) ──
 
         // Tag sources use singular kinds ("Table/X/TableFieldInt/F", "Class/X/Method/m"); map them to element types.

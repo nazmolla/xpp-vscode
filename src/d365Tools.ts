@@ -2,9 +2,10 @@ import { ErdPanel } from './erd';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { baseElementOf, CodeExtensionFunctions, CodeTypes, elementOpenCommand, ExtensionTypes, intrinsicReference, listModels, ModelLocation, typeLabel } from './aot';
+import { baseElementOf, CodeExtensionFunctions, CodeTypes, elementOpenCommand, ExtensionTypes, intrinsicReference, listModels, ModelLocation, typeLabel, typeName } from './aot';
 import { methodUri, objectUri } from './codeView';
-import { DiagramNode, DiagramPanel, hierarchyDiagram, MetadataDocuments, MetadataScheme, referencesDiagram } from './diagrams';
+import { dependencyDiagram, DiagramNode, DiagramPanel, hierarchyDiagram, MetadataDocuments, MetadataScheme, referencesDiagram } from './diagrams';
+import { renameElementEverywhere } from './refactor';
 import { readActiveEnvironment, selectedEnvironmentUrl } from './environment';
 import { findActiveProject, readProject } from './project';
 import { XppServerClient } from './serverClient';
@@ -63,6 +64,8 @@ const ToolsMenu: ToolNode[] = [
             { label: 'New Report…', icon: 'sparkle', command: 'xpp.newReport' },
             { label: 'New Approval Workflow…', icon: 'sparkle', command: 'xpp.newWorkflow' },
             { label: 'New Custom Service…', icon: 'sparkle', command: 'xpp.newService' },
+            { label: 'New Table with Form…', icon: 'sparkle', command: 'xpp.newTableWithForm' },
+            { label: 'New Data Entity…', icon: 'sparkle', command: 'xpp.newDataEntity' },
             { label: 'New Business Event…', icon: 'sparkle', command: 'xpp.newBusinessEvent' },
             { label: 'Add Number Sequence…', icon: 'sparkle', command: 'xpp.addNumberSequence' },
             { label: 'New Feature…', icon: 'sparkle', command: 'xpp.newFeature' },
@@ -89,6 +92,8 @@ const ToolsMenu: ToolNode[] = [
             { label: 'Synchronize Database', icon: 'database', command: 'xpp.pac.dbSync', description: 'pac', udeOnly: true },
             { label: 'Synchronize Tables…', icon: 'sync', command: 'xpp.syncTables' },
             { label: 'Initialize Deployment Solution…', icon: 'new-folder', command: 'xpp.pac.init', description: 'pac', udeOnly: true },
+            { label: 'Link Work Item…', icon: 'link', command: 'xpp.devops.linkWorkItem', description: 'Azure Boards' },
+            { label: 'Open Pipelines', icon: 'rocket', command: 'xpp.devops.openPipelines' },
         ],
     },
     { label: '', icon: '', slot: 'data' },
@@ -124,6 +129,8 @@ const ToolsMenu: ToolNode[] = [
             { label: 'Find Labels…', icon: 'search', command: 'xpp.tools.findLabels' },
             { label: 'Translate Missing Labels…', icon: 'globe', command: 'xpp.translateMissingLabels' },
             { label: 'Find Unused Labels…', icon: 'trash', command: 'xpp.findUnusedLabels' },
+            { label: 'Export Labels…', icon: 'export', command: 'xpp.exportLabels' },
+            { label: 'Import Labels…', icon: 'cloud-upload', command: 'xpp.importLabels' },
         ],
     },
     {
@@ -150,7 +157,7 @@ const ToolsMenu: ToolNode[] = [
     },
     {
         label: 'Debug', icon: 'debug-alt', children: [
-            { label: 'Launch Debugger', icon: 'debug-start', command: 'xpp.debug.start', udeOnly: true },
+            { label: 'Launch Debugger', icon: 'debug-start', command: 'xpp.debug.start' },
             { label: 'Infolog', icon: 'output', command: 'xpp.infolog.focus' },
         ],
     },
@@ -158,6 +165,7 @@ const ToolsMenu: ToolNode[] = [
         label: 'View and run', icon: 'eye', children: [
             { label: 'View Hierarchy…', icon: 'type-hierarchy-sub', command: 'xpp.viewHierarchy' },
             { label: 'View References…', icon: 'references', command: 'xpp.viewReferences' },
+            { label: 'View Dependencies…', icon: 'type-hierarchy-sub', command: 'xpp.viewDependencies' },
             { label: 'Compare Code…', icon: 'diff', command: 'xpp.compare' },
             { label: 'Compare Metadata…', icon: 'diff-multiple', command: 'xpp.compareMetadata' },
             { label: 'Open in Browser…', icon: 'globe', command: 'xpp.openInBrowser' },
@@ -263,6 +271,18 @@ export function registerTools(
         const element = elementOf(arg) ?? await pickElement(server, 'View references');
         if (element) {
             await referencesDiagram(server, element.objectType, element.objectName, openReference);
+        }
+    });
+    command('xpp.viewDependencies', async (arg?: TreeArg) => {
+        const element = elementOf(arg) ?? await pickElement(server, 'View dependencies');
+        if (element) {
+            await dependencyDiagram(server, element.objectType, element.objectName);
+        }
+    });
+    command('xpp.renameElement', async (arg?: TreeArg) => {
+        const element = elementOf(arg) ?? await pickElement(server, 'Rename element');
+        if (element) {
+            await renameElementEverywhere(server, element.objectType, element.objectName);
         }
     });
     context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(MetadataScheme, new MetadataDocuments(server)));
@@ -662,7 +682,7 @@ async function duplicateObject(server: XppServerClient, arg: TreeArg | undefined
     }
     const base = baseElementOf(element.objectType, element.objectName);
     const name = await vscode.window.showInputBox({
-        title: `Duplicate ${element.objectName}`, prompt: `Name of the new ${typeLabel(element.objectType).replace(/s$/, '').toLowerCase()} in ${model}`,
+        title: `Duplicate ${element.objectName}`, prompt: `Name of the new ${typeName(element.objectType).toLowerCase()} in ${model}`,
         value: base ? `${base.objectName}.${model}` : `${element.objectName}Copy`,
         validateInput: v => base
             ? (new RegExp(`^${base.objectName}\\.[A-Za-z_][A-Za-z0-9_]*$`).test(v) && v !== element.objectName ? undefined : `Use ${base.objectName}.<Suffix> with a new suffix.`)

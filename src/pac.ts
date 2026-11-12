@@ -44,8 +44,8 @@ export class PacCommands {
         await this.run('Sign in', ['auth', 'create', '--name', profileName(url), '--environment', url]);
     }
 
-    /** Returns the deployed models, or undefined when nothing was deployed. */
-    async deploy(): Promise<string[] | undefined> {
+    /** Returns the deployed models, or undefined when nothing was deployed. dbSync skips the question (tasks). */
+    async deploy(options?: { dbSync?: string }): Promise<string[] | undefined> {
         if (await this.local()) {
             return undefined;
         }
@@ -53,7 +53,7 @@ export class PacCommands {
         if (!root) {
             return undefined;
         }
-        const sync = await vscode.window.showQuickPick(['None', 'Incremental', 'Full'], { title: 'Database sync after deploy' });
+        const sync = options?.dbSync ?? await vscode.window.showQuickPick(['None', 'Incremental', 'Full'], { title: 'Database sync after deploy' });
         if (!sync) {
             return undefined;
         }
@@ -68,20 +68,22 @@ export class PacCommands {
         return solutionModels(root);
     }
 
-    async syncDatabase(): Promise<void> {
+    /** mode and modules skip the questions (tasks). */
+    async syncDatabase(options?: { mode?: string; modules?: string }): Promise<void> {
         const env = await readActiveEnvironment().catch(() => undefined);
         if (env?.local) {
             await this.syncLocalDatabase(env);
             return;
         }
-        const mode = await vscode.window.showQuickPick(['Full', 'Module'], { title: 'Database synchronization' });
+        const mode = options?.mode ?? await vscode.window.showQuickPick(['Full', 'Module'], { title: 'Database synchronization' });
         if (!mode) {
             return;
         }
         const args = ['package', 'db-sync', '--db-sync', mode, ...this.environmentArgs()];
         if (mode === 'Module') {
             const project = await readProject();
-            const modules = await vscode.window.showInputBox({ title: 'Modules to synchronize', value: project?.model ?? '' });
+            const modules = options?.modules ?? (options?.mode ? project?.model : undefined)
+                ?? await vscode.window.showInputBox({ title: 'Modules to synchronize', value: project?.model ?? '' });
             if (!modules) {
                 return;
             }

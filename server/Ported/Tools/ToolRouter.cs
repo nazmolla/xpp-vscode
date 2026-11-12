@@ -35,6 +35,9 @@ namespace XppVsCode.Server.Tools
 
         public string TagReferencesJson(string body) => _xref.TagReferencesJson(JsonHelpers.ExtractJsonString(body, "tag"), 1000);
 
+        public string DependenciesJson(string body) => _xref.DependenciesJson(JsonHelpers.ExtractJsonString(body, "objectType"),
+            JsonHelpers.ExtractJsonString(body, "objectName"), int.TryParse(JsonHelpers.ExtractJsonString(body, "maxResults"), out int m) ? Math.Max(1, Math.Min(m, 500)) : 200);
+
         /// <summary>The label IDs of a label file that the cross-reference database records a use of.</summary>
         public string LabelUsageJson(string body)
         {
@@ -545,7 +548,7 @@ namespace XppVsCode.Server.Tools
     },
     {
       ""name"": ""xpp_analyze_performance"",
-      ""description"": ""Static performance review of the X++ methods of a class, table or form (no environment needed): queries and row-by-row insert/update/delete inside loops, select firstonly inside while select (use a join or exists join), while select of every field, select forupdate without a write, unbalanced ttsbegin/ttscommit, crossCompany queries, and insert_recordset/update_recordset/delete_from that quietly run row by row because the table overrides insert/update/delete, has delete actions or is date-effective. Each finding gives the method, line, why it is slow and the fix. Findings are heuristics: confirm before changing code. Database log and alerts, which also force row-by-row, are environment setup and are not checked. For a data entity (AxDataEntityView) it also checks readiness for OData and data management: public entity and collection names, an entity key, staging table fields missing for entity fields, mandatory fields of the root table that are not mapped, and set-based processing over views, entities or temporary tables."",
+      ""description"": ""Static performance review of the X++ methods of a class, table or form (no environment needed): queries and row-by-row insert/update/delete inside loops, select firstonly inside while select (use a join or exists join), while select of every field, select forupdate without a write, unbalanced ttsbegin/ttscommit, crossCompany queries, and insert_recordset/update_recordset/delete_from that quietly run row by row because the table overrides insert/update/delete, has delete actions or is date-effective. For forms it also checks display methods in grids without cacheAddMethod, data sources that fetch every field but show a few in a grid (OnlyFetchActive) and data sources shown in a parent's grid with LinkType Delayed or Active instead of a join. Each finding gives the method, line, why it is slow and the fix. Findings are heuristics: confirm before changing code. Database log and alerts, which also force row-by-row, are environment setup and are not checked. For a data entity (AxDataEntityView) it also checks readiness for OData and data management: public entity and collection names, an entity key, staging table fields missing for entity fields, mandatory fields of the root table that are not mapped, and set-based processing over views, entities or temporary tables."",
       ""inputSchema"": {
         ""type"": ""object"",
         ""properties"": {

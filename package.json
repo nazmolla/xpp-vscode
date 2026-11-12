@@ -2,7 +2,7 @@
   "name": "xpp-vscode",
   "displayName": "F&O Studio for VS Code",
   "description": "Dynamics 365 Finance & Operations X++ development without Visual Studio: Application Explorer, designers, X++ code intelligence, build, deploy, debugging, data, performance and trace analysis, and Copilot agent tools on the real metadata API.",
-  "version": "0.13.3",
+  "version": "0.14.0",
   "publisher": "MNazmi",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -333,13 +333,36 @@
             "type": "string",
             "enum": [
               "buildProject",
-              "buildModel"
+              "buildModel",
+              "deploy",
+              "syncDatabase"
             ],
-            "description": "buildProject reports the problems of the project's elements; buildModel those of the whole model."
+            "description": "buildProject reports the problems of the project's elements; buildModel those of the whole model. deploy deploys the solution's models to the unified environment (pac); syncDatabase synchronizes the database (pac on a unified environment, SyncEngine on cloud-hosted and VHD)."
           },
           "model": {
             "type": "string",
             "description": "Model to build. Defaults to the active project's model."
+          },
+          "dbSync": {
+            "type": "string",
+            "enum": [
+              "None",
+              "Incremental",
+              "Full"
+            ],
+            "description": "deploy: database sync after the deploy. Default None."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "Full",
+              "Module"
+            ],
+            "description": "syncDatabase on a unified environment. Default Full."
+          },
+          "modules": {
+            "type": "string",
+            "description": "syncDatabase with mode Module: comma-separated modules. Defaults to the active project's model."
           }
         }
       }
@@ -681,6 +704,18 @@
         "icon": "$(new-file)"
       },
       {
+        "command": "xpp.newTableWithForm",
+        "title": "New Table with Form…",
+        "category": "F&O Studio",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "xpp.newDataEntity",
+        "title": "New Data Entity…",
+        "category": "F&O Studio",
+        "icon": "$(new-file)"
+      },
+      {
         "command": "xpp.translateMissingLabels",
         "title": "Translate Missing Labels…",
         "category": "F&O Studio"
@@ -688,6 +723,32 @@
       {
         "command": "xpp.findUnusedLabels",
         "title": "Find Unused Labels…",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.exportLabels",
+        "title": "Export Labels…",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.devops.linkWorkItem",
+        "title": "Link Work Item…",
+        "category": "F&O Studio",
+        "icon": "$(link)"
+      },
+      {
+        "command": "xpp.devops.openWorkItem",
+        "title": "Open Work Item…",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.devops.openPipelines",
+        "title": "Open Pipelines",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.importLabels",
+        "title": "Import Labels…",
         "category": "F&O Studio"
       },
       {
@@ -740,6 +801,11 @@
       {
         "command": "xpp.viewReferences",
         "title": "View References",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.viewDependencies",
+        "title": "View Dependencies",
         "category": "F&O Studio"
       },
       {
@@ -829,6 +895,11 @@
         "title": "Delete",
         "category": "F&O Studio",
         "icon": "$(trash)"
+      },
+      {
+        "command": "xpp.renameElement",
+        "title": "Rename…",
+        "category": "F&O Studio"
       },
       {
         "command": "xpp.excludeFromProject",
@@ -1369,7 +1440,7 @@
         },
         {
           "command": "xpp.debug.start",
-          "when": "(view == xpp.infolog || view == xpp.tools) && !xpp.localEnvironment",
+          "when": "view == xpp.infolog || view == xpp.tools",
           "group": "navigation@0"
         },
         {
@@ -1595,6 +1666,11 @@
           "group": "9_delete@1"
         },
         {
+          "command": "xpp.renameElement",
+          "when": "(view == xpp.project || view == xpp.aot) && viewItem =~ /xppElement/ && viewItem =~ /\\bcustom\\b/ && !(viewItem =~ /\\bext\\b/)",
+          "group": "9_delete@1"
+        },
+        {
           "command": "xpp.deleteObject",
           "when": "(view == xpp.project || view == xpp.aot) && viewItem =~ /xppElement/ && viewItem =~ /\\bcustom\\b/",
           "group": "9_delete@2"
@@ -1621,6 +1697,11 @@
         },
         {
           "command": "xpp.viewReferences",
+          "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\brefs\\b/",
+          "group": "4_refs@2"
+        },
+        {
+          "command": "xpp.viewDependencies",
           "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\brefs\\b/",
           "group": "4_refs@2"
         },
@@ -1917,6 +1998,11 @@
           "group": "0_4_refs@2"
         },
         {
+          "command": "xpp.viewDependencies",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\brefs\\b/",
+          "group": "0_4_refs@2"
+        },
+        {
           "command": "xpp.viewHierarchy",
           "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\bhier\\b/",
           "group": "0_4_refs@3"
@@ -2186,8 +2272,7 @@
           "when": "!xpp.localEnvironment"
         },
         {
-          "command": "xpp.debug.start",
-          "when": "!xpp.localEnvironment"
+          "command": "xpp.debug.start"
         },
         {
           "command": "xpp.runTests",

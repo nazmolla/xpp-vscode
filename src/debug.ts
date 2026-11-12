@@ -1,4 +1,4 @@
-import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
+import { ChildProcessWithoutNullStreams, execFile, spawn } from 'child_process';
 import { existsSync, promises as fs } from 'fs';
 import * as net from 'net';
 import * as os from 'os';
@@ -47,6 +47,8 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
             vscode.debug.registerDebugConfigurationProvider(DebugType, this),
             vscode.debug.registerDebugAdapterDescriptorFactory(DebugType, this),
             vscode.debug.registerDebugAdapterTrackerFactory(DebugType, { createDebugAdapterTracker: () => this.tracker() }),
+            // The local AOS is debugged with the C# extension's clr debugger; its output carries the same Infolog messages.
+            vscode.debug.registerDebugAdapterTrackerFactory('clr', { createDebugAdapterTracker: () => this.tracker() }),
             this.infolog.view = vscode.window.createTreeView('xpp.infolog', { treeDataProvider: this.infolog }),
             vscode.commands.registerCommand('xpp.debug.start', () => vscode.debug.startDebugging(undefined, {
                 type: DebugType, request: 'attach', name: 'Attach to Dynamics 365 (unified developer environment)',
@@ -65,8 +67,9 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
         if (!config.type) {
             config = this.provideDebugConfigurations()[0];
         }
-        if ((await readActiveEnvironment().catch(() => undefined))?.local) {
-            vscode.window.showErrorMessage('The X++ debugger attaches to unified developer environments. On a cloud-hosted or VHD environment, debug from Visual Studio on the VM.');
+        const environment = await readActiveEnvironment().catch(() => undefined);
+        if (environment?.local) {
+            await this.attachLocal(config);
             return undefined;
         }
         if (!await this.deployState.confirmCurrent('The debugger')) {
@@ -112,6 +115,58 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
                     },
                 },
             };
+        });
+    }
+
+    /**
+     * Cloud-hosted and VHD environments run the AOS on this machine (w3wp.exe in IIS, Batch.exe for batch): their .NET
+     * Framework process is attached with the C# extension's vsdbg ("clr"), with the symbols in each package's bin folder.
+     * Local builds record the same e:\source\ paths as the cloud's, so the debug sources are written the same way.
+     */
+    private async attachLocal(config: vscode.DebugConfiguration): Promise<void> {
+        if (!vscode.extensions.getExtension('ms-dotnettools.csharp')) {
+            const choice = await vscode.window.showErrorMessage('Debugging the local AOS uses the C# extension\'s .NET Framework debugger. Install the C# extension (ms-dotnettools.csharp) and try again.', 'Install');
+            if (choice) {
+                await vscode.commands.executeCommand('workbench.extensions.installExtension', 'ms-dotnettools.csharp');
+            }
+            return;
+        }
+        const processes = await localAosProcesses();
+        if (!processes.length) {
+            vscode.window.showErrorMessage('No AOS process is running (w3wp.exe or Batch.exe). Open the web client once to start it, then try again.');
+            return;
+        }
+        const picked = processes.length === 1 && processes[0].name.toLowerCase() === 'w3wp.exe' ? processes[0]
+            : (await vscode.window.showQuickPick(processes.map(p => ({ label: p.name, description: `process ${p.pid}`, process: p })),
+                { title: 'Attach the X++ debugger to' }))?.process;
+        if (!picked) {
+            return;
+        }
+        const models = (await listModels()).filter(m => m.isCustom);
+        const packages = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Preparing X++ debugging: writing debug sources…' },
+            () => this.writeDebugSources());
+        await this.mirrorBreakpoints();
+        const sourceFileMap: Record<string, string> = {};
+        for (const root of PdbSourceRoots) {
+            sourceFileMap[root] = debugSourceRoot() + path.sep;
+        }
+        await vscode.debug.startDebugging(undefined, {
+            type: 'clr',
+            request: 'attach',
+            name: `Attach to the local AOS (${picked.name} ${picked.pid})`,
+            processId: picked.pid,
+            justMyCode: config.justMyCode ?? true,
+            requireExactSource: false,
+            sourceFileMap: { ...sourceFileMap, ...(config.sourceFileMap ?? {}) },
+            symbolOptions: {
+                searchPaths: [...new Set(models.map(m => path.join(path.dirname(m.folder), 'bin')))],
+                searchMicrosoftSymbolServer: false,
+                moduleFilter: {
+                    mode: 'loadOnlyIncluded',
+                    includedModules: packages.flatMap(p => [`Dynamics.AX.${p}.dll`, `Dynamics.AX.${p}.*`]),
+                    includeSymbolsNextToModules: true,
+                },
+            },
         });
     }
 
@@ -294,6 +349,18 @@ class ProxyDebugAdapter implements vscode.DebugAdapter {
         this.sent.fire({ type: 'event', seq: 0, event: 'terminated', body: {} } as vscode.DebugProtocolMessage);
         vscode.window.showErrorMessage(`X++ debugging stopped: ${reason} See the X++ output for details.`);
     }
+}
+
+/** The local AOS processes: IIS worker processes (w3wp.exe) and the batch server (Batch.exe). */
+function localAosProcesses(): Promise<{ name: string; pid: number }[]> {
+    return new Promise(resolve => execFile('tasklist', ['/FO', 'CSV', '/NH'], { windowsHide: true, timeout: 30_000 }, (err, stdout) => {
+        if (err) {
+            resolve([]);
+            return;
+        }
+        resolve(stdout.split(/\r?\n/).map(line => /^"([^"]+)","(\d+)"/.exec(line)).filter((m): m is RegExpExecArray => !!m)
+            .filter(m => /^(w3wp|batch)\.exe$/i.test(m[1])).map(m => ({ name: m[1], pid: Number(m[2]) })));
+    }));
 }
 
 function freePort(): Promise<number> {
