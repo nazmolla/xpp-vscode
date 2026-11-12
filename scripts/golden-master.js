@@ -104,6 +104,18 @@ const steps = [
     b('label_usage', { labelFileId: L }), b('label_usage', { labelFileId: '' }),
     b('element_dependencies', { objectType: 'AxTable', objectName: 'CustGroup', maxResults: '10' }), b('element_dependencies', { objectType: 'AxLabelFile', objectName: 'x' }),
     b('no_such_action', {}),
+    // A read of every element type (each has its own read path)
+    ...[['AxForm', 'CustGroup'], ['AxEdt', 'CustGroupId'], ['AxView', 'CustTableCube'], ['AxQuery', 'CustTable'], ['AxDataEntityView', 'CustCustomerGroupEntity'],
+        ['AxMenu', 'AccountsReceivable'], ['AxMenuItemDisplay', 'CustGroup'], ['AxMenuItemOutput', 'CustAgingBalance'], ['AxMenuItemAction', 'CustCollectionLetterPost'],
+        ['AxSecurityDuty', 'CredManCreditLimitCustGroupView'], ['AxSecurityRole', 'FMClerk'], ['AxService', 'CustRecurrenceInvoicePostService'],
+        ['AxServiceGroup', 'WHSServices'], ['AxTile', 'CustTableListPageTile'], ['AxConfigurationKey', 'LedgerBasic'], ['AxTableExtension', 'AssetTable.HSFixedAssetRemoval'],
+        ['AxEnumExtension', 'SalesPurchCopy.TAMDeduction'], ['AxEdtExtension', 'NoSuchEdtXvs.Extension'], ['AxFormExtension', 'CustGroup.SubBillDeferralExtension'],
+        ['AxDataEntityViewExtension', 'SalesOrderHeaderV2Entity.HSFixedAssetRemoval'], ['AxSecurityDutyExtension', 'LedgerEntitiesView.Extension'],
+        ['AxSecurityRoleExtension', 'LedgerAccountant.HSFixedAssetRemoval'], ['AxMenuExtension', 'AccountsReceivable.HSFixedAssetRemoval'],
+        ['AxCompositeDataEntityView', 'SalesOrderV2Entity'], ['AxMap', 'TradePostalAddress'], ['AxReport', 'CustAgingReport'], ['AxWorkflowCategory', 'CustCategory'],
+        ['AxLabelFile', 'HSFixedAssetRemoval_en-US'], ['AxNoSuchType', 'X']]
+        .flatMap(([objectType, objectName]) => [b('read_object', { objectType, objectName }), b('validate_object', { objectType, objectName })]),
+    b('get_object_type_schema', { objectType: 'AxForm' }), b('get_object_type_schema', { objectType: 'AxNoSuchType' }),
     // Agent tools
     t('xpp_get_model_info', { modelName: M }), t('xpp_list_models', {}), t('xpp_read_object', { objectType: 'AxTable', objectName: 'CustGroup' }),
     t('xpp_find_object', { objectName: 'CustGroup', objectType: 'AxTable', exactMatch: true }), t('xpp_read_label', { labelFileId: L, labelId: 'HSRemovalStatus' }),
