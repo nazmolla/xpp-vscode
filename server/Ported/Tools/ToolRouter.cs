@@ -537,7 +537,8 @@ namespace XppVsCode.Server.Tools
           ""user"": { ""type"": ""string"", ""description"": ""Only sessions of this user (user id or GUID, or part of it)."" },
           ""method"": { ""type"": ""string"", ""description"": ""Only requests whose call tree has a method containing this text (e.g. SalesOrderHeaderCDSEntity or PriceDisc); shows the path to it."" },
           ""from"": { ""type"": ""string"", ""description"": ""Only requests running at or after this time: UTC time (20:05:50), UTC date and time, or seconds from the start of the trace."" },
-          ""to"": { ""type"": ""string"", ""description"": ""Only requests that started at or before this time (same formats as from)."" }
+          ""to"": { ""type"": ""string"", ""description"": ""Only requests that started at or before this time (same formats as from)."" },
+          ""manifestFolder"": { ""type"": ""string"", ""description"": ""Optional: folder with the event manifests (DynamicsAXXppExecutionTraces.man), only when the tool reports none were found. Found automatically in PackagesLocalDirectory\\bin\\Monitoring, AosService\\WebRoot\\Monitoring or the registered trace providers' folder."" }
         },
         ""required"": [""path""]
       }

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { baseElementOf, elementOpenCommand } from './aot';
+import { baseElementOf, CodeTypes, elementOpenCommand, typeName } from './aot';
+import { objectUri } from './codeView';
 import { elementOf, TreeArg } from './d365Tools';
 import { XppServerClient } from './serverClient';
 
@@ -89,4 +90,74 @@ async function goTo(key: string, arg?: GoToContext & TreeArg): Promise<void> {
     if (ref) {
         await openElementReference(ref);
     }
+}
+
+interface OpenElementInput {
+    objectName: string;
+    objectType?: string;
+    method?: string;
+    text?: string;
+}
+
+/** xpp_open_element: lets the agent show an element in the code editor or designer instead of opening its metadata XML. */
+export function registerOpenElementTool(context: vscode.ExtensionContext, server: XppServerClient): void {
+    context.subscriptions.push(vscode.lm.registerTool<OpenElementInput>('xpp_open_element', {
+        prepareInvocation: options => ({ invocationMessage: `Opening ${options.input.objectName}${options.input.method ? '.' + options.input.method : ''}` }),
+        invoke: async options => new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(await openForAgent(server, options.input))]),
+    }));
+}
+
+async function openForAgent(server: XppServerClient, input: OpenElementInput): Promise<string> {
+    const objectName = input?.objectName?.trim();
+    if (!objectName) {
+        return 'Pass objectName.';
+    }
+    let objectType = input.objectType?.trim();
+    if (!objectType) {
+        const result = await server.bridge('find_object', { objectName, exactMatch: true, maxResults: 10 });
+        const types = [...new Set(((result?.matches ?? []) as { objectType: string }[]).map(m => m.objectType))];
+        if (types.length === 0) {
+            return `NOT FOUND: no element named ${objectName}.`;
+        }
+        if (types.length > 1) {
+            return `AMBIGUOUS: ${objectName} exists as ${types.join(', ')}; pass objectType.`;
+        }
+        objectType = types[0];
+    }
+    if (!CodeTypes.has(objectType) || (objectType !== 'AxClass' && !input.method && !input.text)) {
+        await openElementReference({ objectType, objectName });
+        return `Opened ${typeName(objectType)} ${objectName} in the designer.`;
+    }
+    const document = await vscode.workspace.openTextDocument(objectUri(objectType, objectName));
+    const editor = await vscode.window.showTextDocument(document, { preview: false });
+    const source = document.getText();
+    let start = 0;
+    const notes: string[] = [];
+    if (input.method) {
+        const name = input.method.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Methods sit one level inside the class body; statements inside them are deeper.
+        const match = new RegExp(`^(?: {4}|\\t)(?!return\\b|next\\b)(?:[\\w\\[\\]]+\\s+)+${name}\\s*\\(`, 'mi').exec(source);
+        if (match) {
+            start = match.index + match[0].search(/\S/);
+        } else {
+            notes.push(`method ${input.method} not found in the code view`);
+        }
+    }
+    let end = start;
+    if (input.text) {
+        let at = source.indexOf(input.text, start);
+        if (at < 0) {
+            at = source.toLowerCase().indexOf(input.text.toLowerCase(), start);
+        }
+        if (at >= 0) {
+            start = at;
+            end = at + input.text.length;
+        } else {
+            notes.push('text not found');
+        }
+    }
+    const range = new vscode.Range(document.positionAt(start), document.positionAt(end));
+    editor.selection = new vscode.Selection(range.start, range.end);
+    editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+    return `Opened ${objectName} in the X++ code editor at line ${range.start.line + 1}${notes.length ? ` (${notes.join('; ')})` : ''}.`;
 }

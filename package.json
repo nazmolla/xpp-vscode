@@ -2,7 +2,7 @@
   "name": "xpp-vscode",
   "displayName": "F&O Studio for VS Code",
   "description": "Dynamics 365 Finance & Operations X++ development without Visual Studio: Application Explorer, designers, X++ code intelligence, build, deploy, debugging, data, performance and trace analysis, and Copilot agent tools on the real metadata API.",
-  "version": "0.13.2",
+  "version": "0.13.3",
   "publisher": "MNazmi",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -58,6 +58,38 @@
   ],
   "contributes": {
     "languageModelTools": [
+      {
+        "name": "xpp_open_element",
+        "displayName": "Open X++ element",
+        "toolReferenceName": "xppOpenElement",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(go-to-file)",
+        "modelDescription": "Shows a D365FO element to the user in F&O Studio's editor: classes and the code of tables, forms, views, entities, queries and maps in the X++ code editor (optionally at a method and with a line of code selected), other elements in their designer. Use it whenever the user asks to open, show or see an element or code (for example to take a screenshot of a bug). Never open the element's metadata .xml file for that.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "objectName": {
+              "type": "string",
+              "description": "Element name, e.g. SalesFormLetter."
+            },
+            "objectType": {
+              "type": "string",
+              "description": "AxClass, AxTable, AxForm, ... Optional when the name is unique."
+            },
+            "method": {
+              "type": "string",
+              "description": "Method to scroll to (code editor)."
+            },
+            "text": {
+              "type": "string",
+              "description": "Code to select, e.g. the line with the bug; searched from the method on."
+            }
+          },
+          "required": [
+            "objectName"
+          ]
+        }
+      },
       {
         "name": "xpp_run_tests",
         "displayName": "Run X++ tests",
@@ -427,7 +459,7 @@
         "command": "xpp.openObject",
         "title": "Open Element…",
         "category": "F&O Studio",
-        "icon": "$(search)"
+        "icon": "$(go-to-file)"
       },
       {
         "command": "xpp.newElement",
@@ -515,13 +547,13 @@
       },
       {
         "command": "xpp.aot.modelView",
-        "title": "Model View",
+        "title": "Switch to Model View (Elements by Model)",
         "category": "F&O Studio",
         "icon": "$(list-tree)"
       },
       {
         "command": "xpp.aot.classicView",
-        "title": "Classic View",
+        "title": "Switch to Classic View (Elements by Type)",
         "category": "F&O Studio",
         "icon": "$(list-flat)"
       },
@@ -2273,6 +2305,12 @@
           "default": "",
           "scope": "machine",
           "description": "Path to Microsoft.Dynamics.AX.DebuggerProxy.exe. Defaults to the FinOps tools installed by F&O Studio: Connect to Environment."
+        },
+        "xpp.trace.manifestFolder": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Folder with the Dynamics 365 trace event manifests (DynamicsAXXppExecutionTraces.man) for Analyze Trace. Leave empty to find them in PackagesLocalDirectory\\bin\\Monitoring, AosService\\WebRoot\\Monitoring or the registered trace providers' folder."
         },
         "xpp.financeAndOperationsUrl": {
           "type": "string",

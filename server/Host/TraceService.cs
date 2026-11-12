@@ -24,6 +24,8 @@ namespace XppVsCode.Server.Host
         public string Method;
         /// <summary>Seconds from the start of the trace, or a UTC time (HH:mm:ss or a full date and time).</summary>
         public string From, To;
+        /// <summary>Folder with the event manifests (.man) when they are not found automatically.</summary>
+        public string ManifestFolder;
 
         public bool HasSessionFilter => !string.IsNullOrWhiteSpace(Aos) || !string.IsNullOrWhiteSpace(Session) || !string.IsNullOrWhiteSpace(User);
         public bool IsEmpty => !HasSessionFilter && string.IsNullOrWhiteSpace(Method) && string.IsNullOrWhiteSpace(From) && string.IsNullOrWhiteSpace(To);
@@ -48,6 +50,7 @@ namespace XppVsCode.Server.Host
             Method = Clean(get("method")),
             From = Clean(get("from")),
             To = Clean(get("to")),
+            ManifestFolder = Clean(get("manifestFolder")),
         };
 
         private static string Clean(string s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
@@ -218,6 +221,67 @@ namespace XppVsCode.Server.Host
             return sb.ToString();
         }
 
+        /// <summary>Dynamics 365 trace providers (XppExecutionTraces, ExecutionTraces); their registration points at the installed manifests.</summary>
+        private static readonly string[] ProviderPrefixes = { "{c0d248ce", "{70560195" };
+
+        /// <summary>
+        /// The event manifests: the given folder, else PackagesLocalDirectory\bin\Monitoring (UDE), AosService\WebRoot\Monitoring
+        /// (local VHD) or the folder of the registered trace providers.
+        /// </summary>
+        internal static EventManifest LoadManifest(string explicitFolder)
+        {
+            var candidates = new List<string>();
+            if (!string.IsNullOrWhiteSpace(explicitFolder))
+            {
+                var given = EventManifest.Load(explicitFolder);
+                if (given.Count == 0)
+                    throw new ArgumentException("No event manifests (*.man) in " + explicitFolder + ".");
+                return given;
+            }
+            var config = DynamicsConfigurationReader.ReadActiveConfiguration();
+            foreach (string root in new[] { config.FrameworkDirectory }.Concat(config.ReferenceMetadataFolders).Where(r => !string.IsNullOrWhiteSpace(r)))
+            {
+                candidates.Add(Path.Combine(root, "bin", "Monitoring"));
+                string parent = Path.GetDirectoryName(root.TrimEnd('\\', '/'));
+                if (!string.IsNullOrEmpty(parent)) candidates.Add(Path.Combine(parent, "WebRoot", "Monitoring"));
+            }
+            candidates.AddRange(RegisteredProviderFolders());
+            foreach (string folder in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var manifest = EventManifest.Load(folder);
+                if (manifest.Count > 0) return manifest;
+            }
+            throw new InvalidOperationException("No event manifests (*.man) found. Searched: " + string.Join("; ", candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+                + ". Pass the folder that holds DynamicsAXXppExecutionTraces.man as manifestFolder.");
+        }
+
+        private static IEnumerable<string> RegisteredProviderFolders()
+        {
+            var folders = new List<string>();
+            try
+            {
+                using (var publishers = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Publishers"))
+                {
+                    if (publishers == null) return folders;
+                    foreach (string name in publishers.GetSubKeyNames().Where(n => ProviderPrefixes.Any(p => n.StartsWith(p, StringComparison.OrdinalIgnoreCase))))
+                        using (var key = publishers.OpenSubKey(name))
+                        {
+                            string file = Environment.ExpandEnvironmentVariables(key?.GetValue("ResourceFileName") as string ?? key?.GetValue("MessageFileName") as string ?? "");
+                            string dir = file.Length > 0 ? Path.GetDirectoryName(file) : null;
+                            if (string.IsNullOrEmpty(dir)) continue;
+                            folders.Add(dir);
+                            string parent = Path.GetDirectoryName(dir);
+                            if (!string.IsNullOrEmpty(parent)) folders.Add(Path.Combine(parent, "Monitoring"));
+                        }
+                }
+            }
+            catch (Exception ex) when (ex is System.Security.SecurityException || ex is UnauthorizedAccessException || ex is IOException || ex is ArgumentException)
+            {
+                Log.Write("Trace providers not readable from the registry: " + ex.Message);
+            }
+            return folders;
+        }
+
         internal static TraceAnalyzer Analyze(string path, out TraceInfo info) => Analyze(path, new TraceFilter(), out info);
 
         internal static TraceAnalyzer Analyze(string path, TraceFilter filter, out TraceInfo info)
@@ -228,10 +292,7 @@ namespace XppVsCode.Server.Host
             path = Path.GetFullPath(path);
             if (!File.Exists(path)) throw new ArgumentException("Trace file not found: " + path);
 
-            string folder = Path.Combine(DynamicsConfigurationReader.ReadActiveConfiguration().FrameworkDirectory ?? "", "bin", "Monitoring");
-            var manifest = EventManifest.Load(folder);
-            if (manifest.Count == 0)
-                throw new InvalidOperationException("No event manifests found in " + folder + "; they come with the Dynamics 365 platform (PackagesLocalDirectory\\bin\\Monitoring).");
+            var manifest = LoadManifest(filter.ManifestFolder);
 
             // The user id is only on some events of a session, so the sessions to keep are found in a first pass.
             HashSet<(string, string)> keep = null;

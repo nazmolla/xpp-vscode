@@ -15,7 +15,7 @@ import { DesignerNodeContext, DesignerServices, ElementDesigner } from './elemen
 import { LabelEditor } from './labelEditor';
 import { initEnvironmentSelection, onDidChangeEnvironment, readActiveEnvironment } from './environment';
 import { EnvironmentStatus, selectEnvironment } from './environmentPicker';
-import { registerGoTo } from './goTo';
+import { registerGoTo, registerOpenElementTool } from './goTo';
 import { registerHistory } from './history';
 import { registerMcpProvider } from './mcpProvider';
 import { openObject, XppDocumentSelector, XppNavigation } from './navigation';
@@ -353,6 +353,7 @@ export function activate(context: vscode.ExtensionContext): void {
     command('xpp.designer.refresh', () => ElementDesigner.titleAction('refresh'));
     command('xpp.designer.createExtension', () => ElementDesigner.titleAction('createExtension'));
     registerGoTo(command, server);
+    registerOpenElementTool(context, server);
     registerHistory(context, server, command);
     context.subscriptions.push(ElementDesigner.onDidChange.event(e => codeFs.refresh(objectUri(e.objectType, e.objectName))));
     void vscode.commands.executeCommand('setContext', 'xpp.aot.modelView', false);
