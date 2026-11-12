@@ -1,7 +1,7 @@
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { elementOpenCommand, listModels, typeLabel } from '../aot';
+import { elementOpenCommand, listModels, typeLabel, typeName } from '../aot';
 import { elementOf, pickElement, TreeArg } from '../d365Tools';
 import { CommandRegistrar, Element, ProductivityContext } from '../productivity/common';
 import { exportText, Inline, SecurityPanel, SecurityReport } from './securityPanel';
@@ -203,8 +203,7 @@ async function whoCanAccess(ctx: ProductivityContext, arg?: TreeArg): Promise<vo
         throw new Error('Who Can Access works on menu items, forms, tables and data entities.');
     }
     const r = await withProgress(`Finding who can access ${element.objectName}…`, () => security<AccessResult>(ctx, 'access', element));
-    const typeName = typeLabel(element.objectType).replace(/ies$/, 'y').replace(/s$/, '');
-    const doc = new SecurityReport(`Who can access ${typeName} ${element.objectName}`, `access-${element.objectName}`);
+    const doc = new SecurityReport(`Who can access ${typeName(element.objectType)} ${element.objectName}`, `access-${element.objectName}`);
     const privileges = r.privileges ?? [];
     doc.text(`${privileges.length} privilege(s) grant access, in ${r.roleCount ?? 0} role(s).`);
     if (r.menuItems?.length) {
@@ -261,7 +260,7 @@ async function findGaps(ctx: ProductivityContext): Promise<void> {
         }
         doc.heading(`${severity === 'Info' ? 'Information' : severity + 's'} (${group.length})`);
         doc.table(['Object', 'Type', 'Check', 'Message'], group.map(f => [
-            openLink(f.name, objectTypeOf(f.objectType)), typeLabel(objectTypeOf(f.objectType)).replace(/ies$/, 'y').replace(/s$/, ''), f.kind ?? '', f.message ?? '',
+            openLink(f.name, objectTypeOf(f.objectType)), typeName(objectTypeOf(f.objectType)), f.kind ?? '', f.message ?? '',
         ]), () => severity);
     }
     SecurityPanel.show(doc);

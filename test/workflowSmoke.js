@@ -28,13 +28,15 @@ async function run() {
         const missing = ['xpp.analyzePerformance', 'xpp.upgradeReadiness', 'xpp.database.openSsms', 'xpp.restartServer', 'xpp.reviewChanges',
             'xpp.preDeployChecklist', 'xpp.bestPractice', 'xpp.newSysOperationJob', 'xpp.newReport', 'xpp.newWorkflow', 'xpp.newService', 'xpp.translateMissingLabels', 'xpp.findUnusedLabels',
             'xpp.analyzeTrace', 'xpp.syncTables', 'xpp.activity.clear', 'xpp.createTeamRules', 'xpp.showUsageStatistics', 'xpp.infolog.filter',
-            'xpp.database.insights', 'xpp.showChangedElements', 'xpp.telemetryQueries'].filter(c => !all.includes(c));
+            'xpp.database.insights', 'xpp.showChangedElements', 'xpp.telemetryQueries', 'xpp.newTableWithForm', 'xpp.newDataEntity', 'xpp.renameElement',
+            'xpp.viewDependencies', 'xpp.exportLabels', 'xpp.importLabels', 'xpp.devops.linkWorkItem', 'xpp.devops.openWorkItem', 'xpp.devops.openPipelines'].filter(c => !all.includes(c));
         if (missing.length) { throw new Error('missing: ' + missing.join(', ')); }
         return 'all registered';
     });
     await check('build tasks provided', async () => {
         const tasks = await vscode.tasks.fetchTasks({ type: 'xpp' });
-        if (tasks.length !== 2) { throw new Error(`expected 2 tasks, got ${tasks.length}`); }
+        const actions = tasks.map(t => t.definition.action).sort().join(',');
+        if (actions !== 'buildModel,buildProject,deploy,syncDatabase') { throw new Error(`expected build, deploy and sync tasks, got ${actions || 'none'} (tasks need a workspace: XPP_TEST_WORKSPACE)`); }
         return tasks.map(t => t.name);
     });
     await check('analyze performance publishes diagnostics', async () => {

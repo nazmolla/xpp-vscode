@@ -2,7 +2,7 @@ import { execFile } from 'child_process';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { CodeTypes, listModels, typeLabel } from './aot';
+import { CodeTypes, listModels, typeLabel, typeName } from './aot';
 import { parseObjectUri, XppScheme } from './codeView';
 import { elementOf, pickElement, TreeArg } from './d365Tools';
 import { XppServerClient } from './serverClient';
@@ -83,7 +83,7 @@ const ShowMetadata: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('
 function showCommits(target: ElementFile, commits: Commit[], pending: boolean): void {
     const hasCode = CodeTypes.has(target.objectType);
     const pick = vscode.window.createQuickPick<CommitItem>();
-    pick.title = `History of ${target.objectName} (${typeLabel(target.objectType).replace(/s$/, '')})`;
+    pick.title = `History of ${target.objectName} (${typeName(target.objectType)})`;
     pick.placeholder = hasCode ? 'Pick a commit to see its code changes' : 'Pick a commit to see its changes';
     pick.matchOnDescription = true;
     pick.matchOnDetail = true;

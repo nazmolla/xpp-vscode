@@ -2,7 +2,7 @@ import { execFile } from 'child_process';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { listModels, typeLabel } from './aot';
+import { listModels, typeName } from './aot';
 import { XppScheme, objectUri } from './codeView';
 
 export interface ChangedElement {
@@ -120,7 +120,7 @@ export class ChangeDecorations implements vscode.FileDecorationProvider, vscode.
         }
         const name = file.replace(/\.xpp$/i, '');
         const change = this.changes.get(`${objectType}/${name}`.toLowerCase());
-        const type = typeLabel(objectType).replace(/s$/, '');
+        const type = typeName(objectType);
         if (!change) {
             return { tooltip: type };
         }

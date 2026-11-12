@@ -51,6 +51,7 @@ namespace XppVsCode.Server.MetaModel
         string GetElementMethodJson(string objectType, string objectName, string[] path);
         string SetElementMethodJson(string objectType, string objectName, string[] nodePath, string originalName, string source);
         string GetOverridesJson(string objectType, string objectName, string[] nodePath);
+        string ReplaceReferencesJson(string objectType, string objectName, string targetType, string table, string oldName, string newName);
     }
 
     /// <summary>The active project and its items.</summary>

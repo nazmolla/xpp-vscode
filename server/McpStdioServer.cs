@@ -134,6 +134,8 @@ namespace XppVsCode.Server
                         return JsonHelpers.BuildResult(idToken, _router.TagReferencesJson(body));
                     if (action == "label_usage")
                         return JsonHelpers.BuildResult(idToken, _router.LabelUsageJson(body));
+                    if (action == "element_dependencies")
+                        return JsonHelpers.BuildResult(idToken, _router.DependenciesJson(body));
                     return JsonHelpers.BuildResult(idToken, _bridge.Call(action, body));
                 case "xpp/lang":
                     // Language features of the VS Code extension (its own server process): raw JSON results.

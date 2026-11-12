@@ -57,25 +57,25 @@ sandbox environments (UDE/USE) use Azure SQL with just-in-time credentials, the 
 |---|---|---|
 | F1 | Test Explorer integration (discover the project's SysTest classes, run on the environment, result per test method) | Done (runs on unified environments, like Run Tests) |
 | F2 | `@fno` chat participant: `/extend`, `/report`, `/batch`, `/security`, `/explain`, `/design` | Done: `/design`, `/extend`, `/explain`, `/review`, `/support`, `/performance` (reports, batch jobs and security go through `/design` and the agent tools) |
-| F3 | Rename (methods, fields, elements) with cross-reference updates | Done for methods of your models (calls from the cross-reference database, preview first); fields and elements planned |
-| F4 | New Object wizards: table + form + menu item + privilege; SysOperation batch; report; data entity; integration (entity, staging, service, security) | SysOperation batch job, report, approval workflow and custom service done; table + form + menu item + privilege and data entity planned (the agent tools and `@fno /design` create them today) |
+| F3 | Rename (methods, fields, elements) with cross-reference updates | Done: methods (F2), fields (designer Rename on a table field) and elements (Rename… on your elements): X++ code in the refactor preview, metadata of your other elements through `replace_references`, references from the cross-reference database. Not run end to end in VS Code yet |
+| F4 | New Object wizards: table + form + menu item + privilege; SysOperation batch; report; data entity; integration (entity, staging, service, security) | Done: batch job, report, approval workflow, custom service, table with form (key EDT, table, SimpleList form, menu item, View/Maintain privileges) and data entity (entity, staging table, privileges); `scripts/scaffold-test.js` builds all of them without errors or warnings |
 | F5 | On-demand best-practice check (`xppbp`) into Problems, with quick fixes | Done (quick fixes come from the existing code actions) |
-| F6 | Label tooling: translate missing languages, unused labels, import/export | Translate and unused labels done; import/export planned |
+| F6 | Label tooling: translate missing languages, unused labels, import/export | Done: Export Labels… and Import Labels… (CSV: Id, Comment, one column per language) |
 | F7 | Git-aware project view: changed elements, "changed in this branch", readable metadata diffs | Done |
 | F8 | Database sync of selected tables | Done for cloud-hosted and VHD (SyncEngine); not run here (this machine has a UDE, which syncs through `pac`) |
 | F9 | Trace Parser integration (open a trace, jump to code) | Done: replaced by Analyze Trace (P7); every method opens in the code view |
 | F10 | Review My Changes: best practice, CoC without `next`, missing security, literal text, for the branch diff | Done |
 | F11 | Team knowledge pack: per-repo naming, prefix and pattern rules the guide and validation follow | Done: `.xpp/agent-rules.md` joins the agent instructions |
 | F12 | Copilot tools: `xpp_check_best_practice`, `xpp_diff_changes`, `xpp_find_deprecations`, `xpp_package` (asks first) | Done |
-| F13 | Dependency diagram (Visual Studio's DGML): a model's package references, and an element's dependencies from the cross-reference database, exportable as SVG/Mermaid | Planned |
-| F14 | Debugger on cloud-hosted and VHD environments: attach vsdbg to the local AOS (w3wp, batch) with the PDBs in PackagesLocalDirectory, no DebuggerProxy | Planned |
+| F13 | Dependency diagram (Visual Studio's DGML): a model's package references, and an element's dependencies from the cross-reference database, exportable as SVG/Mermaid | Done: View Dependencies (`element_dependencies`), View Model Dependencies; every diagram exports Mermaid |
+| F14 | Debugger on cloud-hosted and VHD environments: attach vsdbg to the local AOS (w3wp, batch) with the PDBs in PackagesLocalDirectory, no DebuggerProxy | Done: Launch Debugger attaches the C# extension's clr debugger to w3wp.exe or Batch.exe; local PDBs use the same e:\source paths as the cloud. Not verified on a cloud-hosted or VHD environment yet |
 
 ## 4. Workflows (W)
 
 | ID | Item | Status |
 |---|---|---|
 | W1 | Pre-deploy checklist: build, best practice, tests, security gaps, missing labels, then package and deploy | Done (Pre-Deploy Checklist; tests stay a separate run because they need the deployed code) |
-| W2 | VS Code tasks for builds (`type: xpp`, `buildProject` / `buildModel`) | Done: no problem matcher needed, builds write to Problems directly. Deploy and sync tasks planned |
+| W2 | VS Code tasks for builds (`type: xpp`, `buildProject` / `buildModel`) | Done, plus `deploy` (dbSync) and `syncDatabase` (mode, modules) tasks |
 | W3 | Upgrade readiness report per model: obsolete calls, CoC wrappers of changed methods, broken extensions | Done: obsolete API uses (cross references); Chain of Command wrappers whose target is gone, changed signature or is no longer wrappable; event handlers whose target is gone; table, form and enum extensions whose base, fields, field groups or controls are gone (Upgrade Readiness, `xpp_find_deprecations`) |
 | W4 | Environment profiles (switch without re-running setup) | Done (existing): Select Environment, per workspace |
 | W5 | Code review assist: pull request summary of metadata changes with security and license impact | Done (Review My Changes: Copy PR Summary) |
@@ -89,7 +89,7 @@ sandbox environments (UDE/USE) use Azure SQL with just-in-time credentials, the 
 | L1 | Requirements / design | Technical design document from a requirement: elements to create or extend, extension points, security and license impact | Done: `@fno /design` |
 | L2 | Develop | Scaffolding for reports, workflows, batch jobs, integrations (see F4) | Done: New Report (RDP with TempDB table, contract, controller, report with auto design), New Approval Workflow, New Batch Job, New Custom Service; `scripts/scaffold-test.js` builds all of them without errors or warnings |
 | L3 | Code review | Branch review (F10) and best-practice tool (F5) | Done |
-| L4 | Deploy / ALM | Pre-deploy checklist (W1), packaging tool, pipeline and work item links | Checklist and `xpp_package` done; pipeline and work item links planned |
+| L4 | Deploy / ALM | Pre-deploy checklist (W1), packaging tool, pipeline and work item links | Done: checklist, `xpp_package`, Link Work Item… (#id or AB#id in the commit message), Open Work Item…, Open Pipelines (Azure Pipelines or GitHub Actions); Review My Changes lists the branch's work items |
 | L5 | Upgrade | Upgrade readiness report (W3) | Done (see W3) |
 | L6 | Support | Call stack and batch failure helper, built on Find Message Source and the Infolog | Done: `@fno /support`, batch job history in Database Performance Insights |
 
@@ -104,7 +104,7 @@ Static checks need no environment; live checks use the database connection (DB3)
 | P3 | Query shape: queries and row operations in loops, nested `select firstonly` in `while select`, `while select` of every field, `forupdate` without a write, unbalanced transactions, unlimited `crossCompany` | Static | Done |
 | P4 | Index advisor: covering indexes for joins and ranges; missing-index DMVs where the database allows | Static + live | Done: queries whose ranges no index starts with (static); missing-index DMVs (live) |
 | P5 | Table cache review: CacheLookup against TableGroup and write frequency | Static | Done (CacheLookup against TableGroup) |
-| P6 | Form data sources: OnlyFetchActive, link types, display methods without cacheAddMethod | Static | Done for display methods without cacheAddMethod; OnlyFetchActive and link types planned |
+| P6 | Form data sources: OnlyFetchActive, link types, display methods without cacheAddMethod | Static | Done: display methods without cacheAddMethod; data sources that fetch every field but show a few in a grid (OnlyFetchActive); Delayed/Active data sources shown in the parent's grid instead of joined, and Active links |
 | P7 | Trace analyzer: slowest methods and SQL from a Trace Parser trace, linked to source | Live | Done: F&O Studio's own .etl reader (Windows ETW API + the platform's event manifests), no Trace Parser: requests with call trees, methods, SQL per method, pauses; `xpp_analyze_trace` |
 | P8 | Query plan explainer | Live | Done (Explain Plan in the query panel) |
 | P9 | Batch job analyzer: task split, bundling | Static + live | Done: batch job history (live) |
