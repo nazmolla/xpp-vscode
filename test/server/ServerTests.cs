@@ -345,6 +345,104 @@ namespace XppVsCode.Server.Tests
         }
     }
 
+    /// <summary>The action registry: exactly the contract, write kinds as the policy expects, no duplicates.</summary>
+    public class BridgeRegistryTests
+    {
+        private static MetaModelBridgeServer CreateWithXRef()
+        {
+            var server = BridgeDispatchTests.Create(new WritePolicyStub());
+            new ToolRouter(new BridgeClient(server)).AddXRefActions(server.Actions);
+            return server;
+        }
+
+        private sealed class WritePolicyStub : IWritePolicy
+        {
+            public string EditDenial(string objectType, string objectName) => null;
+            public string TargetModelDenial(string modelName) => null;
+        }
+
+        [Fact]
+        public void TheRegistryServesExactlyTheContract()
+        {
+            var names = CreateWithXRef().Actions.All.Select(a => a.Name).OrderBy(n => n, StringComparer.Ordinal);
+            Assert.Equal(BridgeDispatchTests.ContractActions().OrderBy(n => n, StringComparer.Ordinal), names);
+        }
+
+        [Fact]
+        public void WriteKindsMatchThePolicyLists()
+        {
+            var all = CreateWithXRef().Actions.All;
+            Assert.Equal(BridgeDispatchTests.EditActions.OrderBy(a => a), all.Where(a => a.Write == WriteKind.Edit).Select(a => a.Name).OrderBy(a => a));
+            Assert.Equal(new[] { "create_object" }, all.Where(a => a.Write == WriteKind.Create).Select(a => a.Name));
+            Assert.Equal(new[] { "duplicate_object" }, all.Where(a => a.Write == WriteKind.Copy).Select(a => a.Name));
+        }
+
+        [Fact]
+        public void OnlyCrossReferenceActionsRunOutsideTheMetadataLock()
+        {
+            var unlocked = CreateWithXRef().Actions.All.Where(a => !a.UsesMetadata).Select(a => a.Name).OrderBy(a => a);
+            Assert.Equal(BridgeDispatchTests.XRefActions.OrderBy(a => a), unlocked);
+            Assert.All(CreateWithXRef().Actions.All.Where(a => !a.UsesMetadata), a => Assert.Equal(WriteKind.Read, a.Write));
+        }
+
+        [Fact]
+        public void DuplicateRegistrationsAreRefused()
+        {
+            var registry = new BridgeActionRegistry();
+            registry.Add("x", b => b);
+            var ex = Assert.Throws<InvalidOperationException>(() => registry.Add("x", WriteKind.Edit, b => b));
+            Assert.Contains("'x'", ex.Message);
+            Assert.Throws<InvalidOperationException>(() => CreateWithXRef().Actions.Add("where_used", b => b));
+        }
+
+        [Fact]
+        public void UnnamedActionsAreRefused()
+        {
+            Assert.Throws<ArgumentException>(() => new BridgeAction(" ", WriteKind.Read, b => b));
+            Assert.Throws<ArgumentNullException>(() => new BridgeAction("x", WriteKind.Read, null));
+        }
+
+        [Fact]
+        public void FindIsExactAndNullSafe()
+        {
+            var actions = CreateWithXRef().Actions;
+            Assert.NotNull(actions.Find("read_object"));
+            Assert.Null(actions.Find("READ_OBJECT"));
+            Assert.Null(actions.Find(null));
+        }
+
+        [Fact]
+        public void CrossReferenceActionsDoNotWaitForTheMetadataLock()
+        {
+            var server = BridgeDispatchTests.Create(new WritePolicyStub());
+            var entered = new System.Threading.ManualResetEventSlim();
+            var release = new System.Threading.ManualResetEventSlim();
+            server.Actions.Add("slow_metadata", b => { entered.Set(); release.Wait(5000); return "{}"; });
+            server.Actions.Add(new BridgeAction("quick_xref", WriteKind.Read, b => "{\"quick\":true}", usesMetadata: false));
+            var slow = System.Threading.Tasks.Task.Run(() => server.Dispatch("slow_metadata", "{}"));
+            Assert.True(entered.Wait(5000));
+            try
+            {
+                var quick = System.Threading.Tasks.Task.Run(() => server.Dispatch("quick_xref", "{}"));
+                Assert.True(quick.Wait(2000), "an XRef action waited for the metadata lock");
+                Assert.Equal("{\"quick\":true}", quick.Result);
+            }
+            finally
+            {
+                release.Set();
+                slow.Wait(5000);
+            }
+        }
+
+        [Fact]
+        public void XRefFailuresBecomeFailedResults()
+        {
+            var server = BridgeDispatchTests.Create(new WritePolicyStub());
+            server.Actions.Add(new BridgeAction("broken_xref", WriteKind.Read, b => throw new InvalidOperationException("no database"), usesMetadata: false));
+            Assert.Equal("{\"success\":false,\"message\":\"no database\"}", server.Dispatch("broken_xref", "{}"));
+        }
+    }
+
     public class ReadOnlySqlTests
     {
         [Theory]
