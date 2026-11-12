@@ -443,6 +443,137 @@ namespace XppVsCode.Server.Tests
         }
     }
 
+    /// <summary>Agent tool registry and discovery (tools/list): every listed tool is served and every served tool is listed.</summary>
+    public class ToolRegistryTests
+    {
+        private static ToolRouter CreateRouter() => new ToolRouter(new BridgeClient(BridgeDispatchTests.Create(new AllowAll())));
+
+        private sealed class AllowAll : IWritePolicy
+        {
+            public string EditDenial(string objectType, string objectName) => null;
+            public string TargetModelDenial(string modelName) => null;
+        }
+
+        internal static readonly string[] ExpectedTools =
+        {
+            "xpp_create_object", "xpp_read_object", "xpp_update_object", "xpp_find_object", "xpp_list_objects", "xpp_list_model_objects",
+            "xpp_find_references", "xpp_find_examples", "xpp_analyze_security", "xpp_get_guide", "xpp_find_message_source", "xpp_search_code",
+            "xpp_get_model_info", "xpp_list_models", "xpp_read_label", "xpp_create_label", "xpp_add_to_project", "xpp_list_project_items",
+            "xpp_get_environment", "xpp_search_docs", "xpp_validate_object", "xpp_get_form_layout", "xpp_delete_object", "xpp_remove_from_project",
+            "xpp_select_project", "xpp_build", "xpp_package", "xpp_diff_changes", "xpp_check_best_practice", "xpp_find_deprecations",
+            "xpp_analyze_trace", "xpp_analyze_performance", "xpp_get_object_type_schema",
+        };
+
+        private static Dictionary<string, object> ToolsList(ToolRouter router)
+        {
+            var response = new JavaScriptSerializer { MaxJsonLength = int.MaxValue }.Deserialize<Dictionary<string, object>>(router.BuildToolsListResponse("7"));
+            Assert.Equal(7, response["id"]);
+            return (Dictionary<string, object>)response["result"];
+        }
+
+        [Fact]
+        public void ToolsListHasEveryToolInOrderWithItsSchema()
+        {
+            var tools = ((System.Collections.ArrayList)ToolsList(CreateRouter())["tools"]).Cast<Dictionary<string, object>>().ToList();
+            Assert.Equal(ExpectedTools, tools.Select(t => (string)t["name"]));
+            foreach (var tool in tools)
+            {
+                Assert.False(string.IsNullOrWhiteSpace(tool["description"] as string), (string)tool["name"]);
+                var schema = (Dictionary<string, object>)tool["inputSchema"];
+                Assert.Equal("object", schema["type"]);
+                var properties = schema.TryGetValue("properties", out object p) ? (Dictionary<string, object>)p : new Dictionary<string, object>();
+                if (schema.TryGetValue("required", out object required))
+                    Assert.All(((System.Collections.ArrayList)required).Cast<string>(), r => Assert.True(properties.ContainsKey(r), tool["name"] + " requires unknown " + r));
+            }
+        }
+
+        [Fact]
+        public void EveryListedToolIsServedAndOnlyAliasesAreUnlisted()
+        {
+            var registry = CreateRouter().Tools;
+            Assert.Equal(ExpectedTools, registry.Listed.Select(t => t.Name));
+            Assert.Equal(new[] { "xpp_update_current_object" }, registry.All.Where(t => t.Is(ToolTraits.Unlisted)).Select(t => t.Name));
+            Assert.All(registry.Listed, t => Assert.NotNull(t.Definition));
+        }
+
+        [Fact]
+        public void ParallelReadsAreExactlyTheReadOnlyTools()
+        {
+            var router = CreateRouter();
+            var parallel = new[]
+            {
+                "xpp_search_code", "xpp_find_examples", "xpp_find_references", "xpp_search_docs", "xpp_read_object", "xpp_find_object",
+                "xpp_list_objects", "xpp_list_model_objects", "xpp_get_form_layout", "xpp_read_label", "xpp_get_model_info",
+                "xpp_list_models", "xpp_get_environment", "xpp_get_object_type_schema", "xpp_list_project_items", "xpp_validate_object", "xpp_analyze_security",
+                "xpp_find_message_source", "xpp_get_guide", "xpp_analyze_performance", "xpp_find_deprecations", "xpp_analyze_trace",
+            };
+            Assert.Equal(parallel.OrderBy(n => n), router.Tools.All.Where(t => t.Is(ToolTraits.ParallelRead)).Select(t => t.Name).OrderBy(n => n));
+            Assert.All(parallel, n => Assert.True(router.IsParallelRead(n)));
+            Assert.False(router.IsParallelRead("xpp_create_object"));
+            Assert.False(router.IsParallelRead("xpp_no_such_tool"));
+            Assert.False(router.IsParallelRead(null));
+            Assert.Empty(router.Tools.All.Where(t => t.Is(ToolTraits.ParallelRead) && t.Is(ToolTraits.WritesElement)));
+        }
+
+        [Fact]
+        public void ElementWritesAreTheObjectLifeCycleTools()
+        {
+            var writes = CreateRouter().Tools.All.Where(t => t.Is(ToolTraits.WritesElement)).Select(t => t.Name).OrderBy(n => n);
+            Assert.Equal(new[] { "xpp_create_object", "xpp_delete_object", "xpp_update_current_object", "xpp_update_object" }, writes);
+        }
+
+        [Fact]
+        public void UnknownToolsAreReported()
+        {
+            string response = CreateRouter().HandleToolCall("3", "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"xpp_nope\",\"arguments\":{}}}");
+            Assert.Contains("-32602", response);
+            Assert.Contains("Unknown tool: xpp_nope", response);
+        }
+
+        [Fact]
+        public void WriteToolsOnStandardObjectsReachThePolicy()
+        {
+            var router = new ToolRouter(new BridgeClient(BridgeDispatchTests.Create(new DenyStd())));
+            string response = router.HandleToolCall("4", "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"xpp_update_object\",\"arguments\":{\"objectType\":\"AxClass\",\"objectName\":\"Std\"}}}");
+            Assert.Contains("standard object refused", response);
+            Assert.DoesNotContain("bridge reached", response);
+        }
+
+        private sealed class DenyStd : IWritePolicy
+        {
+            public string EditDenial(string objectType, string objectName) => objectName == "Std" ? "standard object refused" : null;
+            public string TargetModelDenial(string modelName) => null;
+        }
+
+        [Fact]
+        public void DefinitionsAndRegistrationsMustMatch()
+        {
+            var registry = new McpToolRegistry();
+            registry.Add("a", ToolTraits.None, (id, json) => "");
+            registry.Add("b", ToolTraits.None, (id, json) => "");
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                registry.AttachDefinitions("{\"tools\":[{\"name\":\"a\",\"description\":\"x\",\"inputSchema\":{\"type\":\"object\"}},{\"name\":\"c\"}]}"));
+            Assert.Contains("defined but not registered: c", ex.Message);
+            Assert.Contains("registered but not defined: b", ex.Message);
+        }
+
+        [Fact]
+        public void DuplicateToolsAreRefused()
+        {
+            var registry = new McpToolRegistry();
+            registry.Add("a", ToolTraits.None, (id, json) => "");
+            Assert.Throws<InvalidOperationException>(() => registry.Add("a", ToolTraits.ParallelRead, (id, json) => ""));
+            Assert.Throws<ArgumentException>(() => registry.Add(null, ToolTraits.None, (id, json) => ""));
+        }
+
+        [Fact]
+        public void DefinitionsResourceIsEmbedded()
+        {
+            string json = McpToolRegistry.LoadDefinitions();
+            Assert.Contains("\"xpp_create_object\"", json);
+        }
+    }
+
     public class ReadOnlySqlTests
     {
         [Theory]
