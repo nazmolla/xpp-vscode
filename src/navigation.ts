@@ -300,12 +300,29 @@ export async function openObject(server: XppServerClient, context: vscode.Extens
     };
     showRecent();
     let timer: NodeJS.Timeout | undefined;
-    pick.onDidChangeValue(value => {
-        clearTimeout(timer);
+    const parse = (value: string) => {
         const prefixed = /^([a-z]):\s*(.*)$/i.exec(value.trim());
         const types = prefixed ? TypePrefixes[prefixed[1].toLowerCase()] : undefined;
-        const name = (types ? prefixed![2] : value).trim();
-        if (name.length < 3) {
+        return { types, name: (types ? prefixed![2] : value).trim() };
+    };
+    const search = async (value: string): Promise<Match[]> => {
+        const { types, name } = parse(value);
+        pick.busy = true;
+        try {
+            const result = await server.bridge('find_object', { objectName: name, exactMatch: false, maxResults: 50, ...types?.length === 1 ? { objectType: types[0] } : {} });
+            const matches = ((result.matches ?? []) as Match[]).filter(m => !types || types.includes(m.objectType));
+            // Keep VS Code's own filtering from hiding results whose text doesn't contain the prefix.
+            pick.items = matches.length
+                ? matches.map(m => ({ ...toItem(m), alwaysShow: true }))
+                : [{ label: `$(add) New Element named '${name}'…`, alwaysShow: true, create: true }];
+            return matches;
+        } finally {
+            pick.busy = false;
+        }
+    };
+    pick.onDidChangeValue(value => {
+        clearTimeout(timer);
+        if (parse(value).name.length < 3) {
             if (!value.trim()) {
                 showRecent();
             } else {
@@ -313,19 +330,7 @@ export async function openObject(server: XppServerClient, context: vscode.Extens
             }
             return;
         }
-        timer = setTimeout(async () => {
-            pick.busy = true;
-            try {
-                const result = await server.bridge('find_object', { objectName: name, exactMatch: false, maxResults: 50, ...types?.length === 1 ? { objectType: types[0] } : {} });
-                const matches = ((result.matches ?? []) as Match[]).filter(m => !types || types.includes(m.objectType));
-                // Keep VS Code's own filtering from hiding results whose text doesn't contain the prefix.
-                pick.items = matches.length
-                    ? matches.map(m => ({ ...toItem(m), alwaysShow: true }))
-                    : [{ label: `$(add) New Element named '${name}'…`, alwaysShow: true, create: true }];
-            } finally {
-                pick.busy = false;
-            }
-        }, 300);
+        timer = setTimeout(() => void search(value), 300);
     });
     const remember = (m: Match) => void context.workspaceState.update(RecentElementsKey,
         [m, ...recent().filter(r => r.objectType !== m.objectType || r.objectName !== m.objectName)].slice(0, 15));
@@ -345,20 +350,35 @@ export async function openObject(server: XppServerClient, context: vscode.Extens
             await vscode.commands.executeCommand('xpp.addToProject', { item: { objectType: m.objectType, objectName: m.objectName } });
         }
     });
-    pick.onDidAccept(() => {
-        const selected = pick.selectedItems[0];
+    const openMatch = (match: Match) => {
         pick.hide();
-        if (selected?.create) {
-            void vscode.commands.executeCommand('xpp.newElement');
-            return;
-        }
-        const match = selected?.match;
-        if (!match) {
-            return;
-        }
         remember(match);
         const open = elementOpenCommand(match.objectType, match.objectName);
         void vscode.commands.executeCommand(open.command, ...(open.arguments ?? []));
+    };
+    pick.onDidAccept(async () => {
+        const selected = pick.selectedItems[0];
+        if (selected?.create) {
+            pick.hide();
+            void vscode.commands.executeCommand('xpp.newElement');
+            return;
+        }
+        if (selected?.match) {
+            openMatch(selected.match);
+            return;
+        }
+        // Enter before the results arrived: search now; open the element when the name identifies one.
+        const { name } = parse(pick.value);
+        if (name.length < 3) {
+            return;
+        }
+        clearTimeout(timer);
+        const matches = await search(pick.value);
+        const exact = matches.filter(m => m.objectName.toLowerCase() === name.toLowerCase());
+        const only = exact.length === 1 ? exact[0] : matches.length === 1 ? matches[0] : undefined;
+        if (only) {
+            openMatch(only);
+        }
     });
     pick.onDidHide(() => pick.dispose());
     pick.show();

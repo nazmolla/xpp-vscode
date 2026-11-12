@@ -58,7 +58,8 @@ export class XppServerClient implements vscode.Disposable {
     /** Analyzes a performance trace (.etl) on the server (xpp/trace); outside the metadata lock. */
     async trace<T = BridgeResult>(body: { path: string; minRequestMs?: number; minNodeMs?: number }, timeoutMs = 600_000): Promise<T> {
         await this.ensureStarted();
-        const raw = await this.request('xpp/trace', { action: 'analyze', body }, timeoutMs);
+        const manifestFolder = vscode.workspace.getConfiguration('xpp').get<string>('trace.manifestFolder') || undefined;
+        const raw = await this.request('xpp/trace', { action: 'analyze', body: { ...body, manifestFolder } }, timeoutMs);
         return (typeof raw === 'string' ? JSON.parse(raw) : raw) as T;
     }
 
