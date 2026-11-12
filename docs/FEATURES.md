@@ -10,6 +10,8 @@ Develop Dynamics 365 Finance & Operations X++ code in VS Code, without Visual St
 
 ## What's new in 0.13
 
+**0.13.3: Analyze Trace on VHD environments, Copilot opens code in the editor.** Analyze Trace finds the event manifests on local VHD environments (`AosService\WebRoot\Monitoring` or the registered trace providers), or in the folder set in `xpp.trace.manifestFolder` / `manifestFolder` ([#10](https://github.com/nazmolla/xpp-vscode/issues/10)). The new `xpp_open_element` tool lets Copilot show an element in the X++ code editor or designer, at a method and line, instead of opening its XML. **Open Element…** opens the element when you press Enter before the results appear, and has its own icon.
+
 **0.13.2: Build compiles label files.** LabelC now gets the label file names with their language (`Id_en-US,Id_de` instead of `Id`), so models with label files build, and Build and best practice checks find a model whose package has a different name ([#9](https://github.com/nazmolla/xpp-vscode/issues/9)).
 
 **0.13.1: Analyze Trace for errors and integrations.** The trace analyzer lists every AOS and session in the trace with its user (dual-write, OData, batch, other users), finds errors and exceptions with their full X++ call stack, shows UTC times to match integration logs, and filters by AOS, session, user, method or time window (also in `xpp_analyze_trace`).

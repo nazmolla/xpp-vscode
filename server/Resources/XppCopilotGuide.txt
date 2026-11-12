@@ -59,6 +59,9 @@ ownership rules, auto-add objects to the active D365FO project, and handle all o
                                   error before reporting done.
   xpp_run_tests                — (VS Code tool) Run SysTest classes of the active project against
                                   the deployed environment and return pass/fail per test method.
+  xpp_open_element             — (VS Code tool) Show an element to the user in the X++ code editor
+                                  or designer, optionally at a method or a line of code. Use it when
+                                  the user asks to open or see code; never open the .xml file.
 
   ── Labels ──
   xpp_read_label               — Read labels from a label file. Look up by ID or search by text.
