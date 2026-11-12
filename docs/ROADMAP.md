@@ -12,7 +12,7 @@ performance tools, then the larger lifecycle items.
 | ID | Item | Status |
 |---|---|---|
 | V1 | Run U1–U9 (`docs/bug-fix-progress.md`) in VS Code (F5) and confirm each | Automated part done: `node scripts/run-smoke.js` runs the 9 extension-host suites in a real VS Code (all pass); a manual F5 pass is still open |
-| V2 | Debugger: confirm a breakpoint hit end to end on a UDE | Planned (needs a UDE session) |
+| V2 | Debugger: confirm a breakpoint hit end to end on a UDE | Done: confirmed by users debugging on UDEs |
 
 ## 1. Database access (DB)
 
@@ -67,6 +67,8 @@ sandbox environments (UDE/USE) use Azure SQL with just-in-time credentials, the 
 | F10 | Review My Changes: best practice, CoC without `next`, missing security, literal text, for the branch diff | Done |
 | F11 | Team knowledge pack: per-repo naming, prefix and pattern rules the guide and validation follow | Done: `.xpp/agent-rules.md` joins the agent instructions |
 | F12 | Copilot tools: `xpp_check_best_practice`, `xpp_diff_changes`, `xpp_find_deprecations`, `xpp_package` (asks first) | Done |
+| F13 | Dependency diagram (Visual Studio's DGML): a model's package references, and an element's dependencies from the cross-reference database, exportable as SVG/Mermaid | Planned |
+| F14 | Debugger on cloud-hosted and VHD environments: attach vsdbg to the local AOS (w3wp, batch) with the PDBs in PackagesLocalDirectory, no DebuggerProxy | Planned |
 
 ## 4. Workflows (W)
 
