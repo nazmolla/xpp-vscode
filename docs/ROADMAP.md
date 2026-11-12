@@ -172,3 +172,21 @@ wins, build loop and navigation, views, designers, then the lifecycle features.
 | CS4 | Telemetry Queries as snippets/documentation unless they run | Partly: the queries are also Kusto snippets (`fno-…`); the command stays for the form-specific queries |
 | CS5 | Usage statistics feed Report a Problem (PM14) | Done |
 | CS6 | Run Snippet's scratch runner excluded from packages and flagged by the Pre-Deploy Checklist | Done: the checklist fails while the runner is in the model |
+
+## 8. Server structure (S)
+
+The server routes requests through hard-coded switches: 63 bridge actions in `MetaModelBridgeServer.DispatchOnMainThread`,
+5 more in `McpStdioServer`, 34 MCP tools in `ToolRouter.DispatchTool` (with their descriptions in one JSON string), and 7
+switches on the element type in `MetaModelBridge.cs` (4,200 lines). Action names are also listed in `src/bridgeContract.ts` and
+the write lists `EditActions`/`CreateActions`. Goal: one registration per action, tool and element type, with write rules
+taken from the registration. Every step keeps behaviour identical: `scripts/golden-master.js` reports IDENTICAL, and the smoke
+test, security probes, `npm run test:server`, `check-bridge-actions.js` and `run-smoke.js` pass.
+
+| ID | Item | Status |
+|---|---|---|
+| S1 | Bridge action registry: `IBridgeAction` (name, write kind None/Edit/Create, needs the metadata lock, handler) over a `BridgeRequest` that wraps today's JSON helpers. Services register their actions in `Program.Run`; the dispatcher looks the action up, applies the lock, the write policy (from the write kind, replacing `EditActions`/`CreateActions`), agent scope and checkpoints, and the error envelope. The `McpStdioServer` cross-reference actions move into the registry without the lock. A unit test denies every write action on a standard element | Planned |
+| S2 | Contract from the registry: `--list-actions` prints the registered actions with their write kind; `check-bridge-actions.js` compares `src/bridgeContract.ts` with it instead of reading C# | Planned |
+| S3 | MCP tool registry: `IMcpTool` (name, description, input schema, handler) per tool or tool group; `tools/list` built from the registry; activity log, errors and output limits in one wrapper | Planned |
+| S4 | Element type handlers: `IElementTypeHandler` (create, update, read) for each type, extracted from the switches in `MetaModelBridge.cs`; one generic handler for the types the typed API covers; create (create, reload, update, roll back) stays one orchestrator | Planned |
+| S5 | Split what is left of `MetaModelBridge` along the existing interfaces in `MetadataServices.cs`, so each service holds only its own state through `IMetadataCore` | Planned |
+| S6 | Dependency injection container (`Microsoft.Extensions.DependencyInjection`, runs on .NET Framework 4.8), only if hand wiring in `Program.Run` gets hard to follow | Optional |
