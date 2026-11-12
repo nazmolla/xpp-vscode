@@ -66,20 +66,12 @@ namespace XppVsCode.Server
             }
         }
 
-        private static readonly HashSet<string> ParallelTools = new HashSet<string>(StringComparer.Ordinal)
-        {
-            "xpp_search_code", "xpp_find_examples", "xpp_find_references", "xpp_search_docs", "xpp_read_object", "xpp_find_object",
-            "xpp_list_objects", "xpp_list_model_objects", "xpp_get_form_layout", "xpp_read_label", "xpp_get_model_info",
-            "xpp_list_models", "xpp_get_environment", "xpp_get_object_type_schema", "xpp_list_project_items", "xpp_validate_object", "xpp_analyze_security",
-            "xpp_find_message_source", "xpp_get_guide", "xpp_analyze_performance", "xpp_find_deprecations", "xpp_analyze_trace",
-        };
-
-        private static bool IsParallelRead(string json)
+        private bool IsParallelRead(string json)
         {
             string method = JsonHelpers.ExtractJsonString(json, "method");
             // Database queries and trace analysis can run for minutes; they never touch the metadata API.
             return method == "xpp/data" || method == "xpp/trace"
-                || method == "tools/call" && ParallelTools.Contains(JsonHelpers.ExtractNestedString(json, "params", "name") ?? "");
+                || method == "tools/call" && _router.IsParallelRead(JsonHelpers.ExtractNestedString(json, "params", "name"));
         }
 
         private readonly object _outputLock = new object();
@@ -126,16 +118,6 @@ namespace XppVsCode.Server
                     string paramsJson = JsonHelpers.ExtractNestedObject(json, "params") ?? "{}";
                     string action = JsonHelpers.ExtractJsonString(paramsJson, "action");
                     string body = JsonHelpers.ExtractNestedObject(paramsJson, "body") ?? "{}";
-                    if (action == "where_used")
-                        return JsonHelpers.BuildResult(idToken, _router.WhereUsedJson(body));
-                    if (action == "list_tags")
-                        return JsonHelpers.BuildResult(idToken, _router.TagsJson(body));
-                    if (action == "tag_references")
-                        return JsonHelpers.BuildResult(idToken, _router.TagReferencesJson(body));
-                    if (action == "label_usage")
-                        return JsonHelpers.BuildResult(idToken, _router.LabelUsageJson(body));
-                    if (action == "element_dependencies")
-                        return JsonHelpers.BuildResult(idToken, _router.DependenciesJson(body));
                     return JsonHelpers.BuildResult(idToken, _bridge.Call(action, body));
                 case "xpp/lang":
                     // Language features of the VS Code extension (its own server process): raw JSON results.

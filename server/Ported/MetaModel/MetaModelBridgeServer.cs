@@ -57,29 +57,25 @@ namespace XppVsCode.Server.MetaModel
             _policy = services.Policy ?? throw new ArgumentNullException(nameof(services.Policy));
             _agentWrites = services.AgentWrites;
             _checkpoints = services.Checkpoints;
+            RegisterActions();
         }
 
         private readonly IWritePolicy _policy;
         private readonly IAgentSession _agentWrites;
         private readonly IAgentSession _checkpoints;
 
-        // Actions that change an existing object (objectType/objectName) and actions that create objects in a model (modelName).
-        private static readonly HashSet<string> EditActions = new HashSet<string>(StringComparer.Ordinal)
-        {
-            "update_object", "delete_object", "set_element_property", "add_element_node", "delete_element_node", "rename_element_node",
-            "duplicate_element_node", "move_element_node", "drop_on_node", "drop_on_property", "set_element_method", "replace_references",
-        };
-        private static readonly HashSet<string> CreateActions = new HashSet<string>(StringComparer.Ordinal) { "create_object", "duplicate_object" };
+        /// <summary>Every action the bridge serves. Other components add theirs (the cross-reference queries, see ToolRouter).</summary>
+        public BridgeActionRegistry Actions { get; } = new BridgeActionRegistry();
 
-        private string WriteDenial(string action, string body)
+        private string WriteDenial(WriteKind write, string body)
         {
-            bool checkOnly = "true".Equals(ExtractJsonString(body, "checkOnly"), StringComparison.OrdinalIgnoreCase);
-            string denial = EditActions.Contains(action) && !checkOnly
-                ? _policy.EditDenial(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"))
-                : CreateActions.Contains(action) ? _policy.TargetModelDenial(ExtractJsonString(body, "modelName")) : null;
-            if (denial != null || _agentWrites == null || checkOnly || !(EditActions.Contains(action) || action == "create_object"))
+            bool checkOnly = Flag(body, "checkOnly");
+            string denial = write == WriteKind.Edit && !checkOnly
+                ? _policy.EditDenial(Str(body, "objectType"), Str(body, "objectName"))
+                : write == WriteKind.Create || write == WriteKind.Copy ? _policy.TargetModelDenial(Str(body, "modelName")) : null;
+            if (denial != null || _agentWrites == null || checkOnly || !(write == WriteKind.Edit || write == WriteKind.Create))
                 return denial;
-            string objectType = ExtractJsonString(body, "objectType"), objectName = ExtractJsonString(body, "objectName");
+            string objectType = Str(body, "objectType"), objectName = Str(body, "objectName");
             denial = _agentWrites.AgentScopeDenial(objectType, objectName);
             if (denial == null)
                 _agentWrites.BeforeAgentWrite(objectType, objectName);
@@ -88,180 +84,139 @@ namespace XppVsCode.Server.MetaModel
 
         public string Dispatch(string action, string body)
         {
+            BridgeAction registered = Actions.Find(action);
+            if (registered != null && !registered.UsesMetadata)
+                return Run(registered, action, body);
             // The metadata provider is not thread-safe.
             lock (_gate)
+                return Run(registered, action, body);
+        }
+
+        private string Run(BridgeAction registered, string action, string body)
+        {
+            try
             {
-                try
-                {
-                    return DispatchOnMainThread(action, body);
-                }
-                catch (Exception ex)
-                {
-                    BridgeLog("Dispatch " + action + " failed: " + ex);
-                    return "{\"success\":false,\"message\":\"" + EscapeJson(MetaModelBridge.Cause(ex)) + "\"}";
-                }
+                if (registered == null)
+                    return "{\"success\":false,\"message\":\"Unknown action: " + EscapeJson(action ?? "") + "\"}";
+                string denial = WriteDenial(registered.Write, body);
+                if (denial != null)
+                    return SerializeResult(new MetaModelResult { Success = false, Message = denial });
+                return registered.Handler(body);
+            }
+            catch (Exception ex)
+            {
+                BridgeLog("Dispatch " + action + " failed: " + ex);
+                return "{\"success\":false,\"message\":\"" + EscapeJson(MetaModelBridge.Cause(ex)) + "\"}";
             }
         }
 
-        private string DispatchOnMainThread(string action, string body)
+        private static string Str(string body, string key) => ExtractJsonString(body, key);
+        private static string[] Strings(string body, string key) => ExtractJsonStringArray(body, key);
+        private static bool Flag(string body, string key) => "true".Equals(ExtractJsonString(body, key), StringComparison.OrdinalIgnoreCase);
+        private static bool IsProjectScope(string body) => string.Equals(ExtractJsonString(body, "scope"), "project", StringComparison.OrdinalIgnoreCase);
+        private static int Int(string body, string key, int fallback) => int.TryParse(ExtractJsonString(body, key), out int value) ? value : fallback;
+        private const string NotAvailable = "{\"success\":false,\"message\":\"Not available in this process.\"}";
+
+        private void RegisterActions()
         {
-            string denial = WriteDenial(action, body);
-            if (denial != null)
-                return SerializeResult(new MetaModelResult { Success = false, Message = denial });
-            switch (action)
-            {
-                case "create_object":
-                    return HandleCreateObject(body);
-                case "read_object":
-                    return HandleReadObject(body);
-                case "read_object_by_path":
-                    return HandleReadObjectByPath(body);
-                case "update_object":
-                    return HandleUpdateObject(body);
-                case "find_object":
-                    return HandleFindObject(body);
-                case "list_objects":
-                    return HandleListObjects(body);
-                case "find_references":
-                    return HandleFindReferences(body);
-                case "get_model_info":
-                    return HandleGetModelInfo(body);
-                case "list_models":
-                    return HandleListModels(body);
-                case "read_label":
-                    return HandleReadLabel(body);
-                case "create_label":
-                    return HandleCreateLabel(body);
-                case "add_to_project":
-                    return HandleAddToProject(body);
-                case "list_project_items":
-                    return HandleListProjectItems(body);
-                case "remove_from_project":
-                    return _projects.RemoveFromProjectJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
-                case "select_project":
-                    return string.IsNullOrWhiteSpace(ExtractJsonString(body, "projectFile"))
-                        ? _projects.ListProjectsJson(ExtractJsonString(body, "searchFolder"))
-                        : _projects.SelectProjectJson(ExtractJsonString(body, "projectFile"));
-                case "delete_object":
-                    return _objects.DeleteObjectJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
-                        "true".Equals(ExtractJsonString(body, "checkOnly"), StringComparison.OrdinalIgnoreCase));
-                case "table_erd":
-                    return _relations.TableErdJson(XppVsCode.Server.Tools.JsonHelpers.ExtractJsonStringArray(body, "tables"));
-                case "incoming_relations":
-                    return _relations.IncomingRelationsJson(ExtractJsonString(body, "table"), "true".Equals(ExtractJsonString(body, "force"), StringComparison.OrdinalIgnoreCase));
-                case "table_data_shape":
-                    return _dataShape.TableDataShapeJson(ExtractJsonString(body, "table"));
-                case "best_practice":
-                    return _builds.BestPracticeJson(ExtractJsonString(body, "modelName"),
-                        string.Equals(ExtractJsonString(body, "scope"), "project", StringComparison.OrdinalIgnoreCase));
-                case "create_package":
-                    return _builds.PackageJson(XppVsCode.Server.Tools.JsonHelpers.ExtractJsonStringArray(body, "modelNames"), ExtractJsonString(body, "version"));
-                case "sync_tables":
-                    return _builds.SyncTablesJson(XppVsCode.Server.Tools.JsonHelpers.ExtractJsonStringArray(body, "tables"));
-                case "analyze_performance":
-                    return _performance.AnalyzePerformanceJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
-                case "extension_compatibility":
-                    return _compatibility.ExtensionCompatibilityJson(ExtractJsonString(body, "modelName"));
-                case "wrapper_drift":
-                    return _compatibility.WrapperDriftJson(ExtractJsonString(body, "modelName"), ExtractJsonString(body, "previousFolder"));
-                case "extension_collisions":
-                    return _compatibility.ExtensionCollisionsJson(ExtractJsonString(body, "modelName"));
-                case "checkpoint_entries":
-                    return _checkpoints == null ? "{\"success\":false,\"message\":\"Not available in this process.\"}" : _checkpoints.CheckpointEntriesJson(ExtractJsonString(body, "id"));
-                case "revert_checkpoint":
-                    return _checkpoints == null ? "{\"success\":false,\"message\":\"Not available in this process.\"}" : _checkpoints.RevertCheckpointJson(ExtractJsonString(body, "id"));
-                case "type_members":
-                    return _discovery.TypeMembersJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
-                case "label_file_entries":
-                    return _labels.LabelFileEntriesJson(ExtractJsonString(body, "labelFile"), ExtractJsonString(body, "search"),
-                        ExtractJsonStringArray(body, "languages")?.ToList(), int.TryParse(ExtractJsonString(body, "limit"), out int labelLimit) ? labelLimit : 500);
-                case "save_label":
-                    return _labels.SaveLabelJson(ExtractJsonString(body, "labelFile"), ExtractJsonString(body, "labelId"),
-                        ExtractJsonObject(body, "texts"), ExtractJsonString(body, "comment"));
-                case "delete_label":
-                    return _labels.DeleteLabelJson(ExtractJsonString(body, "labelFile"), ExtractJsonString(body, "labelId"));
-                case "build":
-                    return _builds.BuildJson(ExtractJsonString(body, "modelName"),
-                        string.Equals(ExtractJsonString(body, "scope"), "project", StringComparison.OrdinalIgnoreCase),
-                        "true".Equals(ExtractJsonString(body, "syncDatabase"), StringComparison.OrdinalIgnoreCase));
-                case "get_environment":
-                    return HandleGetEnvironment(body);
-                case "validate_object":
-                    return HandleValidateObject(body);
-                case "get_object_type_schema":
-                    return HandleGetObjectTypeSchema(body);
-                case "get_form_layout":
-                    return HandleGetFormLayout(body);
-                case "get_form_tree":
-                    return _designer.GetFormTreeJson(ExtractJsonString(body, "formName"));
-                case "get_table_fields":
-                    return _designer.GetTableFieldsJson(ExtractJsonString(body, "tableName"));
-                case "get_element_tree":
-                    return _designer.GetElementTreeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
-                case "get_element_properties":
-                    return _designer.GetElementPropertiesJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
-                        ExtractJsonStringArray(body, "path"));
-                case "set_element_property":
-                    return _designer.SetElementPropertyJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
-                        ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "property"), ExtractJsonString(body, "value"));
-                case "get_node_types":
-                    return _designer.GetNodeTypesJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"), ExtractJsonStringArray(body, "path"));
-                case "add_element_node":
-                    return _designer.AddElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
-                        ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "typeName"), ExtractJsonString(body, "name"), ExtractJsonObject(body, "properties"));
-                case "delete_element_node":
-                    return _designer.DeleteElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"), ExtractJsonStringArray(body, "path"));
-                case "rename_element_node":
-                    return _designer.RenameElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
-                        ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "newName"));
-                case "duplicate_element_node":
-                    return _designer.DuplicateElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
-                        ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "newName"));
-                case "replace_references":
-                    return _designer.ReplaceReferencesJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
-                        ExtractJsonString(body, "targetType"), ExtractJsonString(body, "table"), ExtractJsonString(body, "oldName"), ExtractJsonString(body, "newName"));
-                case "move_element_node":
-                    return _designer.MoveElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
-                        ExtractJsonStringArray(body, "path"), int.TryParse(ExtractJsonString(body, "offset"), out int moveOffset) ? moveOffset : 0);
-                case "duplicate_object":
-                    return _objects.DuplicateObjectJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
-                        ExtractJsonString(body, "newName"), ExtractJsonString(body, "modelName"));
-                case "drop_on_node":
-                    return _designer.DropOnNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
-                        ExtractJsonStringArray(body, "path"), "true".Equals(ExtractJsonString(body, "onBaseNode"), StringComparison.OrdinalIgnoreCase),
-                        ExtractJsonString(body, "sourceType"), ExtractJsonString(body, "sourceName"), ExtractJsonStringArray(body, "sourcePath"));
-                case "drop_on_property":
-                    return _designer.DropOnPropertyJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
-                        ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "property"), ExtractJsonString(body, "sourceType"), ExtractJsonString(body, "sourceName"));
-                case "get_element_method":
-                    return _designer.GetElementMethodJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"), ExtractJsonStringArray(body, "path"));
-                case "set_element_method":
-                    return _designer.SetElementMethodJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
-                        ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "originalName"), ExtractJsonString(body, "source"));
-                case "get_overrides":
-                    return _designer.GetOverridesJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"), ExtractJsonStringArray(body, "path"));
-                case "get_model":
-                    return _models.GetModelJson(ExtractJsonString(body, "name"));
-                case "create_model":
-                    return _models.CreateModelJson(ExtractJsonString(body, "name"), ExtractJsonString(body, "displayName"), ExtractJsonString(body, "publisher"),
-                        ExtractJsonString(body, "layer"), ExtractJsonString(body, "description"), ExtractJsonStringArray(body, "references"));
-                case "update_model":
-                    return _models.UpdateModelJson(ExtractJsonString(body, "name"), ExtractJsonString(body, "displayName"), ExtractJsonString(body, "publisher"),
-                        ExtractJsonString(body, "description"), body.Contains("\"references\"") ? ExtractJsonStringArray(body, "references") : null);
-                case "list_packages":
-                    return _models.ListPackagesJson();
-                case "dump_element":
-                    return _discovery.DumpElementJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"));
-                case "export_project":
-                    return _packages.ExportProjectJson(ExtractJsonString(body, "projectFile"), ExtractJsonString(body, "outputFile"));
-                case "inspect_project_package":
-                    return _packages.InspectProjectPackageJson(ExtractJsonString(body, "file"));
-                case "import_project":
-                    return _packages.ImportProjectJson(ExtractJsonString(body, "file"), ExtractJsonString(body, "targetFolder"),
-                        "true".Equals(ExtractJsonString(body, "overwrite"), StringComparison.OrdinalIgnoreCase));
-                default:
-                    return "{\"success\":false,\"message\":\"Unknown action: " + EscapeJson(action ?? "") + "\"}";
-            }
+            var a = Actions;
+            // Elements
+            a.Add("create_object", WriteKind.Create, HandleCreateObject);
+            a.Add("read_object", HandleReadObject);
+            a.Add("read_object_by_path", HandleReadObjectByPath);
+            a.Add("update_object", WriteKind.Edit, HandleUpdateObject);
+            a.Add("delete_object", WriteKind.Edit, b => _objects.DeleteObjectJson(Str(b, "objectType"), Str(b, "objectName"), Flag(b, "checkOnly")));
+            a.Add("duplicate_object", WriteKind.Copy, b => _objects.DuplicateObjectJson(Str(b, "objectType"), Str(b, "objectName"), Str(b, "newName"), Str(b, "modelName")));
+            a.Add("validate_object", HandleValidateObject);
+
+            // Discovery
+            a.Add("find_object", HandleFindObject);
+            a.Add("list_objects", HandleListObjects);
+            a.Add("find_references", HandleFindReferences);
+            a.Add("get_model_info", HandleGetModelInfo);
+            a.Add("list_models", HandleListModels);
+            a.Add("get_environment", HandleGetEnvironment);
+            a.Add("get_object_type_schema", HandleGetObjectTypeSchema);
+            a.Add("get_form_layout", HandleGetFormLayout);
+            a.Add("type_members", b => _discovery.TypeMembersJson(Str(b, "objectType"), Str(b, "objectName")));
+            a.Add("dump_element", b => _discovery.DumpElementJson(Str(b, "objectType"), Str(b, "objectName")));
+
+            // Labels
+            a.Add("read_label", HandleReadLabel);
+            a.Add("create_label", HandleCreateLabel);
+            a.Add("label_file_entries", b => _labels.LabelFileEntriesJson(Str(b, "labelFile"), Str(b, "search"), Strings(b, "languages")?.ToList(), Int(b, "limit", 500)));
+            a.Add("save_label", b => _labels.SaveLabelJson(Str(b, "labelFile"), Str(b, "labelId"), ExtractJsonObject(b, "texts"), Str(b, "comment")));
+            a.Add("delete_label", b => _labels.DeleteLabelJson(Str(b, "labelFile"), Str(b, "labelId")));
+
+            // Project
+            a.Add("add_to_project", HandleAddToProject);
+            a.Add("list_project_items", HandleListProjectItems);
+            a.Add("remove_from_project", b => _projects.RemoveFromProjectJson(Str(b, "objectType"), Str(b, "objectName")));
+            a.Add("select_project", b => string.IsNullOrWhiteSpace(Str(b, "projectFile"))
+                ? _projects.ListProjectsJson(Str(b, "searchFolder"))
+                : _projects.SelectProjectJson(Str(b, "projectFile")));
+
+            // Tables
+            a.Add("table_erd", b => _relations.TableErdJson(XppVsCode.Server.Tools.JsonHelpers.ExtractJsonStringArray(b, "tables")));
+            a.Add("incoming_relations", b => _relations.IncomingRelationsJson(Str(b, "table"), Flag(b, "force")));
+            a.Add("table_data_shape", b => _dataShape.TableDataShapeJson(Str(b, "table")));
+
+            // Build, best practice, packages
+            a.Add("build", b => _builds.BuildJson(Str(b, "modelName"), IsProjectScope(b), Flag(b, "syncDatabase")));
+            a.Add("best_practice", b => _builds.BestPracticeJson(Str(b, "modelName"), IsProjectScope(b)));
+            a.Add("create_package", b => _builds.PackageJson(XppVsCode.Server.Tools.JsonHelpers.ExtractJsonStringArray(b, "modelNames"), Str(b, "version")));
+            a.Add("sync_tables", b => _builds.SyncTablesJson(XppVsCode.Server.Tools.JsonHelpers.ExtractJsonStringArray(b, "tables")));
+
+            // Analysis
+            a.Add("analyze_performance", b => _performance.AnalyzePerformanceJson(Str(b, "objectType"), Str(b, "objectName")));
+            a.Add("extension_compatibility", b => _compatibility.ExtensionCompatibilityJson(Str(b, "modelName")));
+            a.Add("wrapper_drift", b => _compatibility.WrapperDriftJson(Str(b, "modelName"), Str(b, "previousFolder")));
+            a.Add("extension_collisions", b => _compatibility.ExtensionCollisionsJson(Str(b, "modelName")));
+
+            // The agent's checkpoints
+            a.Add("checkpoint_entries", b => _checkpoints == null ? NotAvailable : _checkpoints.CheckpointEntriesJson(Str(b, "id")));
+            a.Add("revert_checkpoint", b => _checkpoints == null ? NotAvailable : _checkpoints.RevertCheckpointJson(Str(b, "id")));
+
+            // Element designer
+            a.Add("get_form_tree", b => _designer.GetFormTreeJson(Str(b, "formName")));
+            a.Add("get_table_fields", b => _designer.GetTableFieldsJson(Str(b, "tableName")));
+            a.Add("get_element_tree", b => _designer.GetElementTreeJson(Str(b, "objectType"), Str(b, "objectName")));
+            a.Add("get_element_properties", b => _designer.GetElementPropertiesJson(Str(b, "objectType"), Str(b, "objectName"), Strings(b, "path")));
+            a.Add("set_element_property", WriteKind.Edit, b => _designer.SetElementPropertyJson(Str(b, "objectType"), Str(b, "objectName"),
+                Strings(b, "path"), Str(b, "property"), Str(b, "value")));
+            a.Add("get_node_types", b => _designer.GetNodeTypesJson(Str(b, "objectType"), Str(b, "objectName"), Strings(b, "path")));
+            a.Add("add_element_node", WriteKind.Edit, b => _designer.AddElementNodeJson(Str(b, "objectType"), Str(b, "objectName"),
+                Strings(b, "path"), Str(b, "typeName"), Str(b, "name"), ExtractJsonObject(b, "properties")));
+            a.Add("delete_element_node", WriteKind.Edit, b => _designer.DeleteElementNodeJson(Str(b, "objectType"), Str(b, "objectName"), Strings(b, "path")));
+            a.Add("rename_element_node", WriteKind.Edit, b => _designer.RenameElementNodeJson(Str(b, "objectType"), Str(b, "objectName"),
+                Strings(b, "path"), Str(b, "newName")));
+            a.Add("duplicate_element_node", WriteKind.Edit, b => _designer.DuplicateElementNodeJson(Str(b, "objectType"), Str(b, "objectName"),
+                Strings(b, "path"), Str(b, "newName")));
+            a.Add("move_element_node", WriteKind.Edit, b => _designer.MoveElementNodeJson(Str(b, "objectType"), Str(b, "objectName"),
+                Strings(b, "path"), Int(b, "offset", 0)));
+            a.Add("replace_references", WriteKind.Edit, b => _designer.ReplaceReferencesJson(Str(b, "objectType"), Str(b, "objectName"),
+                Str(b, "targetType"), Str(b, "table"), Str(b, "oldName"), Str(b, "newName")));
+            a.Add("drop_on_node", WriteKind.Edit, b => _designer.DropOnNodeJson(Str(b, "objectType"), Str(b, "objectName"),
+                Strings(b, "path"), Flag(b, "onBaseNode"), Str(b, "sourceType"), Str(b, "sourceName"), Strings(b, "sourcePath")));
+            a.Add("drop_on_property", WriteKind.Edit, b => _designer.DropOnPropertyJson(Str(b, "objectType"), Str(b, "objectName"),
+                Strings(b, "path"), Str(b, "property"), Str(b, "sourceType"), Str(b, "sourceName")));
+            a.Add("get_element_method", b => _designer.GetElementMethodJson(Str(b, "objectType"), Str(b, "objectName"), Strings(b, "path")));
+            a.Add("set_element_method", WriteKind.Edit, b => _designer.SetElementMethodJson(Str(b, "objectType"), Str(b, "objectName"),
+                Strings(b, "path"), Str(b, "originalName"), Str(b, "source")));
+            a.Add("get_overrides", b => _designer.GetOverridesJson(Str(b, "objectType"), Str(b, "objectName"), Strings(b, "path")));
+
+            // Models
+            a.Add("get_model", b => _models.GetModelJson(Str(b, "name")));
+            a.Add("create_model", b => _models.CreateModelJson(Str(b, "name"), Str(b, "displayName"), Str(b, "publisher"),
+                Str(b, "layer"), Str(b, "description"), Strings(b, "references")));
+            a.Add("update_model", b => _models.UpdateModelJson(Str(b, "name"), Str(b, "displayName"), Str(b, "publisher"),
+                Str(b, "description"), b.Contains("\"references\"") ? Strings(b, "references") : null));
+            a.Add("list_packages", b => _models.ListPackagesJson());
+
+            // Project packages (.axpp)
+            a.Add("export_project", b => _packages.ExportProjectJson(Str(b, "projectFile"), Str(b, "outputFile")));
+            a.Add("inspect_project_package", b => _packages.InspectProjectPackageJson(Str(b, "file")));
+            a.Add("import_project", b => _packages.ImportProjectJson(Str(b, "file"), Str(b, "targetFolder"), Flag(b, "overwrite")));
         }
 
         // ── Action handlers ──
