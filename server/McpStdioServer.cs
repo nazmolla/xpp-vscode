@@ -126,16 +126,6 @@ namespace XppVsCode.Server
                     string paramsJson = JsonHelpers.ExtractNestedObject(json, "params") ?? "{}";
                     string action = JsonHelpers.ExtractJsonString(paramsJson, "action");
                     string body = JsonHelpers.ExtractNestedObject(paramsJson, "body") ?? "{}";
-                    if (action == "where_used")
-                        return JsonHelpers.BuildResult(idToken, _router.WhereUsedJson(body));
-                    if (action == "list_tags")
-                        return JsonHelpers.BuildResult(idToken, _router.TagsJson(body));
-                    if (action == "tag_references")
-                        return JsonHelpers.BuildResult(idToken, _router.TagReferencesJson(body));
-                    if (action == "label_usage")
-                        return JsonHelpers.BuildResult(idToken, _router.LabelUsageJson(body));
-                    if (action == "element_dependencies")
-                        return JsonHelpers.BuildResult(idToken, _router.DependenciesJson(body));
                     return JsonHelpers.BuildResult(idToken, _bridge.Call(action, body));
                 case "xpp/lang":
                     // Language features of the VS Code extension (its own server process): raw JSON results.

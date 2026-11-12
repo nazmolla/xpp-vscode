@@ -23,6 +23,16 @@ namespace XppVsCode.Server.Tools
         private MessageTrace _messageTrace;
         private MessageTrace Messages => _messageTrace ?? (_messageTrace = new MessageTrace(_xref));
 
+        /// <summary>The bridge actions served from the cross-reference database; they don't use the metadata API and run at once.</summary>
+        public void AddXRefActions(MetaModel.BridgeActionRegistry actions)
+        {
+            actions.Add(new MetaModel.BridgeAction("where_used", MetaModel.WriteKind.Read, WhereUsedJson, usesMetadata: false));
+            actions.Add(new MetaModel.BridgeAction("list_tags", MetaModel.WriteKind.Read, TagsJson, usesMetadata: false));
+            actions.Add(new MetaModel.BridgeAction("tag_references", MetaModel.WriteKind.Read, TagReferencesJson, usesMetadata: false));
+            actions.Add(new MetaModel.BridgeAction("label_usage", MetaModel.WriteKind.Read, LabelUsageJson, usesMetadata: false));
+            actions.Add(new MetaModel.BridgeAction("element_dependencies", MetaModel.WriteKind.Read, DependenciesJson, usesMetadata: false));
+        }
+
         /// <summary>Structured where-used for the extension's references list.</summary>
         public string WhereUsedJson(string body)
         {
