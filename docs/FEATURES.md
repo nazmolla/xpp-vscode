@@ -287,7 +287,7 @@ The tools are registered automatically. Copilot can:
 | Import/Export project (.axpp) | Import Project…, Export Project… | Same file format |
 | Find references, metadata search, find labels, tag references | Find References, Open Element…, Find Labels…, Find Tag References… | Same cross-reference database |
 | Compare | Compare Code…, Compare Metadata… in VS Code's diff editor | Different view, same content |
-| Launch debugger (UDE) | Launch Debugger (DebuggerProxy with vsdbg) | Attaches; breakpoint hits not yet verified |
+| Launch debugger (UDE) | Launch Debugger (DebuggerProxy with vsdbg) | Same debugger proxy |
 | Infolog | Infolog in the F&O Studio panel | Same messages |
 | Test Explorer (SysTest) | Test Explorer and Run Tests | Same runner on the environment |
 | DGML diagrams | Hierarchy, references and entity relationship diagrams | Different |
@@ -340,7 +340,6 @@ The tools are registered automatically. Copilot can:
 ## Status
 
 This extension is a preview. Some features have not been verified end to end on a live environment:
-- debugger breakpoint hits;
 - the version drift guard;
 - Open Team Repository on a real team repository;
 - Try Data Entity and Try Service Operation;
