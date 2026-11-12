@@ -56,7 +56,7 @@ The full list is in the [feature reference](https://github.com/nazmolla/xpp-vsco
 
 ## Status
 
-Preview. The debugger has not yet been verified end to end against a live environment.
+Preview.
 
 Licensed under the [Apache License 2.0](LICENSE).
 
