@@ -574,6 +574,50 @@ namespace XppVsCode.Server.Tests
         }
     }
 
+    /// <summary>The element type table holds the same types per operation as the switches it replaced.</summary>
+    public class ElementTypeTableTests
+    {
+        private static IEnumerable<string> With(string operation) => MetaModelBridge.ElementTypesWith(operation);
+
+        private static readonly string[] Updatable =
+        {
+            "AxClass", "AxTable", "AxForm", "AxEdt", "AxEnum", "AxView", "AxQuery", "AxDataEntityView", "AxMenu", "AxTableExtension", "AxEnumExtension",
+            "AxEdtExtension", "AxFormExtension", "AxSecurityPrivilege", "AxSecurityDuty", "AxSecurityRole", "AxSecurityDutyExtension",
+            "AxSecurityRoleExtension", "AxDataEntityViewExtension", "AxMenuExtension", "AxCompositeDataEntityView",
+        };
+
+        [Fact]
+        public void CreatableTypes() => Assert.Equal(new[]
+        {
+            "AxClass", "AxTable", "AxForm", "AxEdt", "AxEnum", "AxMenuItemDisplay", "AxMenuItemOutput", "AxMenuItemAction", "AxQuery", "AxView",
+            "AxDataEntityView", "AxSecurityPrivilege", "AxSecurityDuty", "AxSecurityRole", "AxService", "AxServiceGroup", "AxMenu", "AxTile",
+            "AxConfigurationKey", "AxTableExtension", "AxEnumExtension", "AxEdtExtension", "AxFormExtension", "AxSecurityDutyExtension",
+            "AxSecurityRoleExtension", "AxDataEntityViewExtension", "AxLabelFile", "AxMenuExtension", "AxCompositeDataEntityView",
+            "AxWorkflowCategory", "AxWorkflowApproval", "AxWorkflowTemplate", "AxReport",
+        }.OrderBy(n => n, StringComparer.Ordinal), With("create"));
+
+        [Fact]
+        public void TypesWithTheirOwnUpdate() => Assert.Equal(Updatable.OrderBy(n => n, StringComparer.Ordinal), With("update"));
+
+        [Fact]
+        public void CreateRunsUpdateForAllButMenuExtensions() =>
+            Assert.Equal(Updatable.Where(n => n != "AxMenuExtension").OrderBy(n => n, StringComparer.Ordinal), With("updateAfterCreate"));
+
+        [Fact]
+        public void TypesWithTheirOwnRead() => Assert.Equal(new[]
+        {
+            "AxClass", "AxTable", "AxForm", "AxEnum", "AxEdt", "AxView", "AxQuery", "AxDataEntityView", "AxMenu", "AxMenuItemDisplay", "AxMenuItemOutput",
+            "AxMenuItemAction", "AxSecurityPrivilege", "AxSecurityDuty", "AxSecurityRole", "AxService", "AxServiceGroup", "AxTile", "AxConfigurationKey",
+            "AxTableExtension", "AxEnumExtension", "AxEdtExtension", "AxFormExtension",
+        }.OrderBy(n => n, StringComparer.Ordinal), With("read"));
+
+        [Fact]
+        public void EveryUpdatableTypeCanBeCreated() => Assert.Subset(new HashSet<string>(With("create")), new HashSet<string>(Updatable));
+
+        [Fact]
+        public void UnknownOperationsHaveNoTypes() => Assert.Empty(With("delete"));
+    }
+
     public class ReadOnlySqlTests
     {
         [Theory]
