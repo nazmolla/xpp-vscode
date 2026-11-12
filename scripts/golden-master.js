@@ -22,9 +22,21 @@ const T = { objectType: 'AxTable', objectName: 'XvsGmTable' };
 const F = { objectType: 'AxForm', objectName: 'XvsGmForm' };
 const P = { objectType: 'AxSecurityPrivilege', objectName: 'XvsGmPriv' };
 const L = 'HSFixedAssetRemoval';
-const b = (action, body) => ['bridge', action, body];
-const t = (name, args) => ['tool', name, args];
+const b = (action, body, options) => ['bridge', action, body, options];
+const t = (name, args, options) => ['tool', name, args, options];
+const m = (method, params, options) => ['method', method, params, options];
+// Results that depend on the network, Git or the clock: only their shape is compared.
+const loose = { loose: true };
+const repo = path.resolve(__dirname, '..');
+const referenceRoot = JSON.parse(fs.readFileSync(config, 'utf8')).ReferencePackagesPaths[0];
+const G = { objectType: 'AxClass', objectName: 'XvsGmToolClass' };
 const steps = [
+    // MCP methods (discovery: what an agent sees before calling anything)
+    m('initialize', { protocolVersion: '2025-06-18' }), m('ping', {}), m('tools/list', {}), m('no/such/method', {}),
+    m('xpp/data', { action: 'test', body: {} }),
+    m('xpp/trace', { action: 'analyze', body: { path: path.join(repo, 'test trace.etl') } }),
+    m('xpp/lang', { action: 'status', body: {} }), m('xpp/lang', { action: 'subtypes', body: { objectType: 'AxClass', objectName: 'SalesFormLetter' } }),
+    m('xpp/lang', { action: 'no_such_action', body: {} }),
     // Reads of standard and custom metadata
     b('get_environment', {}), b('list_models', {}), b('get_model_info', { modelName: 'Foundation' }), b('get_model_info', { modelName: M }),
     b('get_model', { name: M }), b('get_model', { name: 'NoSuchModel' }), b('list_packages', {}),
@@ -72,15 +84,49 @@ const steps = [
     b('drop_on_property', { ...T, path: ['Fields', 'Flag'], property: 'ExtendedDataType', sourceType: 'AxEdt', sourceName: 'NoYesId' }),
     b('create_object', { ...F, modelName: M }), b('drop_on_node', { ...F, path: [], sourceType: 'AxTable', sourceName: T.objectName }), b('get_form_tree', { formName: F.objectName }),
     b('create_object', { ...P, modelName: M }), b('drop_on_node', { ...P, path: [], sourceType: 'AxMenuItemDisplay', sourceName: 'CustGroup' }), b('read_object', P),
+    b('replace_references', { ...F, table: T.objectName, oldName: 'CustGroupId', newName: 'CustGroupIdGm' }),
+    b('replace_references', { ...P, targetType: 'AxMenuItemDisplay', oldName: 'CustGroup', newName: 'CustGroupGm' }),
+    b('replace_references', { objectType: 'AxTable', objectName: 'CustGroup', targetType: 'AxTable', oldName: 'X', newName: 'Y' }),
+    b('analyze_performance', F), b('table_data_shape', { table: T.objectName }),
     b('duplicate_object', { ...C, newName: 'XvsGmClass2', modelName: M }), b('add_to_project', { objectType: 'AxClass', objectName: 'XvsGmClass2' }),
     b('remove_from_project', { objectType: 'AxClass', objectName: 'XvsGmClass2' }),
     b('delete_object', { objectType: 'AxClass', objectName: 'XvsGmClass2' }), b('delete_object', P), b('delete_object', F), b('delete_object', T), b('delete_object', C),
+    // Remaining reads and analyses, and the refusal paths of long-running actions
+    b('read_object_by_path', { filePath: path.join(referenceRoot, 'ApplicationSuite', 'Foundation', 'AxTable', 'CustGroup.xml') }),
+    b('read_object_by_path', { filePath: path.join(temp, 'NoSuch.xml') }),
+    b('table_data_shape', { table: 'CustGroup' }), b('analyze_performance', { objectType: 'AxForm', objectName: 'SalesTable' }),
+    b('analyze_performance', { objectType: 'AxEdt', objectName: 'CustGroupId' }), b('extension_compatibility', { modelName: M }),
+    b('extension_collisions', { modelName: M }), b('wrapper_drift', { modelName: M, previousFolder: path.join(temp, 'NoSuchFolder') }),
+    b('checkpoint_entries', { id: 'none' }), b('revert_checkpoint', { id: 'none' }),
+    b('best_practice', { modelName: 'NoSuchModelXvs' }), b('create_package', { modelNames: ['NoSuchModelXvs'] }), b('sync_tables', { tables: ['NoSuchTableXvs'] }),
+    b('where_used', { objectType: 'AxTable', objectName: 'CustGroup', maxResults: '5' }), b('where_used', { objectType: 'AxTable', objectName: 'CustGroup', memberName: 'Name', maxResults: '5' }),
+    b('where_used', { objectType: 'AxLabelFile', objectName: 'x' }), b('list_tags', { filter: 'Xvs' }), b('tag_references', { tag: 'NoSuchTagXvs' }),
+    b('label_usage', { labelFileId: L }), b('label_usage', { labelFileId: '' }),
+    b('element_dependencies', { objectType: 'AxTable', objectName: 'CustGroup', maxResults: '10' }), b('element_dependencies', { objectType: 'AxLabelFile', objectName: 'x' }),
+    b('no_such_action', {}),
     // Agent tools
     t('xpp_get_model_info', { modelName: M }), t('xpp_list_models', {}), t('xpp_read_object', { objectType: 'AxTable', objectName: 'CustGroup' }),
     t('xpp_find_object', { objectName: 'CustGroup', objectType: 'AxTable', exactMatch: true }), t('xpp_read_label', { labelFileId: L, labelId: 'HSRemovalStatus' }),
     t('xpp_get_object_type_schema', { objectType: 'AxEnum' }), t('xpp_get_form_layout', { formName: 'CustGroup' }),
     t('xpp_list_model_objects', { modelName: M }), t('xpp_find_references', { objectType: 'AxTable', objectName: 'CustGroup', maxResults: 5 }),
     t('xpp_analyze_security', { op: 'license', objects: ['AxSecurityRole:CustCustomerService'] }),
+    t('xpp_create_object', { ...G, modelName: M, declaration: 'class XvsGmToolClass\n{\n}', methods: ['public void run()\n{\n}'] }),
+    t('xpp_update_object', { ...G, methods: ['public int calc()\n{\n    return 1;\n}'] }),
+    t('xpp_update_current_object', { ...G, methods: ['public int calc()\n{\n    return 2;\n}'] }),
+    t('xpp_validate_object', G), t('xpp_add_to_project', G), t('xpp_remove_from_project', G), t('xpp_delete_object', G),
+    t('xpp_delete_object', { objectType: 'AxTable', objectName: 'CustGroup' }),
+    t('xpp_list_objects', { nameFilter: 'CustGroup', objectType: 'AxTable', maxResults: 5 }),
+    t('xpp_find_examples', { query: 'batch job with contract', maxResults: 3 }), t('xpp_get_guide', { topic: 'ssrs' }), t('xpp_get_guide', {}),
+    t('xpp_find_message_source', { message: 'Field Customer group must be filled in.', maxResults: 3 }),
+    t('xpp_search_code', { pattern: 'CustGroup::find(', model: M, maxResults: 5 }),
+    t('xpp_create_label', { labelFileId: L, labelId: 'XvsGmToolLabel', text: 'Golden tool label' }),
+    b('delete_label', { labelFile: L + '_en-US', labelId: 'XvsGmToolLabel' }),
+    t('xpp_list_project_items', {}), t('xpp_get_environment', {}), t('xpp_search_docs', { query: 'X++ select statement' }, loose),
+    t('xpp_select_project', { searchFolder: path.dirname(project) }), t('xpp_build', { modelName: 'Foundation' }),
+    t('xpp_package', { modelNames: ['NoSuchModelXvs'] }), t('xpp_diff_changes', {}, loose), t('xpp_check_best_practice', { modelName: 'NoSuchModelXvs' }),
+    t('xpp_find_deprecations', { modelName: M }), t('xpp_analyze_trace', { path: path.join(repo, 'test trace.etl') }),
+    t('xpp_analyze_trace', { path: path.join(temp, 'missing.etl') }), t('xpp_analyze_performance', { objectType: 'AxClass', objectName: 'CustVendSettle' }),
+    t('xpp_no_such_tool', {}),
 ];
 
 const args = ['--config', config, '--project', project];
@@ -121,17 +167,29 @@ function normalize(value) {
 (async () => {
     await rpc('initialize', { protocolVersion: '2025-06-18' });
     const results = [];
-    for (const [kind, name, body] of steps) {
-        const r = kind === 'bridge' ? await rpc('xpp/bridge', { action: name, body }) : await rpc('tools/call', { name, arguments: body });
+    for (const [kind, name, body, options] of steps) {
+        const r = kind === 'bridge' ? await rpc('xpp/bridge', { action: name, body })
+            : kind === 'tool' ? await rpc('tools/call', { name, arguments: body })
+            : await rpc(name, body);
         let result = r.result ?? r.error;
         if (typeof result === 'string') { try { result = JSON.parse(result); } catch { /* text */ } }
         if (kind === 'tool' && result?.content) {
             const text = result.content.map(c => c.text).join('\n');
             result = { isError: !!result.isError, text };
         }
+        if (options?.loose) {
+            result = result && typeof result === 'object' ? { shape: Object.keys(result).sort(), isError: result.isError, success: result.success } : typeof result;
+        }
         results.push({ step: `${kind} ${name} ${JSON.stringify(body).slice(0, 120)}`, result: normalize(result) });
         process.stdout.write('.');
     }
+    // Every bridge action of the contract and every tool the server lists must be exercised.
+    const contract = fs.readFileSync(path.join(repo, 'src', 'bridgeContract.ts'), 'utf8');
+    const actions = [...contract.slice(contract.indexOf('['), contract.indexOf('] as const')).matchAll(/'(\w+)'/g)].map(x => x[1]);
+    const tools = (results.find(x => x.step.startsWith('method tools/list'))?.result?.tools ?? []).map(x => x.name);
+    const called = new Set(steps.map(([kind, name]) => `${kind} ${name}`));
+    const uncovered = [...actions.filter(a => !called.has(`bridge ${a}`)), ...tools.filter(x => !called.has(`tool ${x}`))];
+    console.log(uncovered.length ? `\nNOT COVERED: ${uncovered.join(', ')}` : `\nCoverage: ${actions.length} bridge actions, ${tools.length} tools, all exercised.`);
     child.stdin.end();
     fs.writeFileSync(outFile, JSON.stringify(results, null, 1));
     console.log(`\n${results.length} responses written to ${outFile}`);
@@ -147,8 +205,8 @@ function normalize(value) {
         });
         if (baseline.length !== results.length) { differences++; console.log(`DIFF count: ${baseline.length} -> ${results.length}`); }
         console.log(differences ? `${differences} difference(s).` : 'IDENTICAL to the baseline.');
-        process.exit(differences ? 1 : 0);
+        process.exit(differences || uncovered.length ? 1 : 0);
     }
-    process.exit(0);
+    process.exit(uncovered.length ? 1 : 0);
 })().catch(e => { console.log('HARNESS ERROR ' + e.stack); child.kill(); process.exit(1); });
 setTimeout(() => { console.log('GLOBAL TIMEOUT'); child.kill(); process.exit(1); }, 1_200_000);

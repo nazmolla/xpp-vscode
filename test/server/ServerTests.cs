@@ -162,6 +162,187 @@ namespace XppVsCode.Server.Tests
             server.Dispatch("get_model", "{\"name\":\"Foundation\"}");
             Assert.Empty(policy.Calls);
         }
+
+        [Fact]
+        public void ReplacingReferencesInStandardObjectsIsRefused()
+        {
+            var (server, _) = Create();
+            string result = server.Dispatch("replace_references", "{\"objectType\":\"AxForm\",\"objectName\":\"Std\",\"oldName\":\"a\",\"newName\":\"b\"}");
+            Assert.Contains("standard", result);
+            Assert.DoesNotContain("bridge reached", result);
+        }
+    }
+
+    /// <summary>Characterizes how every action of the extension's contract is dispatched: which actions exist, which are writes
+    /// (checked by the write policy) and which follow the agent's scope. The server refactoring must keep all of it.</summary>
+    public class BridgeDispatchTests
+    {
+        private sealed class RecordingPolicy : IWritePolicy
+        {
+            public readonly List<string> Calls = new List<string>();
+            public string EditDenial(string objectType, string objectName) { Calls.Add("edit"); return null; }
+            public string TargetModelDenial(string modelName) { Calls.Add("create"); return null; }
+        }
+
+        private sealed class RecordingSession : IAgentSession
+        {
+            public readonly List<string> Calls = new List<string>();
+            public string AgentScopeDenial(string objectType, string objectName) { Calls.Add("scope"); return null; }
+            public void BeforeAgentWrite(string objectType, string objectName) => Calls.Add("checkpoint");
+            public string CheckpointEntriesJson(string id) => "{\"success\":true,\"entries\":[]}";
+            public string RevertCheckpointJson(string id) => "{\"success\":true}";
+        }
+
+        private sealed class FailingService : RealProxy
+        {
+            private FailingService(Type role) : base(role) { }
+            public static T Of<T>() => (T)new FailingService(typeof(T)).GetTransparentProxy();
+            public override IMessage Invoke(IMessage msg) =>
+                new ReturnMessage(new InvalidOperationException("bridge reached"), (IMethodCallMessage)msg);
+        }
+
+        internal static MetaModelBridgeServer Create(IWritePolicy policy, IAgentSession session = null) => new MetaModelBridgeServer(new BridgeServices
+        {
+            Objects = FailingService.Of<IObjectStore>(),
+            Discovery = FailingService.Of<IMetadataDiscovery>(),
+            Designer = FailingService.Of<IElementDesigner>(),
+            Projects = FailingService.Of<IProjectService>(),
+            Builds = FailingService.Of<IBuildService>(),
+            Models = FailingService.Of<IModelService>(),
+            Labels = FailingService.Of<ILabelService>(),
+            Packages = FailingService.Of<IProjectPackageService>(),
+            Relations = FailingService.Of<ITableRelations>(),
+            DataShape = FailingService.Of<ITableDataShape>(),
+            Performance = FailingService.Of<IPerformanceAnalysis>(),
+            Compatibility = FailingService.Of<IExtensionCompatibility>(),
+            Policy = policy,
+            AgentWrites = session,
+            Checkpoints = session,
+        });
+
+        /// <summary>The actions the extension calls (src/bridgeContract.ts).</summary>
+        internal static List<string> ContractActions()
+        {
+            var dir = new System.IO.DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
+            while (dir != null && !System.IO.File.Exists(System.IO.Path.Combine(dir.FullName, "src", "bridgeContract.ts"))) dir = dir.Parent;
+            Assert.NotNull(dir);
+            string text = System.IO.File.ReadAllText(System.IO.Path.Combine(dir.FullName, "src", "bridgeContract.ts"));
+            text = text.Substring(text.IndexOf('['), text.IndexOf("] as const", StringComparison.Ordinal) - text.IndexOf('['));
+            return System.Text.RegularExpressions.Regex.Matches(text, "'(\\w+)'").Cast<System.Text.RegularExpressions.Match>().Select(m => m.Groups[1].Value).ToList();
+        }
+
+        // Served from the cross-reference database instead of the metadata API.
+        internal static readonly string[] XRefActions = { "where_used", "list_tags", "tag_references", "label_usage", "element_dependencies" };
+
+        internal static readonly string[] EditActions =
+        {
+            "update_object", "delete_object", "set_element_property", "add_element_node", "delete_element_node", "rename_element_node",
+            "duplicate_element_node", "move_element_node", "drop_on_node", "drop_on_property", "set_element_method", "replace_references",
+        };
+        internal static readonly string[] CreateActions = { "create_object", "duplicate_object" };
+
+        private const string Body = "{\"objectType\":\"AxClass\",\"objectName\":\"Mine\",\"modelName\":\"testcust\",\"name\":\"testcust\",\"id\":\"1\"}";
+
+        private static IEnumerable<string> MetadataActions() => ContractActions().Except(XRefActions);
+
+        [Fact]
+        public void TheContractListsEveryAction()
+        {
+            var actions = ContractActions();
+            Assert.Equal(actions.Count, actions.Distinct().Count());
+            Assert.True(actions.Count >= 68, "contract has " + actions.Count + " actions");
+            Assert.Subset(new HashSet<string>(actions), new HashSet<string>(EditActions.Concat(CreateActions).Concat(XRefActions)));
+        }
+
+        [Fact]
+        public void EveryContractActionIsDispatched()
+        {
+            var server = Create(new RecordingPolicy(), new RecordingSession());
+            var unknown = MetadataActions().Where(a => server.Dispatch(a, Body).Contains("Unknown action")).ToList();
+            Assert.Empty(unknown);
+        }
+
+        [Fact]
+        public void UnknownActionsAreReported()
+        {
+            string result = Create(new RecordingPolicy()).Dispatch("no_such_action", Body);
+            Assert.Equal("{\"success\":false,\"message\":\"Unknown action: no_such_action\"}", result);
+        }
+
+        [Fact]
+        public void OnlyWriteActionsConsultThePolicy()
+        {
+            var edits = new List<string>();
+            var creates = new List<string>();
+            foreach (string action in MetadataActions())
+            {
+                var policy = new RecordingPolicy();
+                Create(policy).Dispatch(action, Body);
+                if (policy.Calls.Contains("edit")) edits.Add(action);
+                if (policy.Calls.Contains("create")) creates.Add(action);
+            }
+            Assert.Equal(EditActions.OrderBy(a => a), edits.OrderBy(a => a));
+            Assert.Equal(CreateActions.OrderBy(a => a), creates.OrderBy(a => a));
+        }
+
+        [Fact]
+        public void AgentWritesFollowTheScopeAndCheckpoint()
+        {
+            var scoped = new List<string>();
+            foreach (string action in MetadataActions())
+            {
+                var session = new RecordingSession();
+                Create(new RecordingPolicy(), session).Dispatch(action, Body);
+                if (session.Calls.SequenceEqual(new[] { "scope", "checkpoint" })) scoped.Add(action);
+                else Assert.Empty(session.Calls);
+            }
+            Assert.Equal(EditActions.Concat(new[] { "create_object" }).OrderBy(a => a), scoped.OrderBy(a => a));
+        }
+
+        [Fact]
+        public void CheckOnlyDeletesSkipPolicyAndScope()
+        {
+            var policy = new RecordingPolicy();
+            var session = new RecordingSession();
+            Create(policy, session).Dispatch("delete_object", "{\"objectType\":\"AxClass\",\"objectName\":\"Std\",\"checkOnly\":\"true\"}");
+            Assert.Empty(policy.Calls);
+            Assert.Empty(session.Calls);
+        }
+
+        [Fact]
+        public void AgentScopeDenialStopsTheWrite()
+        {
+            var session = new DenyingSession();
+            string result = Create(new RecordingPolicy(), session).Dispatch("update_object", Body);
+            Assert.Contains("outside the scope", result);
+            Assert.DoesNotContain("bridge reached", result);
+            Assert.False(session.CheckpointTaken);
+        }
+
+        private sealed class DenyingSession : IAgentSession
+        {
+            public bool CheckpointTaken;
+            public string AgentScopeDenial(string objectType, string objectName) => "outside the scope";
+            public void BeforeAgentWrite(string objectType, string objectName) => CheckpointTaken = true;
+            public string CheckpointEntriesJson(string id) => null;
+            public string RevertCheckpointJson(string id) => null;
+        }
+
+        [Fact]
+        public void CheckpointsWithoutASessionAreUnavailable()
+        {
+            var server = Create(new RecordingPolicy());
+            Assert.Equal("{\"success\":false,\"message\":\"Not available in this process.\"}", server.Dispatch("checkpoint_entries", "{\"id\":\"1\"}"));
+            Assert.Equal("{\"success\":false,\"message\":\"Not available in this process.\"}", server.Dispatch("revert_checkpoint", "{\"id\":\"1\"}"));
+        }
+
+        [Fact]
+        public void ServiceFailuresBecomeFailedResults()
+        {
+            string result = Create(new RecordingPolicy()).Dispatch("get_model", "{\"name\":\"x\"}");
+            Assert.StartsWith("{\"success\":false,\"message\":\"", result);
+            Assert.Contains("bridge reached", result);
+        }
     }
 
     public class ReadOnlySqlTests
