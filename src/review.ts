@@ -3,6 +3,7 @@ import { typeLabel } from './aot';
 import { XppBuilder } from './build';
 import { ChangedElement, changedElements } from './changes';
 import { objectUri } from './codeView';
+import { branchWorkItems } from './devops';
 import { Finding, ResultRun, ResultsView, worst } from './results';
 import { XppServerClient } from './serverClient';
 
@@ -65,6 +66,10 @@ async function buildReport(server: XppServerClient, builder: XppBuilder, base: s
         lines.push(`New menu items need a privilege: ${menuItems.map(m => m.objectName).join(', ')}.`);
         summary.push({ label: 'New menu items need a privilege', description: menuItems.map(m => m.objectName).join(', '), severity: 'warning' });
     }
+    const workItems = base ? await branchWorkItems(base) : [];
+    const workItemText = workItems.length ? workItems.map(id => `#${id}`).join(', ') : 'none named in the commit messages (Link Work Item… adds one).';
+    lines.push('', '**Work items:** ' + workItemText);
+    summary.push({ label: 'Work items', description: workItemText, severity: workItems.length ? 'info' : 'warning' });
 
     const findings: string[] = [];
     const performance: Finding[] = [];

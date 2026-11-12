@@ -36,10 +36,11 @@ import { reviewChanges } from './review';
 import { registerChatParticipant } from './chat';
 import { preDeployChecklist } from './checklist';
 import { newSysOperationJob } from './scaffolding/batch';
-import { newReport, newService, newWorkflow } from './scaffolding/wizards';
+import { newDataEntity, newReport, newService, newTableWithForm, newWorkflow } from './scaffolding/wizards';
 import { newElement } from './scaffolding/newElement';
 import { addNumberSequence, newBusinessEvent, newFeature } from './scaffolding/lifecycleWizards';
-import { findUnusedLabels, translateMissingLabels } from './labels';
+import { exportLabels, findUnusedLabels, importLabels, translateMissingLabels } from './labels';
+import { linkWorkItem, openPipelines, openWorkItem } from './devops';
 import { registerTraceAnalyzer } from './traceAnalyzer';
 import { XppRename } from './rename';
 import { elementOf as treeElementOf, pickElement } from './d365Tools';
@@ -84,7 +85,7 @@ export function activate(context: vscode.ExtensionContext): void {
         LabelEditor.revive(context, server, panel, state, () => ElementDesigner.open(designers, 'AxLabelFile', state.labelFile)));
     void projects.migrateUserSetting().catch(err => log.appendLine('Project setting: ' + (err as Error).message));
     context.subscriptions.push(log, buildOutput, server, languageServer, builder, deployState, versionGuard, environment, new ServerStatus([server, languageServer]),
-        new ProjectStatus(builder, deployState), vscode.tasks.registerTaskProvider(TaskType, new XppTaskProvider(builder)));
+        new ProjectStatus(builder, deployState), vscode.tasks.registerTaskProvider(TaskType, new XppTaskProvider(builder, pac, deployState)));
 
     registerMcpProvider(context, log);
 
@@ -272,6 +273,8 @@ export function activate(context: vscode.ExtensionContext): void {
     command('xpp.newReport', () => newReport(server).then(() => projectTree.refresh()));
     command('xpp.newWorkflow', () => newWorkflow(server).then(() => projectTree.refresh()));
     command('xpp.newService', () => newService(server).then(() => projectTree.refresh()));
+    command('xpp.newTableWithForm', () => newTableWithForm(server).then(() => projectTree.refresh()));
+    command('xpp.newDataEntity', () => newDataEntity(server).then(() => projectTree.refresh()));
     command('xpp.newBusinessEvent', () => newBusinessEvent(server).then(() => projectTree.refresh()));
     command('xpp.addNumberSequence', () => addNumberSequence(server).then(() => projectTree.refresh()));
     command('xpp.newFeature', () => newFeature(server).then(() => projectTree.refresh()));
@@ -302,6 +305,11 @@ export function activate(context: vscode.ExtensionContext): void {
         newElement(context, server, productivity.refreshTrees, typeof arg === 'string' ? arg : arg?.items?.[0]?.objectType));
     command('xpp.translateMissingLabels', () => translateMissingLabels(server));
     command('xpp.findUnusedLabels', () => findUnusedLabels(server));
+    command('xpp.exportLabels', () => exportLabels(server));
+    command('xpp.importLabels', () => importLabels(server));
+    command('xpp.devops.linkWorkItem', () => linkWorkItem());
+    command('xpp.devops.openWorkItem', (id?: number) => openWorkItem(typeof id === 'number' ? id : undefined));
+    command('xpp.devops.openPipelines', () => openPipelines());
     registerTraceAnalyzer(context, command, server);
     command('xpp.syncTables', async (arg?: ElementRef, selected?: ElementRef[]) => {
         const picked = (selected?.length ? selected : arg ? [arg] : []).map(a => treeElementOf(a)).filter(e => e?.objectType === 'AxTable');

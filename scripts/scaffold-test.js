@@ -13,6 +13,8 @@ const { reportElements } = require(path.join(out, 'report.js'));
 const { workflowElements, workflowTableChanges } = require(path.join(out, 'workflow.js'));
 const { serviceElements } = require(path.join(out, 'service.js'));
 const { businessEventElements, numberSequenceElements, featureElements } = require(path.join(out, 'lifecycle.js'));
+const { tableFormElements } = require(path.join(out, 'tableForm.js'));
+const { dataEntityElements } = require(path.join(out, 'dataEntity.js'));
 
 const [exe, config, model] = process.argv.slice(2);
 const child = spawn(exe, ['--config', config], { windowsHide: true });
@@ -77,6 +79,14 @@ setTimeout(() => { console.log('TIMEOUT'); child.kill(); process.exit(1); }, 30 
         }
         for (const element of featureElements({ name: 'XvsScafFeature', label: 'Scaffold feature', summary: 'Used by the scaffold test.', module: 'AccountsReceivable', enabledByDefault: false })) {
             await create(element, 'feature');
+        }
+        for (const element of tableFormElements({ base: 'XvsScafGroup', label: 'Scaffold group', keyLabel: 'Scaffold group ID' })) {
+            await create(element, 'table and form');
+        }
+        const groupFields = (await bridge('get_table_fields', { tableName: 'XvsScafGroup' })).fields.filter(f => ['XvsScafGroupId', 'Description'].includes(f.name));
+        for (const element of dataEntityElements({ entity: 'XvsScafGroupEntity', table: 'XvsScafGroup', label: 'Scaffold groups', publicName: 'XvsScafGroup',
+            collectionName: 'XvsScafGroups', fields: groupFields, keyFields: ['XvsScafGroupId'], perCompany: true })) {
+            await create(element, 'data entity');
         }
 
         const build = await bridge('build', { modelName: model });

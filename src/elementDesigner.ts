@@ -1,6 +1,6 @@
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
-import { baseElementOf, CodeTypes, elementContextValue, ExtensionTypes, intrinsicReference, typeLabel, WhereUsedTypes } from './aot';
+import { baseElementOf, CodeTypes, elementContextValue, ExtensionTypes, intrinsicReference, typeLabel, typeName, WhereUsedTypes } from './aot';
 import { stateAttribute } from './webviewState';
 import { BridgeAction } from './bridgeContract';
 import { methodUri, objectUri } from './codeView';
@@ -9,6 +9,7 @@ import { pickElement } from './d365Tools';
 import { ElementDragAndDrop, elementsFromUris } from './dragAndDrop';
 import { openElementReference } from './goTo';
 import { pickLabel, pickReference } from './pickers';
+import { renameFieldEverywhere } from './refactor';
 import { XppServerClient } from './serverClient';
 import { methodSpans } from './xppSource';
 
@@ -85,7 +86,7 @@ export class ElementDesigner {
             existing.panel.reveal(column === vscode.ViewColumn.Active ? undefined : column);
             return;
         }
-        const panel = vscode.window.createWebviewPanel('xppElementDesigner', `${objectName} [${typeLabel(objectType).replace(/s$/, '')}]`, column, {
+        const panel = vscode.window.createWebviewPanel('xppElementDesigner', `${objectName} [${typeName(objectType)}]`, column, {
             enableScripts: true,
             retainContextWhenHidden: true,
             localResourceRoots: [vscode.Uri.joinPath(services.context.extensionUri, 'media')],
@@ -204,7 +205,7 @@ export class ElementDesigner {
             case 'setProperty':
                 return this.setProperty(message.path, message.property, message.value);
             case 'pickReference': {
-                const name = await pickReference(this.server, message.objectTypes, `${message.property}: pick a ${typeLabel(message.objectTypes[0]).replace(/s$/, '').toLowerCase()}`, message.value ?? '');
+                const name = await pickReference(this.server, message.objectTypes, `${message.property}: pick a ${typeName(message.objectTypes[0]).toLowerCase()}`, message.value ?? '');
                 return name === undefined ? undefined : this.setProperty(message.path, message.property, name);
             }
             case 'pickLabel': {
@@ -379,6 +380,12 @@ export class ElementDesigner {
             validateInput: v => NamePattern.test(v) ? undefined : 'Use letters, digits and underscores, starting with a letter.',
         });
         if (!newName || newName === name) {
+            return;
+        }
+        if (this.objectType === 'AxTable' && path.length === 2 && path[0] === 'Fields') {
+            if (await renameFieldEverywhere(this.server, this.objectName, name, newName)) {
+                await this.changed([...path.slice(0, -1), newName]);
+            }
             return;
         }
         if (!await this.confirmRenameOfUsedField(path)) {

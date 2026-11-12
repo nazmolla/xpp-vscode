@@ -44,6 +44,8 @@ const Kinds: Kind[] = [
     { group: 'Wizards', objectType: 'AxReport', label: 'Report', command: 'xpp.newReport', detail: 'temporary table, data provider, contract, controller, design' },
     { group: 'Wizards', objectType: 'AxWorkflowTemplate', label: 'Approval workflow', command: 'xpp.newWorkflow', detail: 'workflow type, approval, handlers, menu items' },
     { group: 'Wizards', objectType: 'AxService', label: 'Custom service', command: 'xpp.newService', detail: 'service class, contracts, service group, privilege' },
+    { group: 'Wizards', objectType: 'AxTable', label: 'Table with form', command: 'xpp.newTableWithForm', detail: 'key EDT, table, list form, menu item, View/Maintain privileges' },
+    { group: 'Wizards', objectType: 'AxDataEntityView', label: 'Data entity', command: 'xpp.newDataEntity', detail: 'entity, staging table, View/Maintain privileges' },
     { group: 'Wizards', objectType: 'AxClass', label: 'Business event', command: 'xpp.newBusinessEvent', detail: 'contract, event class, table trigger' },
     { group: 'Wizards', objectType: 'AxEdt', label: 'Number sequence', command: 'xpp.addNumberSequence', detail: 'EDT, module reference, parameters method, table default' },
     { group: 'Wizards', objectType: 'AxClass', label: 'Feature (Feature management)', command: 'xpp.newFeature', detail: 'IFeatureMetadata class with isEnabled()' },
