@@ -162,6 +162,470 @@ namespace XppVsCode.Server.Tests
             server.Dispatch("get_model", "{\"name\":\"Foundation\"}");
             Assert.Empty(policy.Calls);
         }
+
+        [Fact]
+        public void ReplacingReferencesInStandardObjectsIsRefused()
+        {
+            var (server, _) = Create();
+            string result = server.Dispatch("replace_references", "{\"objectType\":\"AxForm\",\"objectName\":\"Std\",\"oldName\":\"a\",\"newName\":\"b\"}");
+            Assert.Contains("standard", result);
+            Assert.DoesNotContain("bridge reached", result);
+        }
+    }
+
+    /// <summary>Characterizes how every action of the extension's contract is dispatched: which actions exist, which are writes
+    /// (checked by the write policy) and which follow the agent's scope. The server refactoring must keep all of it.</summary>
+    public class BridgeDispatchTests
+    {
+        private sealed class RecordingPolicy : IWritePolicy
+        {
+            public readonly List<string> Calls = new List<string>();
+            public string EditDenial(string objectType, string objectName) { Calls.Add("edit"); return null; }
+            public string TargetModelDenial(string modelName) { Calls.Add("create"); return null; }
+        }
+
+        private sealed class RecordingSession : IAgentSession
+        {
+            public readonly List<string> Calls = new List<string>();
+            public string AgentScopeDenial(string objectType, string objectName) { Calls.Add("scope"); return null; }
+            public void BeforeAgentWrite(string objectType, string objectName) => Calls.Add("checkpoint");
+            public string CheckpointEntriesJson(string id) => "{\"success\":true,\"entries\":[]}";
+            public string RevertCheckpointJson(string id) => "{\"success\":true}";
+        }
+
+        private sealed class FailingService : RealProxy
+        {
+            private FailingService(Type role) : base(role) { }
+            public static T Of<T>() => (T)new FailingService(typeof(T)).GetTransparentProxy();
+            public override IMessage Invoke(IMessage msg) =>
+                new ReturnMessage(new InvalidOperationException("bridge reached"), (IMethodCallMessage)msg);
+        }
+
+        internal static MetaModelBridgeServer Create(IWritePolicy policy, IAgentSession session = null) => new MetaModelBridgeServer(new BridgeServices
+        {
+            Objects = FailingService.Of<IObjectStore>(),
+            Discovery = FailingService.Of<IMetadataDiscovery>(),
+            Designer = FailingService.Of<IElementDesigner>(),
+            Projects = FailingService.Of<IProjectService>(),
+            Builds = FailingService.Of<IBuildService>(),
+            Models = FailingService.Of<IModelService>(),
+            Labels = FailingService.Of<ILabelService>(),
+            Packages = FailingService.Of<IProjectPackageService>(),
+            Relations = FailingService.Of<ITableRelations>(),
+            DataShape = FailingService.Of<ITableDataShape>(),
+            Performance = FailingService.Of<IPerformanceAnalysis>(),
+            Compatibility = FailingService.Of<IExtensionCompatibility>(),
+            Policy = policy,
+            AgentWrites = session,
+            Checkpoints = session,
+        });
+
+        /// <summary>The actions the extension calls (src/bridgeContract.ts).</summary>
+        internal static List<string> ContractActions()
+        {
+            var dir = new System.IO.DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
+            while (dir != null && !System.IO.File.Exists(System.IO.Path.Combine(dir.FullName, "src", "bridgeContract.ts"))) dir = dir.Parent;
+            Assert.NotNull(dir);
+            string text = System.IO.File.ReadAllText(System.IO.Path.Combine(dir.FullName, "src", "bridgeContract.ts"));
+            text = text.Substring(text.IndexOf('['), text.IndexOf("] as const", StringComparison.Ordinal) - text.IndexOf('['));
+            return System.Text.RegularExpressions.Regex.Matches(text, "'(\\w+)'").Cast<System.Text.RegularExpressions.Match>().Select(m => m.Groups[1].Value).ToList();
+        }
+
+        // Served from the cross-reference database instead of the metadata API.
+        internal static readonly string[] XRefActions = { "where_used", "list_tags", "tag_references", "label_usage", "element_dependencies" };
+
+        internal static readonly string[] EditActions =
+        {
+            "update_object", "delete_object", "set_element_property", "add_element_node", "delete_element_node", "rename_element_node",
+            "duplicate_element_node", "move_element_node", "drop_on_node", "drop_on_property", "set_element_method", "replace_references",
+        };
+        internal static readonly string[] CreateActions = { "create_object", "duplicate_object" };
+
+        private const string Body = "{\"objectType\":\"AxClass\",\"objectName\":\"Mine\",\"modelName\":\"testcust\",\"name\":\"testcust\",\"id\":\"1\"}";
+
+        private static IEnumerable<string> MetadataActions() => ContractActions().Except(XRefActions);
+
+        [Fact]
+        public void TheContractListsEveryAction()
+        {
+            var actions = ContractActions();
+            Assert.Equal(actions.Count, actions.Distinct().Count());
+            Assert.True(actions.Count >= 68, "contract has " + actions.Count + " actions");
+            Assert.Subset(new HashSet<string>(actions), new HashSet<string>(EditActions.Concat(CreateActions).Concat(XRefActions)));
+        }
+
+        [Fact]
+        public void EveryContractActionIsDispatched()
+        {
+            var server = Create(new RecordingPolicy(), new RecordingSession());
+            var unknown = MetadataActions().Where(a => server.Dispatch(a, Body).Contains("Unknown action")).ToList();
+            Assert.Empty(unknown);
+        }
+
+        [Fact]
+        public void UnknownActionsAreReported()
+        {
+            string result = Create(new RecordingPolicy()).Dispatch("no_such_action", Body);
+            Assert.Equal("{\"success\":false,\"message\":\"Unknown action: no_such_action\"}", result);
+        }
+
+        [Fact]
+        public void OnlyWriteActionsConsultThePolicy()
+        {
+            var edits = new List<string>();
+            var creates = new List<string>();
+            foreach (string action in MetadataActions())
+            {
+                var policy = new RecordingPolicy();
+                Create(policy).Dispatch(action, Body);
+                if (policy.Calls.Contains("edit")) edits.Add(action);
+                if (policy.Calls.Contains("create")) creates.Add(action);
+            }
+            Assert.Equal(EditActions.OrderBy(a => a), edits.OrderBy(a => a));
+            Assert.Equal(CreateActions.OrderBy(a => a), creates.OrderBy(a => a));
+        }
+
+        [Fact]
+        public void AgentWritesFollowTheScopeAndCheckpoint()
+        {
+            var scoped = new List<string>();
+            foreach (string action in MetadataActions())
+            {
+                var session = new RecordingSession();
+                Create(new RecordingPolicy(), session).Dispatch(action, Body);
+                if (session.Calls.SequenceEqual(new[] { "scope", "checkpoint" })) scoped.Add(action);
+                else Assert.Empty(session.Calls);
+            }
+            Assert.Equal(EditActions.Concat(new[] { "create_object" }).OrderBy(a => a), scoped.OrderBy(a => a));
+        }
+
+        [Fact]
+        public void CheckOnlyDeletesSkipPolicyAndScope()
+        {
+            var policy = new RecordingPolicy();
+            var session = new RecordingSession();
+            Create(policy, session).Dispatch("delete_object", "{\"objectType\":\"AxClass\",\"objectName\":\"Std\",\"checkOnly\":\"true\"}");
+            Assert.Empty(policy.Calls);
+            Assert.Empty(session.Calls);
+        }
+
+        [Fact]
+        public void AgentScopeDenialStopsTheWrite()
+        {
+            var session = new DenyingSession();
+            string result = Create(new RecordingPolicy(), session).Dispatch("update_object", Body);
+            Assert.Contains("outside the scope", result);
+            Assert.DoesNotContain("bridge reached", result);
+            Assert.False(session.CheckpointTaken);
+        }
+
+        private sealed class DenyingSession : IAgentSession
+        {
+            public bool CheckpointTaken;
+            public string AgentScopeDenial(string objectType, string objectName) => "outside the scope";
+            public void BeforeAgentWrite(string objectType, string objectName) => CheckpointTaken = true;
+            public string CheckpointEntriesJson(string id) => null;
+            public string RevertCheckpointJson(string id) => null;
+        }
+
+        [Fact]
+        public void CheckpointsWithoutASessionAreUnavailable()
+        {
+            var server = Create(new RecordingPolicy());
+            Assert.Equal("{\"success\":false,\"message\":\"Not available in this process.\"}", server.Dispatch("checkpoint_entries", "{\"id\":\"1\"}"));
+            Assert.Equal("{\"success\":false,\"message\":\"Not available in this process.\"}", server.Dispatch("revert_checkpoint", "{\"id\":\"1\"}"));
+        }
+
+        [Fact]
+        public void ServiceFailuresBecomeFailedResults()
+        {
+            string result = Create(new RecordingPolicy()).Dispatch("get_model", "{\"name\":\"x\"}");
+            Assert.StartsWith("{\"success\":false,\"message\":\"", result);
+            Assert.Contains("bridge reached", result);
+        }
+    }
+
+    /// <summary>The action registry: exactly the contract, write kinds as the policy expects, no duplicates.</summary>
+    public class BridgeRegistryTests
+    {
+        private static MetaModelBridgeServer CreateWithXRef()
+        {
+            var server = BridgeDispatchTests.Create(new WritePolicyStub());
+            new ToolRouter(new BridgeClient(server)).AddXRefActions(server.Actions);
+            return server;
+        }
+
+        private sealed class WritePolicyStub : IWritePolicy
+        {
+            public string EditDenial(string objectType, string objectName) => null;
+            public string TargetModelDenial(string modelName) => null;
+        }
+
+        [Fact]
+        public void TheRegistryServesExactlyTheContract()
+        {
+            var names = CreateWithXRef().Actions.All.Select(a => a.Name).OrderBy(n => n, StringComparer.Ordinal);
+            Assert.Equal(BridgeDispatchTests.ContractActions().OrderBy(n => n, StringComparer.Ordinal), names);
+        }
+
+        [Fact]
+        public void WriteKindsMatchThePolicyLists()
+        {
+            var all = CreateWithXRef().Actions.All;
+            Assert.Equal(BridgeDispatchTests.EditActions.OrderBy(a => a), all.Where(a => a.Write == WriteKind.Edit).Select(a => a.Name).OrderBy(a => a));
+            Assert.Equal(new[] { "create_object" }, all.Where(a => a.Write == WriteKind.Create).Select(a => a.Name));
+            Assert.Equal(new[] { "duplicate_object" }, all.Where(a => a.Write == WriteKind.Copy).Select(a => a.Name));
+        }
+
+        [Fact]
+        public void OnlyCrossReferenceActionsRunOutsideTheMetadataLock()
+        {
+            var unlocked = CreateWithXRef().Actions.All.Where(a => !a.UsesMetadata).Select(a => a.Name).OrderBy(a => a);
+            Assert.Equal(BridgeDispatchTests.XRefActions.OrderBy(a => a), unlocked);
+            Assert.All(CreateWithXRef().Actions.All.Where(a => !a.UsesMetadata), a => Assert.Equal(WriteKind.Read, a.Write));
+        }
+
+        [Fact]
+        public void DuplicateRegistrationsAreRefused()
+        {
+            var registry = new BridgeActionRegistry();
+            registry.Add("x", b => b);
+            var ex = Assert.Throws<InvalidOperationException>(() => registry.Add("x", WriteKind.Edit, b => b));
+            Assert.Contains("'x'", ex.Message);
+            Assert.Throws<InvalidOperationException>(() => CreateWithXRef().Actions.Add("where_used", b => b));
+        }
+
+        [Fact]
+        public void UnnamedActionsAreRefused()
+        {
+            Assert.Throws<ArgumentException>(() => new BridgeAction(" ", WriteKind.Read, b => b));
+            Assert.Throws<ArgumentNullException>(() => new BridgeAction("x", WriteKind.Read, null));
+        }
+
+        [Fact]
+        public void FindIsExactAndNullSafe()
+        {
+            var actions = CreateWithXRef().Actions;
+            Assert.NotNull(actions.Find("read_object"));
+            Assert.Null(actions.Find("READ_OBJECT"));
+            Assert.Null(actions.Find(null));
+        }
+
+        [Fact]
+        public void CrossReferenceActionsDoNotWaitForTheMetadataLock()
+        {
+            var server = BridgeDispatchTests.Create(new WritePolicyStub());
+            var entered = new System.Threading.ManualResetEventSlim();
+            var release = new System.Threading.ManualResetEventSlim();
+            server.Actions.Add("slow_metadata", b => { entered.Set(); release.Wait(5000); return "{}"; });
+            server.Actions.Add(new BridgeAction("quick_xref", WriteKind.Read, b => "{\"quick\":true}", usesMetadata: false));
+            var slow = System.Threading.Tasks.Task.Run(() => server.Dispatch("slow_metadata", "{}"));
+            Assert.True(entered.Wait(5000));
+            try
+            {
+                var quick = System.Threading.Tasks.Task.Run(() => server.Dispatch("quick_xref", "{}"));
+                Assert.True(quick.Wait(2000), "an XRef action waited for the metadata lock");
+                Assert.Equal("{\"quick\":true}", quick.Result);
+            }
+            finally
+            {
+                release.Set();
+                slow.Wait(5000);
+            }
+        }
+
+        [Fact]
+        public void XRefFailuresBecomeFailedResults()
+        {
+            var server = BridgeDispatchTests.Create(new WritePolicyStub());
+            server.Actions.Add(new BridgeAction("broken_xref", WriteKind.Read, b => throw new InvalidOperationException("no database"), usesMetadata: false));
+            Assert.Equal("{\"success\":false,\"message\":\"no database\"}", server.Dispatch("broken_xref", "{}"));
+        }
+    }
+
+    /// <summary>Agent tool registry and discovery (tools/list): every listed tool is served and every served tool is listed.</summary>
+    public class ToolRegistryTests
+    {
+        private static ToolRouter CreateRouter() => new ToolRouter(new BridgeClient(BridgeDispatchTests.Create(new AllowAll())));
+
+        private sealed class AllowAll : IWritePolicy
+        {
+            public string EditDenial(string objectType, string objectName) => null;
+            public string TargetModelDenial(string modelName) => null;
+        }
+
+        internal static readonly string[] ExpectedTools =
+        {
+            "xpp_create_object", "xpp_read_object", "xpp_update_object", "xpp_find_object", "xpp_list_objects", "xpp_list_model_objects",
+            "xpp_find_references", "xpp_find_examples", "xpp_analyze_security", "xpp_get_guide", "xpp_find_message_source", "xpp_search_code",
+            "xpp_get_model_info", "xpp_list_models", "xpp_read_label", "xpp_create_label", "xpp_add_to_project", "xpp_list_project_items",
+            "xpp_get_environment", "xpp_search_docs", "xpp_validate_object", "xpp_get_form_layout", "xpp_delete_object", "xpp_remove_from_project",
+            "xpp_select_project", "xpp_build", "xpp_package", "xpp_diff_changes", "xpp_check_best_practice", "xpp_find_deprecations",
+            "xpp_analyze_trace", "xpp_analyze_performance", "xpp_get_object_type_schema",
+        };
+
+        private static Dictionary<string, object> ToolsList(ToolRouter router)
+        {
+            var response = new JavaScriptSerializer { MaxJsonLength = int.MaxValue }.Deserialize<Dictionary<string, object>>(router.BuildToolsListResponse("7"));
+            Assert.Equal(7, response["id"]);
+            return (Dictionary<string, object>)response["result"];
+        }
+
+        [Fact]
+        public void ToolsListHasEveryToolInOrderWithItsSchema()
+        {
+            var tools = ((System.Collections.ArrayList)ToolsList(CreateRouter())["tools"]).Cast<Dictionary<string, object>>().ToList();
+            Assert.Equal(ExpectedTools, tools.Select(t => (string)t["name"]));
+            foreach (var tool in tools)
+            {
+                Assert.False(string.IsNullOrWhiteSpace(tool["description"] as string), (string)tool["name"]);
+                var schema = (Dictionary<string, object>)tool["inputSchema"];
+                Assert.Equal("object", schema["type"]);
+                var properties = schema.TryGetValue("properties", out object p) ? (Dictionary<string, object>)p : new Dictionary<string, object>();
+                if (schema.TryGetValue("required", out object required))
+                    Assert.All(((System.Collections.ArrayList)required).Cast<string>(), r => Assert.True(properties.ContainsKey(r), tool["name"] + " requires unknown " + r));
+            }
+        }
+
+        [Fact]
+        public void EveryListedToolIsServedAndOnlyAliasesAreUnlisted()
+        {
+            var registry = CreateRouter().Tools;
+            Assert.Equal(ExpectedTools, registry.Listed.Select(t => t.Name));
+            Assert.Equal(new[] { "xpp_update_current_object" }, registry.All.Where(t => t.Is(ToolTraits.Unlisted)).Select(t => t.Name));
+            Assert.All(registry.Listed, t => Assert.NotNull(t.Definition));
+        }
+
+        [Fact]
+        public void ParallelReadsAreExactlyTheReadOnlyTools()
+        {
+            var router = CreateRouter();
+            var parallel = new[]
+            {
+                "xpp_search_code", "xpp_find_examples", "xpp_find_references", "xpp_search_docs", "xpp_read_object", "xpp_find_object",
+                "xpp_list_objects", "xpp_list_model_objects", "xpp_get_form_layout", "xpp_read_label", "xpp_get_model_info",
+                "xpp_list_models", "xpp_get_environment", "xpp_get_object_type_schema", "xpp_list_project_items", "xpp_validate_object", "xpp_analyze_security",
+                "xpp_find_message_source", "xpp_get_guide", "xpp_analyze_performance", "xpp_find_deprecations", "xpp_analyze_trace",
+            };
+            Assert.Equal(parallel.OrderBy(n => n), router.Tools.All.Where(t => t.Is(ToolTraits.ParallelRead)).Select(t => t.Name).OrderBy(n => n));
+            Assert.All(parallel, n => Assert.True(router.IsParallelRead(n)));
+            Assert.False(router.IsParallelRead("xpp_create_object"));
+            Assert.False(router.IsParallelRead("xpp_no_such_tool"));
+            Assert.False(router.IsParallelRead(null));
+            Assert.Empty(router.Tools.All.Where(t => t.Is(ToolTraits.ParallelRead) && t.Is(ToolTraits.WritesElement)));
+        }
+
+        [Fact]
+        public void ElementWritesAreTheObjectLifeCycleTools()
+        {
+            var writes = CreateRouter().Tools.All.Where(t => t.Is(ToolTraits.WritesElement)).Select(t => t.Name).OrderBy(n => n);
+            Assert.Equal(new[] { "xpp_create_object", "xpp_delete_object", "xpp_update_current_object", "xpp_update_object" }, writes);
+        }
+
+        [Fact]
+        public void UnknownToolsAreReported()
+        {
+            string response = CreateRouter().HandleToolCall("3", "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"xpp_nope\",\"arguments\":{}}}");
+            Assert.Contains("-32602", response);
+            Assert.Contains("Unknown tool: xpp_nope", response);
+        }
+
+        [Fact]
+        public void WriteToolsOnStandardObjectsReachThePolicy()
+        {
+            var router = new ToolRouter(new BridgeClient(BridgeDispatchTests.Create(new DenyStd())));
+            string response = router.HandleToolCall("4", "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"xpp_update_object\",\"arguments\":{\"objectType\":\"AxClass\",\"objectName\":\"Std\"}}}");
+            Assert.Contains("standard object refused", response);
+            Assert.DoesNotContain("bridge reached", response);
+        }
+
+        private sealed class DenyStd : IWritePolicy
+        {
+            public string EditDenial(string objectType, string objectName) => objectName == "Std" ? "standard object refused" : null;
+            public string TargetModelDenial(string modelName) => null;
+        }
+
+        [Fact]
+        public void DefinitionsAndRegistrationsMustMatch()
+        {
+            var registry = new McpToolRegistry();
+            registry.Add("a", ToolTraits.None, (id, json) => "");
+            registry.Add("b", ToolTraits.None, (id, json) => "");
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                registry.AttachDefinitions("{\"tools\":[{\"name\":\"a\",\"description\":\"x\",\"inputSchema\":{\"type\":\"object\"}},{\"name\":\"c\"}]}"));
+            Assert.Contains("defined but not registered: c", ex.Message);
+            Assert.Contains("registered but not defined: b", ex.Message);
+        }
+
+        [Fact]
+        public void DuplicateToolsAreRefused()
+        {
+            var registry = new McpToolRegistry();
+            registry.Add("a", ToolTraits.None, (id, json) => "");
+            Assert.Throws<InvalidOperationException>(() => registry.Add("a", ToolTraits.ParallelRead, (id, json) => ""));
+            Assert.Throws<ArgumentException>(() => registry.Add(null, ToolTraits.None, (id, json) => ""));
+        }
+
+        [Fact]
+        public void DefinitionsResourceIsEmbedded()
+        {
+            string json = McpToolRegistry.LoadDefinitions();
+            Assert.Contains("\"xpp_create_object\"", json);
+        }
+
+        [Theory]
+        [InlineData("license")]
+        [InlineData("access")]
+        public void SecurityOpsWithoutAnObjectNameAskForIt(string op)
+        {
+            var result = new SecurityAnalysis().Handle(op, k => null, k => k == "objects" ? new[] { "AxSecurityRole:X" } : null, k => false);
+            Assert.Equal(false, result["success"]);
+            Assert.Contains("objectName", (string)result["message"]);
+        }
+    }
+
+    /// <summary>The element type table holds the same types per operation as the switches it replaced.</summary>
+    public class ElementTypeTableTests
+    {
+        private static IEnumerable<string> With(string operation) => MetaModelBridge.ElementTypesWith(operation);
+
+        private static readonly string[] Updatable =
+        {
+            "AxClass", "AxTable", "AxForm", "AxEdt", "AxEnum", "AxView", "AxQuery", "AxDataEntityView", "AxMenu", "AxTableExtension", "AxEnumExtension",
+            "AxEdtExtension", "AxFormExtension", "AxSecurityPrivilege", "AxSecurityDuty", "AxSecurityRole", "AxSecurityDutyExtension",
+            "AxSecurityRoleExtension", "AxDataEntityViewExtension", "AxMenuExtension", "AxCompositeDataEntityView",
+        };
+
+        [Fact]
+        public void CreatableTypes() => Assert.Equal(new[]
+        {
+            "AxClass", "AxTable", "AxForm", "AxEdt", "AxEnum", "AxMenuItemDisplay", "AxMenuItemOutput", "AxMenuItemAction", "AxQuery", "AxView",
+            "AxDataEntityView", "AxSecurityPrivilege", "AxSecurityDuty", "AxSecurityRole", "AxService", "AxServiceGroup", "AxMenu", "AxTile",
+            "AxConfigurationKey", "AxTableExtension", "AxEnumExtension", "AxEdtExtension", "AxFormExtension", "AxSecurityDutyExtension",
+            "AxSecurityRoleExtension", "AxDataEntityViewExtension", "AxLabelFile", "AxMenuExtension", "AxCompositeDataEntityView",
+            "AxWorkflowCategory", "AxWorkflowApproval", "AxWorkflowTemplate", "AxReport",
+        }.OrderBy(n => n, StringComparer.Ordinal), With("create"));
+
+        [Fact]
+        public void TypesWithTheirOwnUpdate() => Assert.Equal(Updatable.OrderBy(n => n, StringComparer.Ordinal), With("update"));
+
+        [Fact]
+        public void CreateRunsUpdateForAllButMenuExtensions() =>
+            Assert.Equal(Updatable.Where(n => n != "AxMenuExtension").OrderBy(n => n, StringComparer.Ordinal), With("updateAfterCreate"));
+
+        [Fact]
+        public void TypesWithTheirOwnRead() => Assert.Equal(new[]
+        {
+            "AxClass", "AxTable", "AxForm", "AxEnum", "AxEdt", "AxView", "AxQuery", "AxDataEntityView", "AxMenu", "AxMenuItemDisplay", "AxMenuItemOutput",
+            "AxMenuItemAction", "AxSecurityPrivilege", "AxSecurityDuty", "AxSecurityRole", "AxService", "AxServiceGroup", "AxTile", "AxConfigurationKey",
+            "AxTableExtension", "AxEnumExtension", "AxEdtExtension", "AxFormExtension",
+        }.OrderBy(n => n, StringComparer.Ordinal), With("read"));
+
+        [Fact]
+        public void EveryUpdatableTypeCanBeCreated() => Assert.Subset(new HashSet<string>(With("create")), new HashSet<string>(Updatable));
+
+        [Fact]
+        public void UnknownOperationsHaveNoTypes() => Assert.Empty(With("delete"));
     }
 
     public class ReadOnlySqlTests

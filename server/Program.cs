@@ -64,8 +64,11 @@ namespace XppVsCode.Server
                 AgentWrites = ActivityLog.Enabled ? bridge : null,
                 Checkpoints = allowData ? bridge : null,
             };
-            var client = new BridgeClient(new MetaModelBridgeServer(services));
-            new McpStdioServer(new ToolRouter(client), client, Version, allowData ? new DataQueryService() : null, rulesFile).Run();
+            var bridgeServer = new MetaModelBridgeServer(services);
+            var client = new BridgeClient(bridgeServer);
+            var router = new ToolRouter(client);
+            router.AddXRefActions(bridgeServer.Actions);
+            new McpStdioServer(router, client, Version, allowData ? new DataQueryService() : null, rulesFile).Run();
         }
 
         private static string ArgValue(string[] args, string name)

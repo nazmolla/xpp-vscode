@@ -172,3 +172,23 @@ wins, build loop and navigation, views, designers, then the lifecycle features.
 | CS4 | Telemetry Queries as snippets/documentation unless they run | Partly: the queries are also Kusto snippets (`fno-…`); the command stays for the form-specific queries |
 | CS5 | Usage statistics feed Report a Problem (PM14) | Done |
 | CS6 | Run Snippet's scratch runner excluded from packages and flagged by the Pre-Deploy Checklist | Done: the checklist fails while the runner is in the model |
+
+## 8. Server structure (S)
+
+Before this work the server routed requests through hard-coded switches: 63 bridge actions in `MetaModelBridgeServer.DispatchOnMainThread`,
+5 more in `McpStdioServer`, 34 MCP tools in `ToolRouter.DispatchTool` (with their descriptions in one JSON string), and 7
+switches on the element type in `MetaModelBridge.cs` (4,200 lines). Action names are also listed in `src/bridgeContract.ts` and
+the write lists `EditActions`/`CreateActions`. Goal: one registration per action, tool and element type, with write rules
+taken from the registration. Every step keeps behaviour identical: `scripts/golden-master.js` reports IDENTICAL, and the smoke
+test, security probes, `npm run test:server`, `check-bridge-actions.js` and `run-smoke.js` pass.
+
+| ID | Item | Status |
+|---|---|---|
+| S0 | Safety net: `scripts/golden-master.js` exercises every bridge action of `src/bridgeContract.ts`, every listed MCP tool (it fails when one is missing), `initialize`/`ping`/`tools/list`, `xpp/lang`, `xpp/trace`, the `xpp/data` refusal and a read and validate of every element type (220 steps); dispatch characterization tests in `test/server` (which actions exist, which are writes, which follow the agent's scope) | Done |
+| S1 | Bridge action registry (`BridgeActions.cs`): each action is registered once with its write kind (Read, Edit, Create, Copy) and whether it uses the metadata API; the dispatcher applies the lock, write policy, agent scope and checkpoint and the error envelope from the registration (replaces `EditActions`/`CreateActions` and the switch). The cross-reference actions are registered by `ToolRouter.AddXRefActions` and run without the lock | Done |
+| S2 | Contract from the registry: a unit test compares the running registry with `src/bridgeContract.ts`; `check-bridge-actions.js` reads the registrations. No `--list-actions` flag was needed | Done |
+| S3 | MCP tool registry (`McpTools.cs`): each tool is registered with its handler and traits (parallel read, element write, unlisted alias); the definitions agents discover live in `server/Resources/Tools.json` and `tools/list` is generated from the registry. Startup fails when a definition has no tool or a listed tool no definition. The parallel list in `McpStdioServer` and the write list in `ActivityLog` come from the traits | Done |
+| S4 | Element type table (`MetaModelBridge.ElementTypes.cs`): create, update, read and update-after-create per type replace the four type switches; per-type reads are methods. Create stays one orchestrator (create, reload, update, roll back) | Done |
+| S5 | `MetaModelBridge.cs` split into partial files by section (Validation, Discovery, TypeOperations, Apply, Extract); code moved unchanged, 4,200 to 820 lines | Done |
+| S6 | Dependency injection container (`Microsoft.Extensions.DependencyInjection`, runs on .NET Framework 4.8), only if hand wiring in `Program.Run` gets hard to follow | Optional |
+| S7 | Services with their own state instead of partials of `MetaModelBridge` (along the interfaces in `MetadataServices.cs`, through `IMetadataCore`) | Open |

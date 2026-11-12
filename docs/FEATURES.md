@@ -10,6 +10,8 @@ Develop Dynamics 365 Finance & Operations X++ code in VS Code, without Visual St
 
 ## What's new in 0.14
 
+**0.14.1: Server internals and a security analysis fix.** Bridge actions, agent tools and element types are each registered once; `tools/list` comes from the same registry that serves the calls, and write checks come from each action's registration. Behaviour is unchanged (every action and tool is checked against a recorded baseline). `xpp_analyze_security` with `op=license` or `op=access` and no `objectName` now says what is missing instead of failing with an internal error.
+
 - **New wizards:** **New Table with Form…** (key EDT, table with an alternate key and find/exist, a SimpleList form, menu item, View and Maintain privileges) and **New Data Entity…** (entity for OData and data management, staging table, privileges).
 - **Rename everywhere:** rename a field of your table in the designer, or **Rename…** one of your elements in the Application Explorer. X++ code that uses it changes in the refactor preview, and the metadata of your other elements (menu items, form controls, data sources, entity fields, relations, security) follows.
 - **View Dependencies:** what an element uses, from the cross-reference database. Every diagram exports Mermaid.

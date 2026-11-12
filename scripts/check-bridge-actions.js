@@ -7,10 +7,12 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const contract = read('src/bridgeContract.ts');
 const listed = new Set([...contract.slice(contract.indexOf('['), contract.indexOf('] as const')).matchAll(/'(\w+)'/g)].map(m => m[1]));
 
+// Registrations: a.Add("name", ...) in the dispatcher, new MetaModel.BridgeAction("name", ...) elsewhere (cross-reference actions).
+// test/server (BridgeRegistryTests) checks the same against the running registry.
 const dispatcher = read('server/Ported/MetaModel/MetaModelBridgeServer.cs');
-const body = dispatcher.slice(dispatcher.indexOf('private string DispatchOnMainThread('), dispatcher.indexOf('default:', dispatcher.indexOf('private string DispatchOnMainThread(')));
-const served = new Set([...body.matchAll(/case "(\w+)":/g)].map(m => m[1]));
-for (const m of read('server/McpStdioServer.cs').matchAll(/action == "(\w+)"/g)) served.add(m[1]);
+const body = dispatcher.slice(dispatcher.indexOf('private void RegisterActions('));
+const served = new Set([...body.matchAll(/\ba\.Add\("(\w+)"/g)].map(m => m[1]));
+for (const m of read('server/Ported/Tools/ToolRouter.cs').matchAll(/new MetaModel\.BridgeAction\("(\w+)"/g)) served.add(m[1]);
 
 const used = new Set();
 for (const file of walk(path.join(root, 'src'))) {
