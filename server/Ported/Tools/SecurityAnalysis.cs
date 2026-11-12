@@ -353,6 +353,8 @@ namespace XppVsCode.Server.Tools
         /// <summary>License a role/duty/privilege needs, the menu items that drive it and what a lower grant would change.</summary>
         public Dictionary<string, object> License(string objectType, string name)
         {
+            if (string.IsNullOrWhiteSpace(name))
+                return Fail("op=license needs objectType (AxSecurityRole, AxSecurityDuty or AxSecurityPrivilege) and objectName.");
             var index = Get();
             string kind = KindOf(objectType);
             var x = Expand(index, kind, name);
@@ -388,6 +390,8 @@ namespace XppVsCode.Server.Tools
         /// <summary>Who reaches a menu item, form, table or data entity: privileges, duties and roles, with the grant.</summary>
         public Dictionary<string, object> WhoCanAccess(string objectType, string name)
         {
+            if (string.IsNullOrWhiteSpace(name))
+                return Fail("op=access needs objectType (a menu item type, AxForm, AxTable or AxDataEntityView) and objectName.");
             var index = Get();
             string t = (objectType ?? "").Replace("Ax", "");
             var privileges = new List<Tuple<Privilege, string>>();   // privilege, grant text

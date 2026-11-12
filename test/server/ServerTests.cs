@@ -572,6 +572,16 @@ namespace XppVsCode.Server.Tests
             string json = McpToolRegistry.LoadDefinitions();
             Assert.Contains("\"xpp_create_object\"", json);
         }
+
+        [Theory]
+        [InlineData("license")]
+        [InlineData("access")]
+        public void SecurityOpsWithoutAnObjectNameAskForIt(string op)
+        {
+            var result = new SecurityAnalysis().Handle(op, k => null, k => k == "objects" ? new[] { "AxSecurityRole:X" } : null, k => false);
+            Assert.Equal(false, result["success"]);
+            Assert.Contains("objectName", (string)result["message"]);
+        }
     }
 
     /// <summary>The element type table holds the same types per operation as the switches it replaced.</summary>
