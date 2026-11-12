@@ -101,7 +101,7 @@ const ToolsMenu: ToolNode[] = [
     },
     {
         label: 'Find', icon: 'search', children: [
-            { label: 'Open Element…', icon: 'search', command: 'xpp.openObject' },
+            { label: 'Open Element…', icon: 'go-to-file', command: 'xpp.openObject' },
             { label: 'Find References…', icon: 'references', command: 'xpp.findReferences' },
             { label: 'Search Code…', icon: 'search-fuzzy', command: 'xpp.searchCode', description: 'all packages' },
             { label: 'Find Message Source…', icon: 'search', command: 'xpp.findMessageSource', description: 'error text to code' },

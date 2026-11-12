@@ -48,6 +48,9 @@ TOOLS
     reports BUILD SUCCEEDED/FAILED with every error and warning.
   - xpp_run_tests: (VS Code tool) run the active project's SysTest classes against the deployed
     environment; pass/fail per test method.
+  - xpp_open_element: (VS Code tool) show an element to the user in the X++ code editor or designer,
+    optionally at a method or a line of code. Use it whenever the user asks to open, show or see code;
+    NEVER open the metadata .xml file for that.
   Labels: xpp_read_label (by ID or text search), xpp_create_label (new label in a label file).
   Docs: xpp_search_docs (Microsoft Learn: X++ syntax, APIs, extensibility, D365FO docs; query or URL).
 
