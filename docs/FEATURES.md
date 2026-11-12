@@ -8,6 +8,17 @@ Develop Dynamics 365 Finance & Operations X++ code in VS Code, without Visual St
 
 ![Application Explorer filtered on CustGroup](images/aot.png)
 
+## What's new in 0.14
+
+- **New wizards:** **New Table with Form…** (key EDT, table with an alternate key and find/exist, a SimpleList form, menu item, View and Maintain privileges) and **New Data Entity…** (entity for OData and data management, staging table, privileges).
+- **Rename everywhere:** rename a field of your table in the designer, or **Rename…** one of your elements in the Application Explorer. X++ code that uses it changes in the refactor preview, and the metadata of your other elements (menu items, form controls, data sources, entity fields, relations, security) follows.
+- **View Dependencies:** what an element uses, from the cross-reference database. Every diagram exports Mermaid.
+- **Debugger on cloud-hosted and VHD environments** (*preview*): Launch Debugger attaches to the local AOS (w3wp.exe or Batch.exe) with the C# extension's .NET debugger.
+- **Export Labels… / Import Labels…** as CSV with one column per language.
+- **Tasks:** `deploy` (with database sync) and `syncDatabase` next to the build tasks.
+- **Analyze Performance** checks form data sources: OnlyFetchActive for grids that show few fields, and Delayed or Active data sources shown in the parent's grid instead of joined.
+- **Azure DevOps:** **Link Work Item…** adds the work item to the commit message, Review My Changes lists the branch's work items, **Open Pipelines** opens Azure Pipelines or GitHub Actions.
+
 ## What's new in 0.13
 
 **0.13.3: Analyze Trace on VHD environments, Copilot opens code in the editor.** Analyze Trace finds the event manifests on local VHD environments (`AosService\WebRoot\Monitoring` or the registered trace providers), or in the folder set in `xpp.trace.manifestFolder` / `manifestFolder` ([#10](https://github.com/nazmolla/xpp-vscode/issues/10)). The new `xpp_open_element` tool lets Copilot show an element in the X++ code editor or designer, at a method and line, instead of opening its XML. **Open Element…** opens the element when you press Enter before the results appear, and has its own icon.
@@ -232,7 +243,7 @@ Turn each feature on or off with **Configure Code Intelligence…**, or with the
 
 ### Labels and refactoring
 - **Find Labels…**, **Translate Missing Labels…** (you review each translation before it is saved) and **Find Unused Labels…**.
-- **Rename…** (`F2`) on a method of your models updates its calls, after a preview.
+- **Rename…** (`F2`) on a method of your models updates its calls, after a preview. Renaming a field of your table in the designer, or **Rename…** on one of your elements, also changes the code and the metadata of your other elements that use it.
 
 ### Environments
 - **Connect to Environment…** downloads the metadata, restores the cross-reference database and configures the machine. It shows each step and can retry a failed one.
@@ -241,7 +252,7 @@ Turn each feature on or off with **Configure Code Intelligence…**, or with the
   - **Sign In to Environment (pac)** keeps one pac profile per environment.
 - **Version drift guard** (*preview*): you get a warning when the environment runs a newer application version. **Update Metadata** downloads it, and **Clean Up Old Application Versions…** removes old versions after a confirmation.
 - **Open Team Repository…** (*preview*): clone or pick a repository, link its packages into the metadata folder and build them in dependency order.
-- **Cloud-hosted and VHD environments** work without a connection step. F&O Studio uses the local PackagesLocalDirectory, AOS and AxDB. Deploy (pac), Run Tests and the debugger are UDE-only and are hidden there.
+- **Cloud-hosted and VHD environments** work without a connection step. F&O Studio uses the local PackagesLocalDirectory, AOS and AxDB. Deploy (pac) and Run Tests are UDE-only and are hidden there; the debugger attaches to the local AOS (*preview*, needs the C# extension).
 
 ### Copilot
 - **@fno** in Copilot Chat: `/design`, `/extend`, `/explain`, `/review`, `/support`, `/performance`.
@@ -277,7 +288,7 @@ The tools are registered automatically. Copilot can:
 | Application Explorer (classic and model view) | Application Explorer | Same |
 | Solution Explorer: Add > New Item | New Element… and the wizards | Same element types, plus batch job, report, workflow, service, business event, number sequence and feature wizards |
 | Element designers and the Properties window | Element designer with a filterable, categorized Properties grid and pickers | Same metadata classes |
-| Form designer | Form layout preview, form extensions, element designer for the nodes | Different: no design surface for new forms |
+| Form designer | Form layout preview, form extensions, element designer for the nodes | Same: a preview where clicking a section selects its control |
 | Code editor | X++ code view with completion, definitions, references, Chain of Command implementations, code lens, folding and formatting | Same code layout |
 | Build models, build project | Build Model, Build Project; errors in Problems | Same (xppc, LabelC) |
 | Best practice checks | Run Best Practice Checks on Project | Same (xppbp) |
@@ -287,14 +298,14 @@ The tools are registered automatically. Copilot can:
 | Import/Export project (.axpp) | Import Project…, Export Project… | Same file format |
 | Find references, metadata search, find labels, tag references | Find References, Open Element…, Find Labels…, Find Tag References… | Same cross-reference database |
 | Compare | Compare Code…, Compare Metadata… in VS Code's diff editor | Different view, same content |
-| Launch debugger (UDE) | Launch Debugger (DebuggerProxy with vsdbg) | Same debugger proxy |
+| Launch debugger | Launch Debugger (DebuggerProxy with vsdbg on UDE; the C# extension's debugger on the local AOS) | Same debugger proxy on UDE |
 | Infolog | Infolog in the F&O Studio panel | Same messages |
 | Test Explorer (SysTest) | Test Explorer and Run Tests | Same runner on the environment |
-| DGML diagrams | Hierarchy, references and entity relationship diagrams | Different |
+| DGML diagrams | Hierarchy, references, dependencies and entity relationship diagrams, exportable as Mermaid | Different |
 | Trace Parser | Analyze Trace… (own `.etl` reader, no import database) | Different |
 | Open in browser, table browser | Open in Browser, Open Table Browser, Browse Table Data, SQL queries | More |
 | Report designer (.rdl) | New Report wizard with an automatic design | Not available: design layouts in Visual Studio |
-| Table + form and data entity wizards | New Element… and the agent tools | Planned |
+| Data entity wizard | New Data Entity… (entity, staging table, privileges) and New Table with Form… | Same result, more elements |
 
 ## Requirements
 

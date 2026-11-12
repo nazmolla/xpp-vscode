@@ -6,7 +6,7 @@ F&O Studio runs on the same engine as Microsoft's Visual Studio extension:
 - the same cross-reference database, debugger proxy and deployment scripts;
 - the same project and package formats (`.rnrproj`, `.axpp`).
 
-So the code you build in one opens and builds in the other. The difference is what's built on top. F&O Studio adds AI agent tools that work on real metadata, data and SQL inside the editor, trace and performance analysis, security and license analysis, and upgrade and release checks. Visual Studio is still ahead on the SSRS report designer, the data entity wizard, dependency diagrams, and debugging on cloud-hosted and VHD environments; all but the report designer are on F&O Studio's roadmap.
+So the code you build in one opens and builds in the other. The difference is what's built on top. F&O Studio adds AI agent tools that work on real metadata, data and SQL inside the editor, trace and performance analysis, security and license analysis, and upgrade and release checks. Visual Studio is still ahead on the SSRS report designer and on running tests on cloud-hosted and VHD environments.
 
 ## At a glance
 
@@ -42,8 +42,8 @@ So the code you build in one opens and builds in the other. The difference is wh
 | Business event wizard | ✅ | ❌ |
 | Number sequence wizard | ✅ | ❌ |
 | Feature management wizard | ✅ | ❌ |
-| Table + form + menu item + privilege wizard | 🗓️ | ❌ |
-| Data entity wizard | 🗓️ | ✅ |
+| Table + form + menu item + privilege wizard | ✅ | ❌ |
+| Data entity wizard | ✅ | ✅ |
 | **Designers** | | |
 | Element designer with node tree | ✅ | ✅ |
 | Properties grid with categories and search | ✅ | ✅ |
@@ -58,7 +58,7 @@ So the code you build in one opens and builds in the other. The difference is wh
 | Label editor | ✅ | ✅ |
 | Entity relationship diagram (SVG and Mermaid export) | ✅ | ❌ |
 | Class and table hierarchy diagram | ✅ | 🟡 DGML |
-| Dependency diagram | 🗓️ | ✅ DGML |
+| Dependency diagram | ✅ | ✅ DGML |
 | **Code editor** | | |
 | Code view with declaration and methods | ✅ | ✅ |
 | Syntax highlighting | ✅ | ✅ |
@@ -82,8 +82,8 @@ So the code you build in one opens and builds in the other. The difference is wh
 | Quick fix: implement interface methods | ✅ | ❌ |
 | Quick fix: create a CoC wrapper method | ✅ | ❌ |
 | Rename a method and its calls | ✅ | ❌ |
-| Rename a field and its references | 🗓️ | ❌ |
-| Rename an element and its references | 🗓️ | ❌ |
+| Rename a field and its references | ✅ | ❌ |
+| Rename an element and its references | ✅ | ❌ |
 | **Search** | | |
 | Metadata search | ✅ | ✅ |
 | Search code in all packages (text or regex) | ✅ | 🟡 Find in Files |
@@ -96,14 +96,14 @@ So the code you build in one opens and builds in the other. The difference is wh
 | Build model | ✅ | ✅ |
 | Compiler errors at the right line | ✅ | ✅ |
 | Build from `tasks.json` | ✅ | ❌ |
-| Deploy and database sync from `tasks.json` | 🗓️ | ❌ |
+| Deploy and database sync from `tasks.json` | ✅ | ❌ |
 | Best practice checks (xppbp) | ✅ | ✅ |
 | Create deployment package | ✅ | ✅ |
 | Deploy models to a UDE | ✅ | ✅ |
 | Database synchronization | ✅ | ✅ |
 | Warning when the build is newer than the deploy | ✅ | ❌ |
 | Debugger on UDE | ✅ | ✅ |
-| Debugger on cloud-hosted and VHD environments | 🗓️ | ✅ |
+| Debugger on cloud-hosted and VHD environments | ✅ | ✅ |
 | Infolog | ✅ | ✅ |
 | Run SysTest tests on the environment | ✅ | ✅ |
 | Run tests on cloud-hosted and VHD environments | ❌ | ✅ |
@@ -123,7 +123,7 @@ So the code you build in one opens and builds in the other. The difference is wh
 | Errors with full X++ call stacks from a trace | ✅ | ❌ |
 | Trace Parser | ❌ | 🟡 separate tool |
 | Static performance analysis of X++ | ✅ | ❌ |
-| Form data source checks (OnlyFetchActive, link types) | 🗓️ | ❌ |
+| Form data source checks (OnlyFetchActive, link types) | ✅ | ❌ |
 | Database performance insights | ✅ | ❌ |
 | Application Insights (KQL) queries | ✅ | ❌ |
 | **Security and licensing** | | |
@@ -141,12 +141,12 @@ So the code you build in one opens and builds in the other. The difference is wh
 | Pre-deploy checklist | ✅ | ❌ |
 | Compare code | ✅ | ✅ |
 | Compare metadata | ✅ | ✅ |
-| Links to Azure DevOps work items | 🗓️ | ✅ |
-| Links to Azure DevOps pipelines | 🗓️ | ❌ |
+| Links to Azure DevOps work items | ✅ | ✅ |
+| Links to Azure DevOps pipelines | ✅ | ❌ |
 | **Labels** | | |
 | Translate missing labels | ✅ | ❌ |
 | Find unused labels | ✅ | ❌ |
-| Import and export labels | 🗓️ | ❌ |
+| Import and export labels | ✅ | ❌ |
 | **Integration** | | |
 | Try a data entity (OData) | ✅ | ❌ |
 | Try a service operation | ✅ | ❌ |
@@ -218,10 +218,12 @@ F&O Studio doesn't reimplement Microsoft's toolchain. It loads it from your inst
 - **Review My Changes** against your base branch, and a **Pre-Deploy Checklist** in one report.
 
 **Productivity**
-- **Wizards:** batch job (SysOperation), report, approval workflow, custom service, business event, number sequence, feature.
+- **Wizards:** batch job (SysOperation), report, approval workflow, custom service, business event, number sequence, feature, table with form, data entity.
 - **Search Code in All Packages**, **Find Message Source** (paste the error the user saw), Find Similar Standard Implementations.
-- **Quick fixes:** extract to label, generate `find`/`exist`, create a CoC wrapper, implement interface methods. **Rename** for methods.
-- **Labels:** translate missing labels, find unused labels.
+- **Quick fixes:** extract to label, generate `find`/`exist`, create a CoC wrapper, implement interface methods. **Rename** methods, fields and elements, with their references.
+- **Labels:** translate missing labels, find unused labels, export and import (CSV).
+- **Diagrams:** entity relationships, hierarchies, references and dependencies, exportable as Mermaid.
+- **Azure DevOps:** link work items to commits, see the branch's work items in Review My Changes, open the pipelines.
 - **Try Data Entity (OData)** and **Try Service Operation**, both saved as `.http` files.
 - KQL snippets for F&O telemetry in Application Insights.
 
@@ -232,9 +234,7 @@ F&O Studio doesn't reimplement Microsoft's toolchain. It loads it from your inst
 
 ## Where Visual Studio is still ahead
 - The **SSRS report designer**. Report layouts are still designed in Visual Studio.
-- The **data entity wizard**. In F&O Studio, the agent tools and `New Element…` cover it today; a dedicated wizard is planned.
-- **Debugging on cloud-hosted and VHD environments** (planned) and **running tests there**. In F&O Studio both are UDE-only today.
-- **DGML** dependency diagrams. A dependency diagram is planned.
+- **Running tests on cloud-hosted and VHD environments.** In F&O Studio tests run on UDEs only.
 - **Official Microsoft support.** F&O Studio is an independent, community project and still a preview.
 
 ## Requirements

@@ -34,7 +34,11 @@ namespace XppVsCode.Server.MetaModel
             if (objectType == "AxTable")
                 findings.AddRange(TableCacheFindings(_core.MetaService.GetTable(objectName)));
             if (objectType == "AxForm")
-                findings.AddRange(DisplayMethodFindings(_core.MetaService.GetForm(objectName), methods));
+            {
+                var form = _core.MetaService.GetForm(objectName);
+                findings.AddRange(DisplayMethodFindings(form, methods));
+                findings.AddRange(DataSourceFindings(form));
+            }
             if (objectType == "AxDataEntityView")
                 findings.AddRange(EntityReadinessFindings(_core.MetaService.GetDataEntityView(objectName), methods));
             return json.Serialize(new Dictionary<string, object>
@@ -115,6 +119,10 @@ namespace XppVsCode.Server.MetaModel
         private static IEnumerable<object> Items(object collection) =>
             collection is System.Collections.IEnumerable items ? items.Cast<object>().Where(i => i != null) : Enumerable.Empty<object>();
 
+        /// <summary>A property as text, enums (NoYes, FormLinkType) included.</summary>
+        private static string Text(object target, string propertyName) =>
+            target?.GetType().GetProperty(propertyName)?.GetValue(target)?.ToString();
+
         /// <summary>CacheLookup against the table's group: setup tables should cache, often-written tables should not cache entirely.</summary>
         private static IEnumerable<PerformanceFinding> TableCacheFindings(AxTable table)
         {
@@ -141,7 +149,7 @@ namespace XppVsCode.Server.MetaModel
             if (entity == null) yield break;
             PerformanceFinding Finding(string rule, string severity, string message, string fix) =>
                 new PerformanceFinding { Rule = rule, Severity = severity, Method = "(entity)", Line = 0, Message = message, Fix = fix };
-            string Prop(string name) => MetaModelBridge.GetStringProperty(entity, name) ?? "";
+            string Prop(string name) => Text(entity, name) ?? "";
             bool Yes(string name) => Prop(name) == "Yes" || Prop(name) == "True";
 
             if (Yes("IsPublic") && (Prop("PublicEntityName") == "" || Prop("PublicCollectionName") == ""))
@@ -199,7 +207,7 @@ namespace XppVsCode.Server.MetaModel
                 var mapped = new HashSet<string>(fields.Where(f => string.Equals(MetaModelBridge.GetStringProperty(f, "DataSource"), rootName, StringComparison.OrdinalIgnoreCase))
                     .Select(f => MetaModelBridge.GetStringProperty(f, "DataField")).Where(n => !string.IsNullOrEmpty(n)), StringComparer.OrdinalIgnoreCase);
                 var unmappedMandatory = (table.Fields ?? Enumerable.Empty<AxTableField>())
-                    .Where(f => "Yes".Equals(MetaModelBridge.GetStringProperty(f, "Mandatory"), StringComparison.OrdinalIgnoreCase) && !mapped.Contains(f.Name))
+                    .Where(f => "Yes".Equals(Text(f, "Mandatory"), StringComparison.OrdinalIgnoreCase) && !mapped.Contains(f.Name))
                     .Select(f => f.Name).ToList();
                 if (unmappedMandatory.Count > 0)
                     yield return Finding("EntityMandatoryFields", "Warning", entity.Name + " does not map mandatory field(s) of " + rootTable + ": " + string.Join(", ", unmappedMandatory.Take(10)) + ". Inserts through the entity fail unless code sets them.",
@@ -268,6 +276,76 @@ namespace XppVsCode.Server.MetaModel
             {
                 yield return child;
                 foreach (var grandChild in Controls(child)) yield return grandChild;
+            }
+        }
+
+        /// <summary>A bound control with the data source it inherits from its containers and the grid it sits in.</summary>
+        private sealed class BoundControl
+        {
+            public string Name, DataSource;
+            public object Grid;
+        }
+
+        private static IEnumerable<BoundControl> BoundControls(object container, string dataSource, object grid)
+        {
+            foreach (var child in Items(container?.GetType().GetProperty("Controls")?.GetValue(container)))
+            {
+                // Hidden controls (often country-specific ones) don't show data.
+                if ("No".Equals(Text(child, "Visible"), StringComparison.OrdinalIgnoreCase)) continue;
+                string ds = MetaModelBridge.GetStringProperty(child, "DataSource");
+                ds = string.IsNullOrEmpty(ds) ? dataSource : ds;
+                var inGrid = child.GetType().Name == "AxFormGridControl" ? child : grid;
+                bool bound = !string.IsNullOrEmpty(MetaModelBridge.GetStringProperty(child, "DataField"))
+                    || !string.IsNullOrEmpty(MetaModelBridge.GetStringProperty(child, "DataGroup"))
+                    || !string.IsNullOrEmpty(MetaModelBridge.GetStringProperty(child, "DataMethod"));
+                if (bound && !string.IsNullOrEmpty(ds))
+                    yield return new BoundControl { Name = MetaModelBridge.GetStringProperty(child, "Name"), DataSource = ds, Grid = inGrid };
+                foreach (var nested in BoundControls(child, ds, inGrid)) yield return nested;
+            }
+        }
+
+        /// <summary>
+        /// Form data sources: OnlyFetchActive where only a few fields are shown in grids (or on lookup forms), and joined data
+        /// sources whose link type queries again for every record the user moves to.
+        /// </summary>
+        private IEnumerable<PerformanceFinding> DataSourceFindings(AxForm form)
+        {
+            if (form?.Design == null) yield break;
+            PerformanceFinding Finding(string rule, string severity, string message, string fix) =>
+                new PerformanceFinding { Rule = rule, Severity = severity, Method = "(form)", Line = 0, Message = message, Fix = fix };
+            var bound = BoundControls(form.Design, MetaModelBridge.GetStringProperty(form.Design, "DataSource"), null).ToList();
+            string pattern = Text(form.Design, "Pattern") ?? "";
+            bool lookup = pattern.IndexOf("Lookup", StringComparison.OrdinalIgnoreCase) >= 0 || form.Name.EndsWith("Lookup", StringComparison.OrdinalIgnoreCase);
+            var dataSources = Items(form.DataSources).ToList();
+            foreach (var ds in dataSources)
+            {
+                string name = MetaModelBridge.GetStringProperty(ds, "Name") ?? "";
+                string tableName = MetaModelBridge.GetStringProperty(ds, "Table");
+                var shown = bound.Where(c => name.Equals(c.DataSource, StringComparison.OrdinalIgnoreCase)).ToList();
+
+                if (!"Yes".Equals(Text(ds, "OnlyFetchActive"), StringComparison.OrdinalIgnoreCase) && shown.Count > 0 && shown.All(c => c.Grid != null))
+                {
+                    int fieldCount = _core.MetaService.GetTable(tableName ?? "")?.Fields?.Count ?? 0;
+                    if (lookup || (fieldCount >= 30 && shown.Count <= 10))
+                        yield return Finding("OnlyFetchActive", lookup ? "Warning" : "Info",
+                            "Data source " + name + " fetches every field of " + tableName + (fieldCount > 0 ? " (" + fieldCount + ")" : "") + " but the form shows " + shown.Count + " of them, only in a grid" + (lookup ? " of a lookup form" : "") + ".",
+                            "Set OnlyFetchActive = Yes on " + name + ", unless code reads fields of the record that no control shows.");
+                }
+
+                string joinSource = MetaModelBridge.GetStringProperty(ds, "JoinSource");
+                string linkType = Text(ds, "LinkType") ?? "";
+                if (string.IsNullOrEmpty(joinSource)) continue;
+                var parentGrids = new HashSet<object>(bound.Where(c => joinSource.Equals(c.DataSource, StringComparison.OrdinalIgnoreCase) && c.Grid != null).Select(c => c.Grid));
+                bool sameGrid = shown.Any(c => c.Grid != null && parentGrids.Contains(c.Grid));
+                // Passive links are refreshed by code on purpose (country-specific tables), so only Delayed and Active are reported.
+                if (sameGrid && (linkType == "Delayed" || linkType == "Active"))
+                    yield return Finding("FormLinkType", "Warning",
+                        "Data source " + name + " (LinkType " + linkType + ") is shown in " + joinSource + "'s grid without being joined to it: it is queried separately for the current " + joinSource + " record instead of with the grid's rows.",
+                        "Join it to " + joinSource + " with LinkType InnerJoin (or OuterJoin when the record may be missing), so the grid reads both in one query.");
+                else if (linkType == "Active")
+                    yield return Finding("FormLinkType", "Info",
+                        "Data source " + name + " (LinkType Active) queries again on every move in " + joinSource + ", even while the user scrolls.",
+                        "Use LinkType Delayed: it waits until the user stops on a record.");
             }
         }
     }

@@ -67,7 +67,7 @@ namespace XppVsCode.Server.MetaModel
         private static readonly HashSet<string> EditActions = new HashSet<string>(StringComparer.Ordinal)
         {
             "update_object", "delete_object", "set_element_property", "add_element_node", "delete_element_node", "rename_element_node",
-            "duplicate_element_node", "move_element_node", "drop_on_node", "drop_on_property", "set_element_method",
+            "duplicate_element_node", "move_element_node", "drop_on_node", "drop_on_property", "set_element_method", "replace_references",
         };
         private static readonly HashSet<string> CreateActions = new HashSet<string>(StringComparer.Ordinal) { "create_object", "duplicate_object" };
 
@@ -217,6 +217,9 @@ namespace XppVsCode.Server.MetaModel
                 case "duplicate_element_node":
                     return _designer.DuplicateElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
                         ExtractJsonStringArray(body, "path"), ExtractJsonString(body, "newName"));
+                case "replace_references":
+                    return _designer.ReplaceReferencesJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
+                        ExtractJsonString(body, "targetType"), ExtractJsonString(body, "table"), ExtractJsonString(body, "oldName"), ExtractJsonString(body, "newName"));
                 case "move_element_node":
                     return _designer.MoveElementNodeJson(ExtractJsonString(body, "objectType"), ExtractJsonString(body, "objectName"),
                         ExtractJsonStringArray(body, "path"), int.TryParse(ExtractJsonString(body, "offset"), out int moveOffset) ? moveOffset : 0);

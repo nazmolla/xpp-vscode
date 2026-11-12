@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { elementOpenCommand, iconFor, typeLabel } from '../aot';
+import { elementOpenCommand, iconFor, typeLabel, typeName } from '../aot';
 import { call, ProductivityContext } from '../productivity/common';
 
 /** Element types Who Can Access works on. */
@@ -141,7 +141,7 @@ export class SecurityTreeProvider implements vscode.TreeDataProvider<SecurityNod
                 }
                 item.tooltip = [
                     node.label && node.label !== node.name ? node.label : '',
-                    `${node.name} (${typeLabel(objectType).replace(/s$/, '')})`,
+                    `${node.name} (${typeName(objectType)})`,
                     node.model ? `Model: ${node.model}` : '',
                     node.license !== undefined ? `License: ${node.license ?? 'unknown'}` : '',
                     node.extended ? 'Extended by your models' : '',
