@@ -18,16 +18,10 @@ namespace XppVsCode.Server.Host
         private const int MaxArgumentChars = 400;
         private const int MaxSnapshots = 200;
         private static readonly object Gate = new object();
-        private static readonly HashSet<string> WriteTools = new HashSet<string>(StringComparer.Ordinal)
-        {
-            "xpp_create_object", "xpp_update_object", "xpp_update_current_object", "xpp_delete_object",
-        };
 
         public static bool Enabled { get; set; }
 
         private static string Folder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "XppVsCode");
-
-        public static bool IsWrite(string tool) => WriteTools.Contains(tool);
 
         /// <summary>Copies an element file of your models before a write; null when it doesn't exist yet (create).</summary>
         public static string Snapshot(string objectType, string objectName)
@@ -53,7 +47,8 @@ namespace XppVsCode.Server.Host
             }
         }
 
-        public static void Write(string tool, string arguments, long ms, bool ok, string objectType, string objectName, string snapshot)
+        /// <param name="write">The tool changes the element (its file after the call is kept next to the one before).</param>
+        public static void Write(string tool, string arguments, long ms, bool ok, string objectType, string objectName, string snapshot, bool write)
         {
             if (!Enabled) return;
             var entry = new Dictionary<string, object>
@@ -65,9 +60,9 @@ namespace XppVsCode.Server.Host
                 ["arguments"] = arguments == null ? null : arguments.Length > MaxArgumentChars ? arguments.Substring(0, MaxArgumentChars) + "…" : arguments,
                 ["objectType"] = objectType,
                 ["objectName"] = objectName,
-                ["write"] = IsWrite(tool),
+                ["write"] = write,
                 ["before"] = snapshot,
-                ["after"] = IsWrite(tool) && ok ? ElementFile(objectType, objectName) : null,
+                ["after"] = write && ok ? ElementFile(objectType, objectName) : null,
             };
             try
             {
