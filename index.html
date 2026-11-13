@@ -545,8 +545,12 @@ standard elements like the selected one, or matching a description such
 as "batch job with contract".</li>
 <li><strong>Find Message Source:</strong> paste an error, warning or
 info message exactly as the user saw it, values included, and it finds
-the labels and the code that raises it. It is also on every Infolog
-message.</li>
+the labels and the code that raises it. For "Field '...' must be filled
+in." it first lists the mandatory table fields with that label (the
+platform raises it when a field whose Mandatory property is Yes is
+empty), then the code that raises it for one of those fields, and keeps
+code that reuses the text for other fields apart. It is also on every
+Infolog message.</li>
 <li><strong>Quick fixes</strong> (<code>Ctrl+.</code>): extract to
 label, generate <code>find()</code> and <code>exist()</code>, implement
 missing interface methods, and create a Chain of Command wrapper.</li>
