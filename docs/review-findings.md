@@ -31,3 +31,27 @@ Status: Open / Fixed / Partial. Verified with `npm run build`, `npm run test:ser
 | A8 | Medium | God objects: `MetaModelBridge` (25 partial files, 12.2k lines, `IMetaModelBridge` 56 members), `elementDesigner.ts`, `d365Tools.ts`, `codeIntel/providers.ts`. | Fixed for the server: `IMetaModelBridge` replaced by nine role interfaces (`MetadataServices.cs`); the dispatcher depends on `BridgeServices` (composed in `Program`); models, labels, project packages, table relations and builds are separate services over `IMetadataCore`. Code moved verbatim; `scripts/golden-master.js` (94 responses) is identical before and after. The element-centred roles (objects, discovery, designer, projects) stay on `MetaModelBridge`: they share its typed-metadata mapping. The TypeScript modules are unchanged |
 | A9 | Medium | No unit tests: no C# test project; extension tests are integration smoke tests; the security probes live outside the repo. | Fixed: `test/server` xUnit project (43 tests: JSON escaping, URL allow-list, label names, write policy through the dispatcher), `npm run test:server`; `scripts/security-probes.js` (34 DAST probes) in the repo; both in `.github/copilot-instructions.md` |
 | A10 | Low | Culture-sensitive string operations (CA1305/CA1310: 119 hits). | Fixed: all CA1310/CA1307 (ordinal comparisons), invariant culture where metadata values are converted; CA1310/CA1307 are build warnings now (`server/.editorconfig`). Remaining CA1305 are integer formatting and SQL scalars, culture-neutral |
+
+## End-to-end trial (2026-11-13, 0.15.0)
+
+Every agent tool called the way an agent calls it; the UI driven by hand in a clean VS Code profile with only F&O Studio installed (UDE, TestProj/testcust); every command run from the Command Palette in an extension host (`test/commandSweep.js`: 140 commands, prompts cancelled). Verified afterwards with `npm run test:server` (127), `scripts/smoke-test.ps1` (16/16), `node scripts/security-probes.js` (37/37), the database/productivity/security smoke tests and the golden master (only the intended differences below).
+
+| ID | Sev | Finding | Status |
+|---|---|---|---|
+| E1 | High | Run Best Practice Checks on Project (and the Problems list of a build) failed with "line must be non-negative" when xppbp reported a metadata finding with line 0 (e.g. an EDT relation on a table). | Fixed: line 0 means the whole element; mapped lines never go below 0 |
+| E2 | High | `xpp_validate_object` on a form with `dataSources`/`controls` always failed ("expected to exist, not found"): reading a form returned neither. | Fixed: forms return their data sources; controls are compared against the form design |
+| E3 | High | `xpp_read_object` on a form returned only methods and properties. | Fixed: data sources included, and a pointer to `xpp_get_form_layout` for the design |
+| E4 | High | Browse Table Data without database credentials stayed on "Running�": the panel waited on a notification that could slip into the notification center. | Fixed: the credentials prompt is modal; Cancel shows "No database access" in the panel |
+| E5 | Medium | Labels created after the first lookup showed as raw IDs (`@File:Id`) in the form preview and designer until the server restarted. | Fixed: the label cache is refreshed when the label file changes |
+| E6 | Medium | `xpp_read_label` needed `labelFileId` even for a full reference, and legacy IDs (`SYS7149`) were not found (legacy files store `@SYS7149`). | Fixed: `labelId` accepts `@SYS7149` / `@File:Id`; legacy IDs found either way |
+| E7 | Medium | About 12 error paths (designer, ERD, diagrams, trace and security panels, label picker, test runs, environment check and setup) showed errors without Report Problem. | Fixed: they offer Report Problem; the report can now be filed directly as a GitHub issue (VS Code GitHub sign-in), falling back to the browser |
+| E8 | Low | `xpp_list_models` / `xpp_find_object` promised an editable flag but did not show it. | Fixed: `custom (editable)` on your own models |
+| E9 | Low | `xpp_list_objects` did not put the exact match first; a small `maxResults` could drop it. | Fixed |
+| E10 | Low | `xpp_create_object` without an active project said "Could not resolve model ''". | Fixed: says to pass `modelName` or select a project |
+| E11 | Low | `xpp_build` listed the same warning once per occurrence (89 identical lines). | Fixed: identical diagnostics grouped with a count |
+| E12 | Low | View Changes (Copilot Activity) was in the Command Palette and failed there without a selected entry. | Fixed: hidden from the palette |
+| E13 | Info | Kusto snippets were contributed for the `kusto` language, which only exists with a Kusto extension. | Removed; the Telemetry Queries command has the same queries |
+| E14 | Low | `scripts/call.ps1` closed stdin before the server answered, so it printed nothing. | Fixed |
+| E17 | High | While a Copilot checkpoint was open, an agent change was refused when the element's before-state could not be serialized ("There was an error reflecting type ..."; seen for privileges, menu items and forms in a long-running server). | Fixed: the change goes ahead; the checkpoint records why that element can't be reverted and Revert says so |
+| E15 | Low | Browse Table Data picker clears the typed name and shows a second list; its default filter field is the first field alphabetically. | Open |
+| E16 | Low | ERD shows an empty box for related tables without a key field. | Open |

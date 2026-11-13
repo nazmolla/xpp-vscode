@@ -19,9 +19,10 @@ $psi.RedirectStandardInput = $true
 $psi.RedirectStandardOutput = $true
 $psi.RedirectStandardError = $true
 $p = [Diagnostics.Process]::Start($psi)
-$out = $p.StandardOutput.ReadToEndAsync()
 $err = $p.StandardError.ReadToEndAsync()
 
+# The server stops at the end of stdin even while calls are still running: read every response before closing it.
+$expected = 1 + $calls.Count + $(if ($ListTools) { 1 } else { 0 })
 $p.StandardInput.Write('{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"call","version":"1"}}}' + "`n")
 if ($ListTools) { $p.StandardInput.Write('{"jsonrpc":"2.0","id":9999,"method":"tools/list","params":{}}' + "`n") }
 $id = 1
@@ -29,10 +30,19 @@ foreach ($c in $calls) {
     $msg = @{ jsonrpc = '2.0'; id = $id++; method = 'tools/call'; params = @{ name = $c.name; arguments = $c.arguments } } | ConvertTo-Json -Depth 10 -Compress
     $p.StandardInput.Write($msg + "`n")
 }
+$lines = New-Object System.Collections.Generic.List[string]
+$deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+while ($lines.Count -lt $expected -and (Get-Date) -lt $deadline) {
+    $read = $p.StandardOutput.ReadLineAsync()
+    while (-not $read.Wait(500) -and (Get-Date) -lt $deadline) { }
+    if (-not $read.IsCompleted -or $null -eq $read.Result) { break }
+    if ($read.Result.Trim()) { $lines.Add($read.Result) }
+}
+if ($lines.Count -lt $expected) { 'TIMEOUT' }
 $p.StandardInput.Close()
-if (-not $p.WaitForExit($TimeoutSeconds * 1000)) { $p.Kill(); 'TIMEOUT' }
+if (-not $p.WaitForExit(10000)) { $p.Kill() }
 
-foreach ($r in ($out.Result -split "`n" | Where-Object { $_ })) {
+foreach ($r in $lines) {
     $o = $r | ConvertFrom-Json
     if ($o.id -eq 0) { continue }
     if ($o.id -eq 9999) { $o.result.tools | ForEach-Object { "== $($_.name)`n$($_.description)`n$($_.inputSchema | ConvertTo-Json -Depth 12)" }; continue }

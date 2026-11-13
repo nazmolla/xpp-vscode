@@ -195,6 +195,30 @@ namespace XppVsCode.Server.MetaModel
                 result.Message = ex is ArgumentException ? ex.Message : "List error: " + ex.Message;
             }
 
+            // The object named exactly comes first, even when maxResults stopped the scan before it.
+            if (hasNameFilter && result.Success)
+            {
+                try
+                {
+                    foreach (var searcher in GetTypeSearchers(objectType).AsEnumerable().Reverse())
+                    {
+                        int at = result.Objects.FindIndex(o => o.ObjectType == searcher.TypeName && o.ObjectName.Equals(nameFilter, StringComparison.OrdinalIgnoreCase));
+                        FoundObject exact = at >= 0 ? result.Objects[at] : null;
+                        if (exact == null && ObjectExists(searcher.TypeName, nameFilter))
+                        {
+                            string model = GetObjectModelName(searcher.TypeName, nameFilter);
+                            if (!hasModelFilter || modelName.Equals(model, StringComparison.OrdinalIgnoreCase))
+                                exact = new FoundObject { ObjectType = searcher.TypeName, ObjectName = nameFilter, ModelName = model, IsCustom = IsCustomModel(model) };
+                        }
+                        if (exact == null) continue;
+                        if (at >= 0) result.Objects.RemoveAt(at);
+                        result.Objects.Insert(0, exact);
+                        if (result.Objects.Count > maxResults) result.Objects.RemoveAt(result.Objects.Count - 1);
+                    }
+                }
+                catch (Exception ex) { LogIgnored("Exact match for list_objects", ex); }
+            }
+
             if (budgetExceeded)
                 result.Message = BudgetExceededMessage(result.Objects.Count);
 

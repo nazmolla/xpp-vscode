@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { showReportableError } from '../reportProblem';
 
 /** Text, or a link that runs an action when clicked in the panel. */
 export type Inline = string | { text: string; open: () => unknown };
@@ -137,7 +138,7 @@ export class SecurityPanel {
                     break;
             }
         } catch (err) {
-            vscode.window.showErrorMessage((err as Error).message);
+            showReportableError('securityPanel', err);
         }
     }
 

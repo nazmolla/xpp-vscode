@@ -7,6 +7,7 @@ import { pipeline } from 'stream/promises';
 import * as vscode from 'vscode';
 import { dynamics365Folder, notifyEnvironmentChanged, readActiveEnvironment, selectedEnvironmentUrl, useEnvironment } from './environment';
 import { ClientAssets, getAssetDownloadUrl, getDataverseToken, httpFetch, readUdeEnvironment, resolveDataverseUrl, UdeEnvironment, validateDataverseUrl } from './ude';
+import { recordError } from './reportProblem';
 
 const ConfigurationsKey = 'HKCU\\Software\\Microsoft\\Dynamics\\AX7\\Development\\Configurations';
 const RequiredFreeBytes = 16 * 1024 ** 3;
@@ -131,11 +132,14 @@ export async function connectEnvironment(context: vscode.ExtensionContext, log: 
                 status!.running = false;
                 status!.error = message;
                 setupChanged.fire(status);
-                const choice = await vscode.window.showErrorMessage(`Environment setup failed: ${message}`, 'Retry', 'Show Log');
+                recordError('connectEnvironment', err as Error);
+                const choice = await vscode.window.showErrorMessage(`Environment setup failed: ${message}`, 'Retry', 'Show Log', 'Report Problem');
                 if (choice === 'Retry') {
                     void vscode.commands.executeCommand('xpp.connectEnvironment', dataverseUrl);
                 } else if (choice === 'Show Log') {
                     log.show(true);
+                } else if (choice === 'Report Problem') {
+                    void vscode.commands.executeCommand('xpp.reportProblem', 'connectEnvironment');
                 }
                 return false;
             }
