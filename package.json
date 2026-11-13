@@ -2,7 +2,7 @@
   "name": "xpp-vscode",
   "displayName": "F&O Studio for VS Code",
   "description": "Dynamics 365 Finance & Operations X++ development without Visual Studio: Application Explorer, designers, X++ code intelligence, build, deploy, debugging, data, performance and trace analysis, and Copilot agent tools on the real metadata API.",
-  "version": "0.14.1",
+  "version": "0.15.0",
   "publisher": "MNazmi",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -320,6 +320,82 @@
             "description": "Find performance problems in an element or process"
           }
         ]
+      }
+    ],
+    "chatAgents": [
+      {
+        "path": "./agents/developer.agent.md"
+      },
+      {
+        "path": "./agents/reviewer.agent.md"
+      },
+      {
+        "path": "./agents/support.agent.md"
+      },
+      {
+        "path": "./agents/solution-designer.agent.md"
+      },
+      {
+        "path": "./agents/architect.agent.md"
+      },
+      {
+        "path": "./agents/security.agent.md"
+      },
+      {
+        "path": "./agents/performance.agent.md"
+      },
+      {
+        "path": "./agents/upgrade.agent.md"
+      },
+      {
+        "path": "./agents/integration.agent.md"
+      },
+      {
+        "path": "./agents/test-engineer.agent.md"
+      },
+      {
+        "path": "./agents/report-developer.agent.md"
+      },
+      {
+        "path": "./agents/workflow.agent.md"
+      },
+      {
+        "path": "./agents/release-manager.agent.md"
+      },
+      {
+        "path": "./agents/archaeologist.agent.md"
+      },
+      {
+        "path": "./agents/explainer.agent.md"
+      },
+      {
+        "path": "./agents/setup-advisor.agent.md"
+      },
+      {
+        "path": "./agents/data-investigator.agent.md"
+      },
+      {
+        "path": "./agents/triage.agent.md"
+      },
+      {
+        "path": "./agents/role-designer.agent.md"
+      },
+      {
+        "path": "./agents/test-scenarios.agent.md"
+      },
+      {
+        "path": "./agents/fit-gap.agent.md"
+      },
+      {
+        "path": "./agents/data-migration.agent.md"
+      },
+      {
+        "path": "./agents/release-notes.agent.md"
+      }
+    ],
+    "chatInstructions": [
+      {
+        "path": "./agents/fno-agents.instructions.md"
       }
     ],
     "taskDefinitions": [
@@ -2521,6 +2597,7 @@
     "build:server": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-server.ps1",
     "test:server": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-server.ps1 -Test && node scripts/check-bridge-actions.js",
     "build": "npm run build:server && npm run compile",
+    "agents": "node scripts/build-agents.js",
     "package": "vsce package --readme-path docs/FEATURES.md --baseContentUrl https://github.com/nazmolla/xpp-vscode/blob/HEAD/docs --baseImagesUrl https://github.com/nazmolla/xpp-vscode/raw/HEAD/docs",
     "publish": "vsce publish --readme-path docs/FEATURES.md --baseContentUrl https://github.com/nazmolla/xpp-vscode/blob/HEAD/docs --baseImagesUrl https://github.com/nazmolla/xpp-vscode/raw/HEAD/docs"
   },
