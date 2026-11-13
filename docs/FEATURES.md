@@ -10,6 +10,16 @@ Develop Dynamics 365 Finance & Operations X++ code in VS Code, without Visual St
 
 ## What's new in 0.15
 
+**0.15.1: Fixes from an end-to-end trial of every tool and command.**
+- Run Best Practice Checks no longer fails with "line must be non-negative" (metadata findings without a line).
+- Forms: `xpp_read_object` returns their data sources, and `xpp_validate_object` checks form data sources and controls correctly.
+- Copilot checkpoints no longer block a change when the element's earlier state can't be saved; Revert names that element.
+- Browse Table Data without database credentials asks in a dialog instead of waiting on a notification.
+- New labels show their text in the designer and form preview right away.
+- `xpp_read_label` accepts full references (`@SYS7149`, `@SCM:SalesStatusLabel`); model and object lists mark your own models; exact name matches come first.
+- **Report Problem** on every unexpected error, and it can file the GitHub issue directly with your GitHub sign-in.
+- The Kusto snippets were removed (they needed a Kusto extension); the Telemetry Queries command has the same queries.
+
 - **Copilot agents for developers and functional consultants.** 23 agents in the Copilot agent picker, each with its own instructions and the next agent to hand off to:
   - **Developers:** F&O Developer, Code Reviewer, Support, Performance, Upgrade Reviewer, Test Engineer, Report Developer, Workflow & Events, Release Manager, Code Archaeologist.
   - **Developers and consultants:** Solution Designer, Architect, Security & License, Integration.
