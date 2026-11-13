@@ -2,7 +2,7 @@
   "name": "xpp-vscode",
   "displayName": "F&O Studio for VS Code",
   "description": "Dynamics 365 Finance & Operations X++ development without Visual Studio: Application Explorer, designers, X++ code intelligence, build, deploy, debugging, data, performance and trace analysis, and Copilot agent tools on the real metadata API.",
-  "version": "0.15.0",
+  "version": "0.15.1",
   "publisher": "MNazmi",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -230,10 +230,6 @@
       {
         "language": "xpp",
         "path": "./snippets/xpp.json"
-      },
-      {
-        "language": "kusto",
-        "path": "./snippets/kusto.json"
       }
     ],
     "viewsContainers": {
@@ -2155,6 +2151,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "xpp.activity.showChanges",
+          "when": "false"
+        },
         {
           "command": "xpp.results.rerun",
           "when": "xpp.results.canRerun"

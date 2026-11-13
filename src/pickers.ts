@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { iconFor, typeName } from './aot';
 import { listLabelFiles } from './d365Tools';
 import { XppServerClient } from './serverClient';
+import { showReportableError } from './reportProblem';
 
 interface Match { objectType: string; objectName: string; modelName: string; isCustom?: boolean }
 
@@ -114,7 +115,7 @@ export async function pickLabel(server: XppServerClient, title: string, current 
             } else if (item?.create) {
                 pick.busy = true;
                 const reference = await createLabel(server, item.create.fileId, item.create.text).catch(err => {
-                    vscode.window.showErrorMessage((err as Error).message);
+                    showReportableError('createLabel', err);
                     return undefined;
                 });
                 finish(reference);

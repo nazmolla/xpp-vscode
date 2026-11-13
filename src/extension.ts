@@ -151,7 +151,7 @@ export function activate(context: vscode.ExtensionContext): void {
     });
     command('xpp.selectEnvironment', () => selectEnvironment());
     command('xpp.environment.menu', () => environment.menu());
-    command('xpp.reportProblem', () => reportProblem(context, UsageKey));
+    command('xpp.reportProblem', (failedCommand?: unknown) => reportProblem(context, UsageKey, typeof failedCommand === 'string' ? failedCommand : undefined));
     command('xpp.restartServer', () => vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: 'Restarting the X++ server' }, async () => {
         server.restart();
         languageServer.restart();

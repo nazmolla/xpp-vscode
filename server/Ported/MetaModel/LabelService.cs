@@ -25,6 +25,30 @@ namespace XppVsCode.Server.MetaModel
         private IMetaModelService MetaService => _core.MetaService;
         private IMetadataProvider MetadataProvider => _core.MetadataProvider;
 
+        /// <summary>
+        /// Accepts a full label reference in labelId: '@File:Id' gives the file and the ID; a legacy '@SYS7149' gives the file
+        /// from its letters (the ID keeps the '@', as legacy files store it).
+        /// </summary>
+        internal static void SplitLabelReference(ref string labelFileId, ref string labelId)
+        {
+            if (string.IsNullOrEmpty(labelId) || labelId[0] != '@')
+                return;
+            int colon = labelId.IndexOf(':');
+            if (colon > 1)
+            {
+                labelFileId = labelId.Substring(1, colon - 1);
+                labelId = labelId.Substring(colon + 1);
+                return;
+            }
+            if (string.IsNullOrEmpty(labelFileId))
+            {
+                int end = 1;
+                while (end < labelId.Length && char.IsLetter(labelId[end])) end++;
+                if (end > 1)
+                    labelFileId = labelId.Substring(1, end - 1);
+            }
+        }
+
         public LabelResult ReadLabel(string labelFileId, string language, string labelId, string searchText, int maxResults)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
@@ -33,6 +57,9 @@ namespace XppVsCode.Server.MetaModel
 
             try
             {
+                SplitLabelReference(ref labelFileId, ref labelId);
+                if (string.IsNullOrEmpty(labelFileId))
+                    return new LabelResult { Message = "Pass labelFileId, or a full label reference in labelId (e.g. '@SYS7149' or '@SCM:SalesStatusLabel')." };
                 string labelPath = _labels.FindLabelFile(labelFileId, language);
                 if (labelPath == null)
                     return new LabelResult { Message = "Label file '" + labelFileId + "' (" + (language ?? "en-US") + ") not found." };
@@ -43,6 +70,9 @@ namespace XppVsCode.Server.MetaModel
                 if (!string.IsNullOrEmpty(labelId))
                 {
                     result.Labels.AddRange(_labels.Read(labelPath, labelId, null, 1));
+                    // Legacy label files (SYS, SCM numbered labels...) store their IDs with the '@': '@SYS7149=...'.
+                    if (result.Labels.Count == 0 && !labelId.StartsWith("@"))
+                        result.Labels.AddRange(_labels.Read(labelPath, "@" + labelId, null, 1));
                     if (result.Labels.Count == 0)
                         result.Message = "Label '" + labelId + "' not found in " + labelFileId;
                     return result;

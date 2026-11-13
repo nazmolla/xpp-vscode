@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as vscode from 'vscode';
 import { elementOpenCommand, typeLabel, typeName } from './aot';
 import { XppServerClient } from './serverClient';
+import { showReportableError } from './reportProblem';
 
 export const MetadataScheme = 'xppmeta';
 
@@ -85,7 +86,7 @@ document.getElementById('save').addEventListener('click', () => vscode.postMessa
             }
             const node = nodes[message.id];
             if (node?.open) {
-                Promise.resolve(node.open()).catch(err => vscode.window.showErrorMessage((err as Error).message));
+                Promise.resolve(node.open()).catch(err => showReportableError('diagram', err));
             } else if (node?.objectType && node.objectName) {
                 const open = elementOpenCommand(node.objectType, node.objectName);
                 void vscode.commands.executeCommand(open.command, ...(open.arguments ?? []));

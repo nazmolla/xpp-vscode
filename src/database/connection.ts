@@ -56,7 +56,11 @@ export class DatabaseAccess implements vscode.Disposable {
         if (target) {
             return target;
         }
-        const choice = await vscode.window.showInformationMessage('The database of a unified environment needs temporary credentials.', 'Request Credentials');
+        // Modal: a toast can slip into the notification center while the caller (e.g. the data panel) waits on it.
+        const choice = await vscode.window.showInformationMessage('The database of a unified environment needs temporary credentials.', {
+            modal: true,
+            detail: 'F&O Studio requests them from the environment (just-in-time SQL access) and keeps them in VS Code\'s secret storage until they expire.',
+        }, 'Request Credentials');
         return choice ? this.request() : undefined;
     }
 
