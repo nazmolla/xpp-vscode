@@ -1308,7 +1308,7 @@
     },
     {
       "name": "xpp_find_message_source",
-      "description": "Finds the X++ code that raises a message (error, warning or info text). Paste the message as shown, values included: it is matched against every label text (placeholders %1..%9 match any value), and the labels' usages come from the cross-reference database with the code line (raising code first, tests last). Messages written as literal strings are found by a code search. Use it to debug an error a user reports, or to find the standard check you must satisfy or extend.",
+      "description": "Finds the X++ code that raises a message (error, warning or info text). Paste the message as shown, values included: it is matched against every label text (placeholders %1..%9 match any value), and the labels' usages come from the cross-reference database with the code line (raising code first, tests last). Messages written as literal strings are found by a code search. For the platform's \"Field %1 must be filled in.\" it lists the table fields with that label whose Mandatory property is Yes (table or table extension), and separates code that raises it for one of those fields from code that reuses the text for other fields. Use it to debug an error a user reports, or to find the standard check you must satisfy or extend.",
       "inputSchema": {
         "type": "object",
         "properties": {

@@ -830,6 +830,19 @@ namespace XppVsCode.Server.Tools
                 : u["objectType"] + " " + u["objectName"] + (((string[])u["memberPath"]).Length > 0 ? " / " + string.Join("/", (string[])u["memberPath"]) : "")
                   + " line " + u["line"] + (u["text"] is string t && t.Length > 0 ? ": " + t : "");
             if (labels.Count == 0) sb.AppendLine("No " + r["language"] + " label text matches this message.");
+            var mandatory = r["mandatory"] as Dictionary<string, object>;
+            if (mandatory != null)
+            {
+                var fields = (List<Dictionary<string, object>>)mandatory["fields"];
+                sb.AppendLine("Mandatory-field message: the platform raises \"Field %1 must be filled in.\" (" + mandatory["platformLabel"]
+                    + ") when a field whose Mandatory property is Yes is empty on insert or update; %1 is the field label, \"" + mandatory["field"] + "\".");
+                sb.AppendLine("Mandatory fields labelled \"" + mandatory["field"] + "\" (" + fields.Count + " of " + mandatory["labelledFields"] + " fields with this label):");
+                foreach (var f in fields.Take(15))
+                    sb.AppendLine("  - " + f["table"] + "." + f["field"] + " [" + f["model"] + "], Mandatory set by " + f["setBy"]);
+                if (fields.Count > 15) sb.AppendLine("  (+" + (fields.Count - 15) + " more; most used tables first)");
+                if (fields.Count == 0) sb.AppendLine("  none on tables: check Mandatory on form data source fields and controls, the user's personalization, or the code below.");
+                else sb.AppendLine("  Also check form data source fields and controls (Mandatory) of the form in use.");
+            }
             foreach (var l in labels)
             {
                 var usages = (List<Dictionary<string, object>>)l["usages"];
@@ -838,6 +851,20 @@ namespace XppVsCode.Server.Tools
                     + " \"" + l["text"] + "\"" + ((bool)l["whole"] ? " (the whole message)" : " (part of the message)") + ":");
                 if ((int)l["usageCount"] < 0) sb.AppendLine("  (where-used unavailable: " + r["xrefProblem"] + ")");
                 else if (usages.Count == 0) sb.AppendLine("  not used in X++ or metadata of the indexed packages: the platform (kernel) raises it, or its package was not built with cross-reference data.");
+                if (mandatory != null && (int)l["usageCount"] > 0)
+                {
+                    bool IsRelated(Dictionary<string, object> u) => u.TryGetValue("related", out object v) && v is bool b && b;
+                    var forField = usages.Where(IsRelated).ToList();
+                    var others = (int)l["usageCount"] - (int)l["relatedCount"];
+                    sb.AppendLine("  Code that raises it for \"" + mandatory["field"] + "\" (names one of those fields or its label): " + (forField.Count == 0 ? "none" : ""));
+                    foreach (var u in forField) sb.AppendLine("  - " + Where(u));
+                    if (others > 0)
+                    {
+                        sb.AppendLine("  Same text raised by code for other fields (" + others + "), unrelated unless the field name is computed:");
+                        foreach (var u in usages.Where(u => !IsRelated(u)).Take(3)) sb.AppendLine("  - " + Where(u));
+                    }
+                    continue;
+                }
                 foreach (var u in usages) sb.AppendLine("  - " + Where(u));
             }
             if (literal.Count > 0)
@@ -845,7 +872,9 @@ namespace XppVsCode.Server.Tools
                 sb.AppendLine("Code with the message as literal text:");
                 foreach (var u in literal) sb.AppendLine("  - " + Where(u));
             }
-            sb.AppendLine("Read the raising method with xpp_read_object (methodNames) to see the condition; the caller chain is in xpp_find_references.");
+            sb.AppendLine(mandatory != null
+                ? "Read the field's table (xpp_read_object) for its Mandatory property and the code that fills it; a raising method's condition is in xpp_read_object (methodNames)."
+                : "Read the raising method with xpp_read_object (methodNames) to see the condition; the caller chain is in xpp_find_references.");
             return JsonHelpers.BuildToolResult(idToken, sb.ToString());
         }
 

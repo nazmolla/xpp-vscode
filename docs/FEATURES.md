@@ -151,7 +151,7 @@ Turn each feature on or off with **Configure Code Intelligence…**, or with the
 ### Productivity
 - **Search Code in All Packages** (`Ctrl+Shift+Alt+F`): text or regex search over every package's X++ code.
 - **Find Similar Standard Implementations:** standard elements like the selected one, or matching a description such as "batch job with contract".
-- **Find Message Source:** paste an error, warning or info message as the user saw it, values included, to find the labels and the code that raises it. It's also on every Infolog message.
+- **Find Message Source:** paste an error, warning or info message as the user saw it, values included, to find the labels and the code that raises it. For "Field '…' must be filled in." it first lists the mandatory table fields with that label (the platform raises it when a field whose Mandatory property is Yes is empty), then the code that raises it for one of those fields, and keeps code that reuses the text for other fields apart. It's also on every Infolog message.
 - **Quick fixes** (`Ctrl+.`):
   - extract to label;
   - generate `find()` and `exist()`;
