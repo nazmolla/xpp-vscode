@@ -257,6 +257,12 @@ Turn each feature on or off with **Configure Code Intelligence…**, or with the
 - **Cloud-hosted and VHD environments** work without a connection step. F&O Studio uses the local PackagesLocalDirectory, AOS and AxDB. Deploy (pac) and Run Tests are UDE-only and are hidden there; the debugger attaches to the local AOS (*preview*, needs the C# extension).
 
 ### Copilot
+- **Agents** in the Copilot agent picker, each with its own instructions and next-step handoffs:
+  - **Developers:** F&O Developer, Code Reviewer, Support, Performance, Upgrade Reviewer, Test Engineer, Report Developer, Workflow & Events, Release Manager, Code Archaeologist.
+  - **Developers and consultants:** Solution Designer, Architect, Security & License, Integration.
+  - **Functional consultants:** Functional Explainer, Setup Advisor, Data Investigator, Functional Triage, Role Designer, Test Scenarios, Fit-Gap Analyst, Data Migration, Release Notes. They answer in business terms and use the live environment through the Dynamics 365 ERP MCP server or the browser (they suggest connecting it when it's missing).
+  - When you haven't picked one, Copilot suggests the agent that fits, or runs it for a self-contained part of the task.
+  - Agents change data, setup or metadata only after you allow it, and only in development, sandbox or build environments, never in production.
 - **@fno** in Copilot Chat: `/design`, `/extend`, `/explain`, `/review`, `/support`, `/performance`.
 - **Copilot Activity** shows every tool call agents make, with arguments, duration and result. Changed elements link to their designer.
 - **Checkpoints and scope:**
