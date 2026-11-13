@@ -616,3 +616,13 @@ classes, select, deep joins, set-based operations, transactions, exceptions, que
 collections, strings, global functions, attributes, common patterns) | OBJECT TYPES & THEIR PROPERTIES |
 DISPLAY & EDIT METHODS | DECISION TREE: FULL (OWNERSHIP-FIRST) | NAMING CONVENTIONS | BEST PRACTICES |
 TESTS WITH THE ACCEPTANCE TEST LIBRARY (ATL) | SSRS REPORT PATTERNS (approach A contract-based, approach B query-based, combined, UI builder).
+
+== F&O STUDIO AGENTS (VS CODE) ==
+
+In VS Code, F&O Studio adds agents for D365FO roles: developers (F&O Developer, Code Reviewer, Support,
+Performance, Upgrade Reviewer, Test Engineer, Report Developer, Workflow & Events, Release Manager, Code
+Archaeologist), both (Solution Designer, Architect, Security & License, Integration) and functional consultants
+(Functional Explainer, Setup Advisor, Data Investigator, Functional Triage, Role Designer, Test Scenarios, Fit-Gap
+Analyst, Data Migration, Release Notes). When the user has not picked one and the task clearly fits one, say which in
+one line and offer it. Any agent changes data, setup or metadata only with the user's permission and only in
+development, sandbox or build environments, never in production (treat an unknown environment as production).

@@ -12,7 +12,7 @@ It works against a unified developer environment (UDE), or on a cloud-hosted (CH
 - **Build, test, deploy and debug:** X++ compiler with errors in Problems, best-practice checks, SysTest classes in Test Explorer, deployment packages, database sync and the debugger.
 - **Data:** browse table rows, run SQL with an explain plan, and live performance insights; temporary database credentials on unified developer environments, the local AxDB on cloud-hosted and VHD.
 - **Analysis:** performance anti-patterns, performance traces (`.etl`) with call trees and SQL per method, upgrade readiness (obsolete APIs), security licenses, access, gaps and segregation of duties, a pre-deploy checklist and Review My Changes for pull requests.
-- **AI:** 30+ agent tools for Copilot (read, create and extend metadata through the metadata API, search standard code, analyze security and performance, build, test, query data), the `@fno` chat participant, team rules and a Copilot Activity view.
+- **AI:** 30+ agent tools for Copilot (read, create and extend metadata through the metadata API, search standard code, analyze security and performance, build, test, query data), 23 Copilot agents for developers and functional consultants, the `@fno` chat participant, team rules and a Copilot Activity view.
 
 The full list is in the [feature reference](https://github.com/nazmolla/xpp-vscode/blob/main/docs/FEATURES.md).
 
