@@ -88,10 +88,21 @@ namespace XppVsCode.Server.MetaModel
             if (element != null)
             {
                 entry["clrType"] = element.GetType().AssemblyQualifiedName;
-                using (var writer = new StringWriter())
+                // A failed snapshot must not block the change itself: the entry records why this element can't be reverted.
+                try
                 {
-                    new XmlSerializer(element.GetType()).Serialize(writer, element);
-                    entry["xml"] = writer.ToString();
+                    using (var writer = new StringWriter())
+                    {
+                        new XmlSerializer(element.GetType()).Serialize(writer, element);
+                        entry["xml"] = writer.ToString();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    var causes = new List<string>();
+                    for (Exception e = ex; e != null; e = e.InnerException) causes.Add(e.Message);
+                    entry["snapshotError"] = string.Join(" -> ", causes);
+                    LogIgnored("Checkpoint snapshot of " + objectType + " " + objectName, ex);
                 }
             }
             File.WriteAllText(file, new JavaScriptSerializer { MaxJsonLength = int.MaxValue }.Serialize(entry));
@@ -138,6 +149,12 @@ namespace XppVsCode.Server.MetaModel
                     if (!IsCustomModel(model))
                     {
                         failed.Add(label + ": not in one of your models.");
+                        continue;
+                    }
+                    if (!e.ContainsKey("xml"))
+                    {
+                        failed.Add(label + ": its state before the change could not be saved"
+                            + (e.ContainsKey("snapshotError") ? " (" + e["snapshotError"] + ")" : "") + "; restore it from source control.");
                         continue;
                     }
                     Type type = Type.GetType((string)e["clrType"], throwOnError: false);

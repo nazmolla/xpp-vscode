@@ -12,8 +12,10 @@ namespace XppVsCode.Server.MetaModel
     {
         private const int MaxDesignerNodes = 3000;
         private static readonly Regex LabelReference = new Regex(@"^@(?:(?<file>[A-Za-z]\w*):(?<id>\w+)|(?<file>[A-Za-z]+)(?<id>\d+))$");
-        private readonly Dictionary<string, Dictionary<string, string>> _labelCache =
-            new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        // Label texts per label file, with the file's write time: labels added after the first lookup must show.
+        private readonly Dictionary<string, KeyValuePair<DateTime, Dictionary<string, string>>> _labelCache =
+            new Dictionary<string, KeyValuePair<DateTime, Dictionary<string, string>>>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> _labelPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>The form with all extensions merged, as JSON for the designer.</summary>
         public string GetFormTreeJson(string formName)
@@ -128,15 +130,18 @@ namespace XppVsCode.Server.MetaModel
             if (!m.Success) return value;
 
             string file = m.Groups["file"].Value;
-            if (!_labelCache.TryGetValue(file, out var labels))
+            if (!_labelPaths.TryGetValue(file, out string path))
+                _labelPaths[file] = path = _labels.FindLabelFile(file, "en-US");
+            DateTime stamp = path != null ? System.IO.File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
+            if (!_labelCache.TryGetValue(file, out var cached) || cached.Key != stamp)
             {
-                labels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                string path = _labels.FindLabelFile(file, "en-US");
+                var read = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 if (path != null)
                     foreach (var entry in _labels.Read(path, null, null, int.MaxValue))
-                        labels[entry.Id] = entry.Text;
-                _labelCache[file] = labels;
+                        read[entry.Id] = entry.Text;
+                _labelCache[file] = cached = new KeyValuePair<DateTime, Dictionary<string, string>>(stamp, read);
             }
+            var labels = cached.Value;
             // Legacy files store ids with the '@' (e.g. "@SYS76213=..."); newer files store just the id.
             string id = value.Contains(":") ? m.Groups["id"].Value : value;
             return labels.TryGetValue(id, out string text) ? text : value;

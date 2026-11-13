@@ -129,6 +129,13 @@ namespace XppVsCode.Server.MetaModel
                 foreach (var m in frm.Methods)
                     result.Methods.Add(new MethodInfo { Name = m.Name, Source = m.Source });
             result.Properties = ExtractProperties(frm);
+            result.DataSources = frm.DataSources.Select(ds => new QueryDataSourceDto
+            {
+                Name = ds.Name,
+                Table = ds.Table,
+                ParentDataSource = ds.JoinSource,
+                LinkType = string.IsNullOrEmpty(ds.JoinSource) ? null : ds.LinkType.ToString()
+            }).ToList();
             result.TypedMetadataJson = BuildTypedMetadataJson(objectType, frm);
             result.ModelName = GetObjectModelName(objectType, objectName);
             return null;

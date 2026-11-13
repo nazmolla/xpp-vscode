@@ -47,6 +47,7 @@ namespace XppVsCode.Server.MetaModel
             _objectModelNameCache.Clear();
             _elementCacheKey = null;
             _typeNames.Clear();
+            _labelPaths.Clear();
         }
 
         private IMetaModelService MetaService => _host.MetaService;
@@ -68,7 +69,9 @@ namespace XppVsCode.Server.MetaModel
 
             var saveInfo = GetModelSaveInfo(request.ModelName);
             if (saveInfo == null)
-                return Fail("Could not resolve model '" + request.ModelName + "'. Ensure a D365FO project is open.");
+                return Fail(string.IsNullOrEmpty(request.ModelName)
+                    ? "No target model: there is no active project. Pass modelName (one of your models, see xpp_list_models: 'custom (editable)') or select a project with xpp_select_project."
+                    : "Could not resolve model '" + request.ModelName + "'. Check the name with xpp_list_models.");
 
             try
             {

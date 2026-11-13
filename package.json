@@ -230,10 +230,6 @@
       {
         "language": "xpp",
         "path": "./snippets/xpp.json"
-      },
-      {
-        "language": "kusto",
-        "path": "./snippets/kusto.json"
       }
     ],
     "viewsContainers": {
@@ -2155,6 +2151,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "xpp.activity.showChanges",
+          "when": "false"
+        },
         {
           "command": "xpp.results.rerun",
           "when": "xpp.results.canRerun"

@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import { XppServerClient } from './serverClient';
+import { showReportableError } from './reportProblem';
 
 export type ErdDirection = 'outgoing' | 'incoming' | 'both';
 
@@ -55,7 +56,7 @@ export class ErdPanel {
     ) {
         panel.webview.html = this.html();
         panel.onDidDispose(() => ErdPanel.panels.delete(this.table.toLowerCase()));
-        panel.webview.onDidReceiveMessage(message => this.onMessage(message).catch(err => vscode.window.showErrorMessage((err as Error).message)));
+        panel.webview.onDidReceiveMessage(message => this.onMessage(message).catch(err => showReportableError('erd', err)));
     }
 
     private async onMessage(message: any): Promise<void> {

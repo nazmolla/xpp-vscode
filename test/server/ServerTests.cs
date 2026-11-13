@@ -72,6 +72,19 @@ namespace XppVsCode.Server.Tests
         [InlineData("..\\x", false)]
         [InlineData("en-US\\..", false)]
         public void Languages(string language, bool valid) => Assert.Equal(valid, LabelStore.IsLanguage(language));
+
+        [Theory]
+        [InlineData(null, "@SYS7149", "SYS", "@SYS7149")]
+        [InlineData(null, "@SCM:SalesStatusLabel", "SCM", "SalesStatusLabel")]
+        [InlineData("Other", "@SCM:SalesStatusLabel", "SCM", "SalesStatusLabel")]
+        [InlineData("SYS", "SYS7149", "SYS", "SYS7149")]
+        [InlineData(null, "SYS7149", null, "SYS7149")]
+        public void LabelReferencesNameTheirFile(string fileIn, string idIn, string file, string id)
+        {
+            LabelService.SplitLabelReference(ref fileIn, ref idIn);
+            Assert.Equal(file, fileIn);
+            Assert.Equal(id, idIn);
+        }
     }
 
     public class WritePolicyTests

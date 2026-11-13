@@ -12,6 +12,7 @@ import { pickLabel, pickReference } from './pickers';
 import { renameFieldEverywhere } from './refactor';
 import { XppServerClient } from './serverClient';
 import { methodSpans } from './xppSource';
+import { showReportableError } from './reportProblem';
 
 /** Context passed by the designer tree's right-click menu (data-vscode-context). */
 export interface DesignerNodeContext {
@@ -137,7 +138,7 @@ export class ElementDesigner {
                 case 'findEventHandlers': return await designer.findEventHandlers(path, node);
             }
         } catch (err) {
-            vscode.window.showErrorMessage((err as Error).message);
+            showReportableError('elementDesigner', err);
         }
     }
 

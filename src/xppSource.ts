@@ -128,7 +128,7 @@ export function compilerLineToDocumentLine(text: string, compilerLine: number): 
             const docStart = lineOf(normalized, start + (block.length - block.trimStart().length));
             const lines = trimmed.split('\n').length - (first && methodName(trimmed) === 'classDeclaration' ? 1 : 0);
             if (compilerLine < compilerStart + lines) {
-                return docStart + (compilerLine - compilerStart);
+                return Math.max(0, docStart + (compilerLine - compilerStart));
             }
             compilerStart += lines;
             first = false;

@@ -8,6 +8,7 @@ import { readActiveEnvironment } from './environment';
 import { findActiveProject, readProject } from './project';
 import { XppServerClient } from './serverClient';
 import { DeployState } from './deployState';
+import { showReportableError } from './reportProblem';
 
 /**
  * Runs X++ SysTest tests on the unified developer environment's cloud runtime, the way Visual Studio's Test Explorer
@@ -309,7 +310,7 @@ export function registerTests(context: vscode.ExtensionContext, server: XppServe
                 void (failed ? vscode.window.showErrorMessage : vscode.window.showInformationMessage)(result.summary.split('\n')[0]);
             } catch (err) {
                 output.appendLine(`Test run failed: ${(err as Error).message}`);
-                void vscode.window.showErrorMessage(`Test run failed: ${(err as Error).message}`);
+                showReportableError('testRun', err, 'Test run failed: ');
             }
         });
     }));

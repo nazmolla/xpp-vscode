@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { promises as dns } from 'dns';
 import * as vscode from 'vscode';
 import { orgName, selectedEnvironmentUrl, useEnvironment } from './environment';
+import { showReportableError } from './reportProblem';
 
 const DevToolsService = 'https://developertools.powerplatform.microsoft.com';
 
@@ -238,6 +239,6 @@ export async function checkEnvironmentConnection(log: vscode.OutputChannel): Pro
         }
     } catch (err) {
         log.appendLine(`FAILED: ${(err as Error).message}`);
-        vscode.window.showErrorMessage(`Environment check failed: ${(err as Error).message}`);
+        showReportableError('checkEnvironment', err, 'Environment check failed: ');
     }
 }

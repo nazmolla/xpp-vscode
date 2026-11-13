@@ -245,10 +245,13 @@ namespace XppVsCode.Server.MetaModel
                 text.Append(exit != 0 ? ". xppc exited with " + exit : "").Append(!assemblyWritten ? ". No assembly was produced" : "");
             text.AppendLine(".");
 
-            foreach (var d in reported.OrderBy(d => IsBlocking(d.Severity) ? 0 : 1).Take(MaxReportedDiagnostics))
-                text.AppendLine(FormatDiagnostic(d));
-            if (reported.Count > MaxReportedDiagnostics)
-                text.AppendLine("... " + (reported.Count - MaxReportedDiagnostics) + " more in " + xmlLog);
+            // Identical diagnostics (an obsolete base referenced by every field of an extension...) are listed once with a count.
+            var lines = reported.OrderBy(d => IsBlocking(d.Severity) ? 0 : 1).Select(FormatDiagnostic)
+                .GroupBy(l => l).Select(g => g.Count() > 1 ? g.Key + " (x" + g.Count() + ")" : g.Key).ToList();
+            foreach (var l in lines.Take(MaxReportedDiagnostics))
+                text.AppendLine(l);
+            if (lines.Count > MaxReportedDiagnostics)
+                text.AppendLine("... " + (lines.Count - MaxReportedDiagnostics) + " more in " + xmlLog);
             if (!success && blocking.Count == 0)
                 text.AppendLine(Tail(log.ToString(), 2000));
 
