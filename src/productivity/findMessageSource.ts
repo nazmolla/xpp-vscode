@@ -13,6 +13,7 @@ interface Usage {
     text: string | null;
     model: string | null;
     label?: string;
+    related?: boolean;
 }
 
 interface LabelMatch {
@@ -21,11 +22,29 @@ interface LabelMatch {
     whole: boolean;
     usages: Usage[];
     usageCount: number;
+    relatedCount?: number;
+}
+
+interface MandatoryField {
+    table: string;
+    field: string;
+    model: string;
+    objectType: string;
+    objectName: string;
+    setBy: string;
+}
+
+interface MandatoryInfo {
+    field: string;
+    platformLabel: string;
+    fields: MandatoryField[];
+    labelledFields: number;
 }
 
 interface TraceResult {
     labels: LabelMatch[];
     literal: Usage[];
+    mandatory?: MandatoryInfo | null;
     xrefProblem?: string;
     ms: number;
 }
@@ -52,11 +71,42 @@ export async function findMessageSource(ctx: ProductivityContext, entry?: { mess
         { location: vscode.ProgressLocation.Notification, title: 'Finding where the message comes from…' },
         () => call<TraceResult>(ctx.languageServer, 'lang', 'message_source', { message: message.trim(), maxLabels: 5, maxResults: 40 }));
 
-    type Pick = vscode.QuickPickItem & { usage?: Usage };
+    type Pick = vscode.QuickPickItem & { usage?: Usage; field?: MandatoryField };
     const picks: Pick[] = [];
+    const mandatory = result.mandatory;
+    if (mandatory) {
+        // The platform raises this for empty fields with Mandatory = Yes: the fields come first, code that reuses the text after.
+        picks.push({ label: `Mandatory fields · platform check (${mandatory.platformLabel})`, kind: vscode.QuickPickItemKind.Separator });
+        if (mandatory.fields.length === 0) {
+            picks.push({
+                label: '$(info) No table field with this label is mandatory',
+                detail: `${mandatory.labelledFields} fields have this label. Check Mandatory on form data source fields and controls, personalization, or the code below.`,
+            });
+        }
+        picks.push(...mandatory.fields.map(f => ({
+            label: `$(symbol-field) ${f.table}.${f.field}`,
+            description: 'Mandatory = Yes',
+            detail: `${f.setBy === 'table' ? 'Table' : f.setBy.charAt(0).toUpperCase() + f.setBy.slice(1)} · ${f.model}`,
+            field: f,
+        })));
+    }
     for (const match of result.labels ?? []) {
         const ids = match.labels.slice(0, 3).join(', ') + (match.labels.length > 3 ? ` +${match.labels.length - 3}` : '');
-        picks.push({ label: `"${match.text}" · ${ids}${match.whole ? '' : ' (part of the message)'}`, kind: vscode.QuickPickItemKind.Separator });
+        const heading = `"${match.text}" · ${ids}${match.whole ? '' : ' (part of the message)'}`;
+        if (mandatory && match.usageCount > 0) {
+            const forField = match.usages.filter(u => u.related);
+            const others = match.usages.filter(u => !u.related);
+            if (forField.length > 0) {
+                picks.push({ label: `Code that raises it for "${mandatory.field}" · ${heading}`, kind: vscode.QuickPickItemKind.Separator });
+                picks.push(...forField.map(usage => toPick(usage)));
+            }
+            if (others.length > 0) {
+                picks.push({ label: `Same text, other fields (${match.usageCount - (match.relatedCount ?? 0)}) · ${heading}`, kind: vscode.QuickPickItemKind.Separator });
+                picks.push(...others.map(usage => toPick(usage)));
+            }
+            continue;
+        }
+        picks.push({ label: heading, kind: vscode.QuickPickItemKind.Separator });
         if (match.usages.length === 0) {
             picks.push({
                 label: '$(info) Not used in X++ code',
@@ -78,7 +128,9 @@ export async function findMessageSource(ctx: ProductivityContext, entry?: { mess
         title: `Where "${message.length > 60 ? message.slice(0, 57) + '…' : message}" comes from`,
         matchOnDescription: true, matchOnDetail: true,
     });
-    if (picked?.usage?.objectType) {
+    if (picked?.field) {
+        await vscode.commands.executeCommand('xpp.openDesigner', picked.field.objectType, picked.field.objectName);
+    } else if (picked?.usage?.objectType) {
         await openSearchItem({ ...picked.usage, objectType: picked.usage.objectType, member: picked.usage.member ?? '', text: picked.usage.text ?? '', model: picked.usage.model ?? '' });
     }
 }

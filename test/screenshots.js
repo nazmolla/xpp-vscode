@@ -349,7 +349,7 @@ async function run() {
         await pickShot('search-code', 'xpp.searchCode', [], { input: ['^a', 'CustGroup::find', '{ENTER}'] });
     });
     await step('find-message-source', async () => {
-        await pickShot('find-message-source', 'xpp.findMessageSource', [{ message: 'Field Customer group must be filled in.' }], { input: ['{ENTER}'] });
+        await pickShot('find-message-source', 'xpp.findMessageSource', [{ message: "Field 'Customer group' must be filled in." }], { input: ['{ENTER}'] });
     });
     await step('find-examples', async () => {
         await pickShot('find-examples', 'xpp.findExamples', [], { input: ['batch job with contract', '{ENTER}'] });
