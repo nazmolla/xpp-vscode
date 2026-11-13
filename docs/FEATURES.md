@@ -8,6 +8,15 @@ Develop Dynamics 365 Finance & Operations X++ code in VS Code, without Visual St
 
 ![Application Explorer filtered on CustGroup](images/aot.png)
 
+## What's new in 0.15
+
+- **Copilot agents for developers and functional consultants.** 23 agents in the Copilot agent picker, each with its own instructions and the next agent to hand off to:
+  - **Developers:** F&O Developer, Code Reviewer, Support, Performance, Upgrade Reviewer, Test Engineer, Report Developer, Workflow & Events, Release Manager, Code Archaeologist.
+  - **Developers and consultants:** Solution Designer, Architect, Security & License, Integration.
+  - **Functional consultants:** Functional Explainer, Setup Advisor, Data Investigator, Functional Triage, Role Designer, Test Scenarios, Fit-Gap Analyst, Data Migration, Release Notes. They answer in business terms and use the live environment through the Dynamics 365 ERP MCP server or the browser.
+  - When you haven't picked an agent, Copilot suggests the one that fits, or runs it for a self-contained part of the task. Agents change data, setup or metadata only after you allow it, and never in production.
+- **Find Message Source for mandatory fields.** For "Field '…' must be filled in." it first lists the mandatory table fields with that label (the platform raises it when a field whose Mandatory property is Yes is empty), then code that raises it for one of those fields, and keeps code that reuses the text for other fields apart. `xpp_find_message_source` does the same for agents.
+
 ## What's new in 0.14
 
 **0.14.1: Server internals and a security analysis fix.** Bridge actions, agent tools and element types are each registered once; `tools/list` comes from the same registry that serves the calls, and write checks come from each action's registration. Behaviour is unchanged (every action and tool is checked against a recorded baseline). `xpp_analyze_security` with `op=license` or `op=access` and no `objectName` now says what is missing instead of failing with an internal error.
