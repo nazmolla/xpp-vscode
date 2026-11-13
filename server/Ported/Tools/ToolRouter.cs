@@ -588,7 +588,11 @@ namespace XppVsCode.Server.Tools
                 var sections = JsonHelpers.ExtractJsonStringArray(argsJson, "sections")
                     ?? JsonHelpers.ExtractArgString(argsJson, "sections")?.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
                 bool methodsAsked = (JsonHelpers.ExtractJsonStringArray(argsJson, "methodNames")?.Length ?? 0) > 0;
-                return DelegateToBridge(idToken, json, "read_object", text => SelectReadSections(text, sections, methodsAsked));
+                // A form's design (controls) can be thousands of nodes: xpp_get_form_layout returns it bounded by depth.
+                string formHint = objectType == "AxForm"
+                    ? "\n\nControls and design: xpp_get_form_layout formName=" + objectName + " (depth-limited; rootControl to expand a container)."
+                    : "";
+                return DelegateToBridge(idToken, json, "read_object", text => SelectReadSections(text, sections, methodsAsked) + formHint);
             }
 
             return JsonHelpers.BuildToolResult(idToken,
@@ -986,10 +990,11 @@ namespace XppVsCode.Server.Tools
         {
             string argsJson = JsonHelpers.ExtractToolArgumentsObject(json);
             string labelFileId = JsonHelpers.ExtractArgString(argsJson, "labelFileId");
+            string labelId = JsonHelpers.ExtractArgString(argsJson, "labelId");
 
-            if (string.IsNullOrEmpty(labelFileId))
+            if (string.IsNullOrEmpty(labelFileId) && (string.IsNullOrEmpty(labelId) || labelId[0] != '@'))
                 return JsonHelpers.BuildToolResult(idToken,
-                    "Parameter 'labelFileId' is required.", isError: true);
+                    "Parameter 'labelFileId' is required, unless labelId is a full label reference (e.g. '@SYS7149' or '@SCM:SalesStatusLabel').", isError: true);
 
             return DelegateToBridge(idToken, json, "read_label");
         }
@@ -1098,6 +1103,13 @@ namespace XppVsCode.Server.Tools
                 var line = new StringBuilder();
                 foreach (string field in fields)
                 {
+                    if (field == "isCustom")
+                    {
+                        // A boolean, not a string: mark only your own models, so long lists stay short.
+                        if (JsonHelpers.ExtractJsonValueToken(obj, field) == "true")
+                            line.Append(" | custom (editable)");
+                        continue;
+                    }
                     string val = JsonHelpers.ExtractJsonString(obj, field);
                     if (val != null)
                     {

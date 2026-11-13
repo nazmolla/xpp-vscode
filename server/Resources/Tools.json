@@ -1398,13 +1398,13 @@
     },
     {
       "name": "xpp_read_label",
-      "description": "Reads labels from a D365FO label file using the Label API. Look up specific label IDs or search by text.",
+      "description": "Reads labels from a D365FO label file using the Label API. Look up specific label IDs or search by text. A full label reference as it appears in properties or code ('@SYS7149', '@SCM:SalesStatusLabel') can be passed as labelId without labelFileId.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "labelFileId": {
             "type": "string",
-            "description": "The label file ID (e.g. 'MyLabels')."
+            "description": "The label file ID (e.g. 'MyLabels'). Optional when labelId is a full reference starting with '@'."
           },
           "language": {
             "type": "string",
@@ -1412,7 +1412,7 @@
           },
           "labelId": {
             "type": "string",
-            "description": "Specific label ID to look up."
+            "description": "Specific label ID to look up, or a full reference ('@SYS7149', '@SCM:SalesStatusLabel')."
           },
           "searchText": {
             "type": "string",
@@ -1423,9 +1423,7 @@
             "description": "Max results. Default 25. Max 100."
           }
         },
-        "required": [
-          "labelFileId"
-        ]
+        "required": []
       }
     },
     {

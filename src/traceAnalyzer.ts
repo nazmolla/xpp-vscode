@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { openSearchItem } from './productivity/searchCode';
 import { XppServerClient } from './serverClient';
 import { registerPanelSerializer, stateAttribute } from './webviewState';
+import { showReportableError } from './reportProblem';
 
 interface TraceNode { m: string; n: number; incl: number; excl: number; sqlN?: number; sqlMs?: number; c?: TraceNode[]; hidden?: number }
 
@@ -50,7 +51,7 @@ export function registerTraceAnalyzer(context: vscode.ExtensionContext, command:
 class TracePanel {
     private constructor(private readonly panel: vscode.WebviewPanel, private readonly context: vscode.ExtensionContext, private readonly server: XppServerClient, report: TraceReport) {
         panel.webview.html = this.html(report.file);
-        panel.webview.onDidReceiveMessage(message => this.onMessage(message, report).catch(err => vscode.window.showErrorMessage((err as Error).message)));
+        panel.webview.onDidReceiveMessage(message => this.onMessage(message, report).catch(err => showReportableError('tracePanel', err)));
     }
 
     static show(context: vscode.ExtensionContext, server: XppServerClient, report: TraceReport): void {

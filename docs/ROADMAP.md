@@ -169,7 +169,7 @@ wins, build loop and navigation, views, designers, then the lifecycle features.
 | CS1 | Replace the "Go to <X>" commands with Open Referenced Element and a picker | Done: one Go to Referenced Element… in the designer menu; the per-reference commands stay registered (no longer contributed) |
 | CS2 | One environment menu on the status bar item; `pac` init on first deploy | Done |
 | CS3 | Code intelligence toggles: settings plus one Configure command | Done (Configure Code Intelligence…) |
-| CS4 | Telemetry Queries as snippets/documentation unless they run | Partly: the queries are also Kusto snippets (`fno-…`); the command stays for the form-specific queries |
+| CS4 | Telemetry Queries as snippets/documentation unless they run | Done: the Telemetry Queries command only (the Kusto snippets were removed so nothing is contributed to a language another extension provides) |
 | CS5 | Usage statistics feed Report a Problem (PM14) | Done |
 | CS6 | Run Snippet's scratch runner excluded from packages and flagged by the Pre-Deploy Checklist | Done: the checklist fails while the runner is in the model |
 

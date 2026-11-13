@@ -126,7 +126,7 @@ export class DataPanel {
     private async target(): Promise<DatabaseTarget> {
         const target = await this.access.require();
         if (!target) {
-            throw new Error('No database access.');
+            throw new Error('No database access. Request credentials with F&O Studio: Request Database Credentials, then run again.');
         }
         return target;
     }

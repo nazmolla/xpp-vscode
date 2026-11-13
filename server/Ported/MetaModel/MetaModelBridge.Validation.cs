@@ -297,8 +297,13 @@ namespace XppVsCode.Server.MetaModel
 
             if (req.Controls != null)
             {
+                var readControls = readResult.Controls;
+                // xpp_read_object leaves a form's design out (it can be thousands of nodes); compare against the design here.
+                if ((readControls == null || readControls.Count == 0) && req.ObjectType == "AxForm"
+                    && MetaService.GetForm(req.ObjectName)?.Design is AxFormDesign design)
+                    readControls = design.Controls.Select(ExtractFormControl).Where(c => c != null).ToList();
                 var actualControls = new Dictionary<string, FormControlDto>(StringComparer.OrdinalIgnoreCase);
-                FlattenControls(readResult.Controls, actualControls);
+                FlattenControls(readControls, actualControls);
                 var expectedControls = new Dictionary<string, FormControlDto>(StringComparer.OrdinalIgnoreCase);
                 FlattenControls(req.Controls, expectedControls);
                 foreach (var exp in expectedControls.Values)

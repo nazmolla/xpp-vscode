@@ -79,7 +79,6 @@ Features marked *preview* have not yet been verified on a live environment.
 **Support**
 - **Report a Problem…** builds a redacted diagnostics bundle for you to preview and send yourself; nothing is sent automatically. Every command error offers it.
 - **Configure Code Intelligence…** turns code intelligence features on or off in one place.
-- Kusto snippets (`fno-forms`, `fno-slowforms`, `fno-exceptions`, `fno-events`) for Finance and Operations telemetry in Application Insights.
 
 ### Earlier releases
 - **0.12:** Browse Table Data and SQL queries (temporary UDE credentials, local AxDB), Analyze Performance with live database insights, Analyze Trace, Upgrade Readiness, wizards (batch job, report, approval workflow, custom service), best practice checks, Review My Changes, the Pre-Deploy Checklist, `@fno` in chat, Copilot Activity, team rules, Test Explorer, build tasks and an accessibility pass.
@@ -167,7 +166,7 @@ Turn each feature on or off with **Configure Code Intelligence…**, or with the
   - implement missing interface methods;
   - create a Chain of Command wrapper.
 - **Add to Privilege…**, **Generate SysTest Class**, **Generate SysTest Class with Test Data (ATL)**, and **Run Snippet in Environment**, which runs a `main` method through a scratch class in your model.
-- **Snippets** for Chain of Command, event handlers, SysOperation, find/exist, parm methods, transactions with retry and SysTest, plus Kusto snippets for telemetry.
+- **Snippets** for Chain of Command, event handlers, SysOperation, find/exist, parm methods, transactions with retry and SysTest.
 
 ### Build, test, deploy and debug
 - **Build:**

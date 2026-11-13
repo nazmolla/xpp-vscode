@@ -203,11 +203,13 @@ export class XppBuilder {
                 continue;
             }
             const uri = objectUri(target.objectType, target.objectName);
-            let line = Math.max(0, (d.line ?? 1) - 1);
-            if (target.isCode && d.line !== undefined) {
-                line = await this.documentLine(uri, d.line);
+            // Line 0 means the element as a whole (xppbp reports metadata findings that way).
+            const hasLine = d.line !== undefined && d.line > 0;
+            let line = hasLine ? d.line! - 1 : 0;
+            if (target.isCode && hasLine) {
+                line = await this.documentLine(uri, d.line!);
             }
-            const endLine = d.endLine !== undefined ? line + (d.endLine - (d.line ?? d.endLine)) : line;
+            const endLine = hasLine && d.endLine !== undefined ? Math.max(line, line + (d.endLine - d.line!)) : line;
             const range = new vscode.Range(line, Math.max(0, (d.column ?? 1) - 1), endLine, Math.max(0, (d.endColumn ?? 1000) - 1));
             const severity = ['error', 'fatal'].includes(d.severity.toLowerCase()) ? vscode.DiagnosticSeverity.Error
                 : d.severity.toLowerCase() === 'warning' ? vscode.DiagnosticSeverity.Warning
