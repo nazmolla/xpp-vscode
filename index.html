@@ -186,205 +186,627 @@ Studio</title>
   li{margin:.25rem 0}
   em{color:var(--muted)}
   </style>
-  <style>
-  .hero{margin:0 0 2rem}
-  .hero h1{font-size:2.8rem;margin:.2rem 0 .6rem}
-  .eyebrow{margin:0;font-size:.85rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
-  .lead{font-size:1.3rem;line-height:1.45;margin:0 0 1.6rem}
-  .score{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem;margin:0 0 1.6rem}
-  .score div{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:1rem}
-  .score .big{display:block;font-size:1.9rem;font-weight:700;line-height:1.1;color:var(--accent)}
-  .score .lbl{display:block;font-size:.88rem;color:var(--muted);margin-top:.35rem}
-  .cta{margin:0}
-  .btn{display:inline-block;padding:.6rem 1.1rem;border-radius:8px;background:var(--accent);color:#fff;text-decoration:none;font-weight:600;margin:0 .5rem .5rem 0}
-  .btn.alt{background:transparent;color:var(--accent);border:1px solid var(--accent)}
-  figure img{margin:0 auto .3rem}
-  @media (max-width:600px){.score{grid-template-columns:1fr}.hero h1{font-size:2.2rem}}
-  </style>
 </head>
 <body>
-<header class="hero">
-<p class="eyebrow">Free and open source. Apache 2.0. Version 0.14.0.</p>
-<h1>F&amp;O Studio for VS Code</h1>
-<p class="lead">X++ development without Visual Studio. It does what Visual Studio does for Dynamics 365 Finance and Operations, and a good deal that it doesn't.</p>
-<div class="score">
-<div><span class="big">133 of 136</span><span class="lbl">features covered by F&amp;O Studio</span></div>
-<div><span class="big">60 of 136</span><span class="lbl">covered by Visual Studio</span></div>
-<div><span class="big">2</span><span class="lbl">features only Visual Studio has</span></div>
-</div>
-<p class="cta"><a class="btn" href="https://marketplace.visualstudio.com/items?itemName=MNazmi.xpp-vscode">Install from the Marketplace</a> <a class="btn alt" href="https://github.com/nazmolla/xpp-vscode">Source on GitHub</a></p>
-</header>
-
+<h1
+id="fo-studio-for-vs-code-x-development-without-visual-studio">F&amp;O
+Studio for VS Code: X++ development without Visual Studio</h1>
+<h2 id="introduction">Introduction</h2>
+<p>I have spent most of my career on Dynamics 365 Finance and
+Operations, and for most of it the answer to "where do I write X++" has
+been the same: Visual Studio, on a heavy Windows machine, against one
+environment at a time. It works. But the tooling around X++ has not kept
+pace with how the rest of us write code now, and AI assistants in
+particular have only ever seen X++ as plain text files, not as the
+metadata it really is.</p>
+<p>F&amp;O Studio is my attempt to fix that. It is a free, open source
+(Apache 2.0) extension for Visual Studio Code that lets you develop X++
+without Visual Studio.</p>
+<p>It does not reimplement Microsoft's toolchain. It loads the same
+pieces Visual Studio uses: the metadata API, the X++ compiler (xppc),
+the label compiler, the best practice checker (xppbp), the
+cross-reference database, the FinOps debugger proxy and the deployment
+scripts. Projects (<code>.rnrproj</code>) and packages
+(<code>.axpp</code>) use the same formats, so what you build in one
+opens and builds in the other.</p>
+<p>On top of that engine, F&amp;O Studio adds what Visual Studio does
+not have: table data and SQL with query plans, performance and trace
+analysis, license and segregation of duties analysis, upgrade and
+release checks, and AI agent tools that read and write real
+metadata.</p>
+<p>The current version is 0.14.0 and it is on the Visual Studio
+Marketplace. It is a preview, it is an independent community project,
+and it is not affiliated with or endorsed by Microsoft.</p>
+<p>It is built for X++ developers on Windows who work on unified
+developer environments (UDE), cloud-hosted environments or VHD
+environments.</p>
 <p><img src="images/aot.png"
 alt="Application Explorer filtered on CustGroup" /></p>
-<h2 id="it-exists-and-it-is-free">It exists, and it is free</h2>
-<p>F&amp;O Studio is a Visual Studio Code extension for Dynamics 365
-Finance and Operations X++ development. It is on the Visual Studio
-Marketplace, it costs nothing, and you do not need Visual Studio
-installed. It works on unified developer environments (UDE),
-cloud-hosted environments and VHD environments, on Windows.</p>
-<p>It does not reimplement Microsoft's toolchain. It loads the same
-metadata API, X++ compiler (xppc), label compiler, best practice checker
-(xppbp), cross-reference database, FinOps debugger proxy and deployment
-scripts that Visual Studio uses, and it reads and writes the same
-project formats (<code>.rnrproj</code> and <code>.axpp</code>). A
-project you build here opens and builds in Visual Studio, and the other
-way round. A team can have people in both without anyone converting
-anything.</p>
-<p>It is a preview and an independent community project, not affiliated
-with or endorsed by Microsoft.</p>
-<h2 id="it-matches-visual-studio">It matches Visual Studio</h2>
-<p>I went through Visual Studio's X++ tooling feature by feature, 136
-rows in all. 58 of them are in both tools. Day to day, that covers:</p>
-<p><strong>Explore and design.</strong> The Application Explorer in
-classic and model views, element designers with the same node tree and
-properties grid, a form preview drawn like the web client, the label
-editor, Create Extension and Create Code Extension (Chain of Command),
-and drag and drop into designers.</p>
-<p><strong>Write code.</strong> A code view laid out the way Visual
-Studio shows a class, completion that includes methods added by Chain of
-Command, signature help, hover with label text, go to definition, find
-all references from the cross-reference database, syntax errors as you
-type, snippets and formatting.</p>
-<p><strong>Build, deploy, debug and test.</strong> Build project and
-build model with compiler errors on the right line, best practice
-checks, deployment packages, deploy and database sync, the debugger, the
-Infolog, and SysTest runs on the environment.</p>
-<p><strong>Projects and teams.</strong> <code>.rnrproj</code> and
-<code>.axpp</code>, model creation and dependencies, git change markers,
-compare code and compare metadata, temporary SQL credentials for UDE,
-the data entity wizard, dependency diagrams, and Azure DevOps work item
-links.</p>
-<figure><img src="images/form-designer.png" alt="Form designer"><figcaption>The form designer: CustGroup with the rendered preview</figcaption></figure>
-
-<figure><img src="images/code-view.png" alt="Code view"><figcaption>The X++ code view</figcaption></figure>
-
-<h2 id="it-goes-beyond-visual-studio">It goes beyond Visual Studio</h2>
-<p>69 of the 136 features have no equivalent in Visual Studio at all,
-and 6 more are only partly there. Two areas matter most to me.</p>
-<h3 id="an-ai-agent-that-works-on-real-metadata">An AI agent that works
-on real metadata</h3>
-<p>Copilot in a text editor treats X++ as text. It suggests C# patterns,
-edits standard objects it should leave alone, skips <code>next</code> in
-Chain of Command, and has no idea what a model owns. In an F&amp;O
-codebase that is not just unhelpful, it is risky.</p>
-<p>F&amp;O Studio gives Copilot, Claude or any MCP client 33 tools that
-go through the same metadata API the designers use. The agent can read,
-create, extend, validate, build and package elements without ever
-hand-writing AOT XML. It plans against a standard precedent it has
-actually found, and best practice warnings come back after every
-write.</p>
-<p>The guardrails are the part I would not give up:</p>
+<h2 id="how-it-compares-with-microsofts-visual-studio-tools">How it
+compares with Microsoft's Visual Studio tools</h2>
+<p>I went through the Visual Studio tooling feature by feature and
+compared it with F&amp;O Studio. The comparison has 136 rows. Here is
+the short version, and the full table is at the end of this post and in
+the repo (<code>docs/comparison.md</code>).</p>
 <ul>
-<li>Writes only go to your own models, and every write is all or
-nothing.</li>
-<li>An existing name is never overwritten.</li>
-<li><strong>Checkpoints</strong> let you revert every element, label and
-project change Copilot made since you started one.</li>
-<li><strong>Scope</strong> limits which elements Copilot may change, and
-the server enforces it.</li>
-<li><strong>Copilot Activity</strong> logs every tool call with
-arguments, duration and result.</li>
-<li><strong>Team rules</strong> in <code>.xpp/agent-rules.md</code> put
-your naming and pattern conventions in front of everyone's agent.</li>
+<li>F&amp;O Studio covers 133 of the 136 features. Visual Studio covers
+60.</li>
+<li>58 features are in both: the Application Explorer, designers, Chain
+of Command completion, build, best practice checks, deployment packages,
+database sync, the debugger, the data entity wizard, dependency
+diagrams, Azure DevOps work item links and GitHub Copilot.</li>
+<li>69 features are only in F&amp;O Studio. Most of them fall into five
+areas: data, performance, security and licensing, upgrades and review,
+and AI.</li>
+<li>2 features are only in Visual Studio, and I list them below, along
+with what is still in preview.</li>
 </ul>
-<p>It also goes past writing code. The agent can trace an error message
-to the code that raises it, analyze security and licenses, read a trace,
-run tests, create a deployment package and run one read-only SELECT
-after you confirm it. It never sees credentials. In chat,
-<code>@fno</code> has six commands: <code>/design</code>,
-<code>/extend</code>, <code>/explain</code>, <code>/review</code>,
-<code>/support</code> and <code>/performance</code>.</p>
-<figure><img src="images/copilot-activity.png" alt="Copilot Activity"><figcaption>Copilot Activity: every tool call the agent made</figcaption></figure>
-
-<h3 id="trace-and-performance-analysis">Trace and performance
-analysis</h3>
-<p>Reading a performance trace in Visual Studio's world means Trace
-Parser, which is a separate tool with its own import database. F&amp;O
-Studio reads the web client <code>.etl</code> file directly. Open it and
-you get requests on a timeline per AOS and thread, every AOS and session
-with its user (other users, dual-write and OData integrations, batch),
-errors with their full X++ call stacks, hot methods, SQL per method and
-pauses. Every method is one click from its code. It works on UDE and on
-local VHD environments.</p>
-<figure><img src="images/trace.png" alt="Analyze Trace"><figcaption>Analyze Trace: requests on a timeline, the slowest request's hot spots and call tree</figcaption></figure>
-
-<p>Before anything reaches a trace, <strong>Analyze Performance</strong>
-reads your X++ and puts findings in Problems with the fix. It looks for
-queries and writes inside loops, set-based statements that silently run
-row by row, <code>while select</code> of every field,
-<code>forupdate</code> without a write, unlimited
-<code>crossCompany</code>, missing indexes and cache settings, form data
-sources that load more than the grid shows, and data entity readiness
-problems. <strong>Database Performance Insights</strong> adds the most
-expensive queries, missing indexes, batch history and number sequences
-that slow posting, and there are Application Insights KQL queries for
-slow forms and exceptions.</p>
-<figure><img src="images/analyze-performance.png" alt="Analyze Performance"><figcaption>Analyze Performance findings in the Problems panel</figcaption></figure>
-
-<h3 id="and-more-visual-studio-does-not-have">And more Visual Studio
-does not have</h3>
+<table>
+<thead>
+<tr class="header">
+<th>Area</th>
+<th>F&amp;O Studio</th>
+<th>Visual Studio</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Open source, no Visual Studio install or license needed</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr class="even">
+<td>Unified developer environments</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr class="odd">
+<td>Application Explorer, element designers, form preview</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr class="even">
+<td>Chain of Command completion and navigation</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr class="odd">
+<td>Go to implementations, code lens, call and type hierarchy</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr class="even">
+<td>Wizards: batch job, report, approval workflow, custom service,
+business event, number sequence, feature, table with form</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr class="odd">
+<td>Build, best practice checks, deployment package, deploy, database
+sync</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr class="even">
+<td>Debugger on UDE</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr class="odd">
+<td>Browse table data, record inspector, SQL editor with query plan</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr class="even">
+<td>Analyze .etl traces without a Trace Parser import</td>
+<td>Yes</td>
+<td>No (separate tool)</td>
+</tr>
+<tr class="odd">
+<td>Static performance analysis of X++</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr class="even">
+<td>License analysis, Who Can Access, security gaps</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr class="odd">
+<td>Segregation of duties check and sign-off report</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr class="even">
+<td>Upgrade readiness and standard code drift</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr class="odd">
+<td>Review My Changes and Pre-Deploy Checklist</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr class="even">
+<td>Translate missing labels, find unused labels</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr class="odd">
+<td>Try a data entity (OData) or a service operation</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr class="even">
+<td>GitHub Copilot chat and completions</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr class="odd">
+<td>33 agent tools that work on the real metadata</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr class="even">
+<td>Copilot checkpoints, scope and activity log</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr class="odd">
+<td>SSRS report designer</td>
+<td>No</td>
+<td>Yes</td>
+</tr>
+<tr class="even">
+<td>Data entity wizard</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr class="odd">
+<td>Dependency diagrams</td>
+<td>Yes</td>
+<td>Yes (DGML)</td>
+</tr>
+<tr class="even">
+<td>Debugger on cloud-hosted and VHD environments</td>
+<td>Yes (preview)</td>
+<td>Yes</td>
+</tr>
+<tr class="odd">
+<td>Tests on cloud-hosted and VHD environments</td>
+<td>No</td>
+<td>Yes</td>
+</tr>
+<tr class="even">
+<td>Official Microsoft support</td>
+<td>No</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+<h3 id="where-visual-studio-still-leads">Where Visual Studio still
+leads</h3>
+<p>I would rather say this up front than have you find it later.</p>
 <ul>
-<li><strong>Data in the editor.</strong> Browse table data with enum
-names, company filter and as-of date, follow relations in a record
-inspector, and run read-only SQL with Explain Plan.</li>
-<li><strong>Security and licensing.</strong> The license each role needs
-and what drives it, who can access a menu item, form or table, security
-gaps, segregation of duties checks and a sign-off report.</li>
-<li><strong>Upgrades and review.</strong> Upgrade readiness, collisions
-with other models' extensions, standard code drift of wrapped methods,
-Review My Changes against a branch and a Pre-Deploy Checklist.</li>
-<li><strong>Faster code work.</strong> Go to implementations for Chain
-of Command and event handlers, code lens, call and type hierarchy, paste
-an error message to find the code behind it, and wizards for batch jobs,
-reports, workflows, services, business events, number sequences,
-features, tables with forms and data entities.</li>
-<li><strong>Environments.</strong> One-step UDE setup, switching
-environments without a restart, and a different environment in each
-window.</li>
-</ul>
-<h2 id="where-visual-studio-still-leads">Where Visual Studio still
-leads</h2>
-<ul>
-<li><strong>The SSRS report designer.</strong> Report layouts are still
-designed in Visual Studio. F&amp;O Studio's New Report wizard builds the
-whole set of objects with a ready-to-run design, but it is not a layout
-designer.</li>
-<li><strong>Running tests on cloud-hosted and VHD environments.</strong>
-Tests run on UDE.</li>
-<li><strong>Official Microsoft support.</strong></li>
+<li><strong>SSRS report designer.</strong> Report layouts are still
+designed in Visual Studio. The New Report wizard in F&amp;O Studio
+creates the full set of objects with a ready-to-run design, but it is
+not a layout designer.</li>
+<li><strong>Tests on cloud-hosted and VHD environments.</strong> Running
+tests works on UDE today.</li>
+<li><strong>Official Microsoft support.</strong> F&amp;O Studio is an
+independent project.</li>
 </ul>
 <p>Three features are built but not yet verified on a live environment,
-so they are marked preview: debugging on cloud-hosted and VHD
-environments, the deploy and database sync tasks, and the full rename
-flow for fields and elements inside VS Code. My comparison comes from my
-own review of Visual Studio's tooling. If a row is wrong, open an issue
-and I will fix it.</p>
-<h2 id="get-started">Get started</h2>
-<p>You need Windows, VS Code 1.101 or later, SQL Server LocalDB for
-cross-references, the Power Platform CLI (<code>pac</code>) for deploy
-and database sync on a UDE, and GitHub Copilot for the AI features.</p>
-<p>Install it from the Extensions view by searching for F&amp;O Studio,
-or run <code>code --install-extension MNazmi.xpp-vscode</code>. Then
-open the <strong>F&amp;O Studio</strong> view in the activity bar. On a
-UDE, run <strong>Connect to Environment</strong> once and it downloads
-the metadata, restores the cross-reference database and configures the
-machine. On cloud-hosted and VHD environments there is nothing to set
-up. Open an element with <code>Ctrl+Alt+O</code>, build with
-<code>Ctrl+Shift+B</code>, or ask Copilot in agent mode. Start a
-checkpoint first if you want to be able to undo.</p>
-<p>If something breaks, <strong>Report a Problem</strong> builds a
-redacted diagnostics bundle for you to preview and send yourself.
-Nothing is sent automatically.</p>
+so I mark them as preview: debugging on cloud-hosted and VHD
+environments, which attaches the .NET debugger to w3wp.exe or Batch.exe,
+the deploy and database sync tasks in <code>tasks.json</code>, and the
+full rename flow for fields and elements inside VS Code.</p>
+<h2 id="same-engine-same-results">Same engine, same results</h2>
+<p>The point of building on Microsoft's own components is that results
+match what you get in Visual Studio. F&amp;O Studio loads these from
+your installation:</p>
 <ul>
-<li><a
-href="https://marketplace.visualstudio.com/items?itemName=MNazmi.xpp-vscode">Visual
-Studio Marketplace</a></li>
-<li><a href="https://github.com/nazmolla/xpp-vscode">Source, docs and
-screenshots</a></li>
-<li><a href="https://github.com/nazmolla/xpp-vscode/issues">Issues and
-feature requests</a></li>
+<li>The <strong>metadata API</strong> (<code>IMetaModelService</code>)
+for every read and write. AOT XML is never written by hand.</li>
+<li><strong>xppc, LabelC and xppbp</strong> with the same arguments
+Visual Studio passes. Compiler errors land on the right line in the
+Problems panel.</li>
+<li>The <strong>cross-reference database</strong> for Find References,
+where-used and tag searches.</li>
+<li>The <strong>FinOps debugger proxy</strong> for hitting breakpoints
+in X++ on UDEs.</li>
+<li><strong>RunPackageCreationAll.ps1</strong> for deployment packages,
+and <strong>pac</strong> for deploy and database sync on UDE.</li>
+<li>The <strong><code>.rnrproj</code> and <code>.axpp</code></strong>
+formats, so a project moves between the two IDEs unchanged.</li>
 </ul>
+<p>If your team has people on Visual Studio and people on VS Code, they
+can share the same projects.</p>
+<h2 id="features">Features</h2>
+<h3 id="application-explorer-and-projects">Application Explorer and
+projects</h3>
+<p>The Application Explorer has a classic view (all models' elements by
+category and type) and a model view (each model by display name), both
+with a name filter. Click a class to open its code, a label file to open
+the label editor, and anything else to open its designer.</p>
+<p>Right-click gives you the actions you expect: open designer, view
+code, create extension, create code extension (Chain of Command), find
+references, view hierarchy, view entity relationship diagram, compare
+code and metadata, and open in the browser. On your own models you also
+get Upgrade Readiness and Standard Code Drift.</p>
+<p>Projects are optional. <strong>Create D365FO Project</strong> writes
+<code>.rnrproj</code> and <code>.slnx</code> files like Visual Studio
+does, and <strong>Import Project</strong> and <strong>Export
+Project</strong> use the <code>.axpp</code> format. The project view
+follows the <code>.rnrproj</code>, so elements added by Copilot or by
+Visual Studio show up on their own, with git change markers.</p>
+<p><strong>Open Element</strong> (<code>Ctrl+Alt+O</code>) shows your
+recent elements and filters by type prefix: <code>t:</code> for tables,
+<code>c:</code> for classes, <code>f:</code> for forms.</p>
+<p><img src="images/aot-context-menu.png"
+alt="Application Explorer right-click actions" /></p>
+<p><img src="images/open-element.png"
+alt="Open Element with recent elements" /></p>
+<h3 id="creating-elements-and-wizards">Creating elements and
+wizards</h3>
+<p><strong>New Element</strong> works like Add New Item in Visual Studio
+and covers every element and extension type. The wizards go further and
+create complete standard patterns in your model. Each one is all or
+nothing, and each result compiles without warnings.</p>
+<ul>
+<li><strong>New Batch Job:</strong> SysOperation contract, service and
+controller, plus an action menu item and a privilege.</li>
+<li><strong>New Report:</strong> TempDB table, optional date contract,
+report data provider, controller, report with a ready-to-run design,
+output menu item and privilege.</li>
+<li><strong>New Approval Workflow</strong> on one of your tables:
+status, document, category, type, approval, event handlers, menu items,
+privileges and the form's workflow settings.</li>
+<li><strong>New Custom Service:</strong> request and response contracts,
+service class, service, service group and privilege.</li>
+<li><strong>New Business Event:</strong> event and contract classes, a
+trigger, and labels for the catalog.</li>
+<li><strong>Add Number Sequence:</strong> the module's number sequence
+reference, the parameters method and the number fetched on insert.</li>
+<li><strong>New Table with Form:</strong> key EDT, table with alternate
+key and find and exist methods, SimpleList form, menu item, and View and
+Maintain privileges.</li>
+<li><strong>New Data Entity:</strong> entity for OData and data
+management, staging table, and View and Maintain privileges.</li>
+<li><strong>New Feature (Feature Management):</strong> the feature class
+and its labels.</li>
+</ul>
+<p><img src="images/batch-job-wizard.png"
+alt="New Batch Job wizard" /></p>
+<h3 id="element-and-form-designers">Element and form designers</h3>
+<p>The element designer has a node tree and a properties grid built from
+the same metadata classes as Visual Studio's designer, with the same
+node order and icons. The properties grid has a filter, categories,
+changed values marked, a label picker that finds or creates labels, and
+element pickers (<code>Alt+Down</code>).</p>
+<p>You can add, rename, duplicate, move and delete nodes, override
+methods, and undo and redo with <code>Ctrl+Z</code> and
+<code>Ctrl+Y</code>. <strong>Copy Event Handler Method</strong> puts the
+handler code on the clipboard, and <strong>Find Event Handlers</strong>
+lists the existing ones.</p>
+<p>Forms get a preview drawn like the web client, with Table of Contents
+and FastTab patterns, columns and field labels. Elements outside your
+own models are read-only, and the editor offers <strong>Create
+Extension</strong> instead.</p>
+<p>The entity relationship diagram lets you choose the depth, direction
+and fields shown, and exports to SVG or Mermaid. <strong>View
+Dependencies</strong> shows what an element uses, from the
+cross-reference database, and every diagram has Copy Mermaid and Export
+Mermaid buttons. The label editor shows other languages side by
+side.</p>
+<p><img src="images/table-designer.png" alt="Table designer" /></p>
+<p><img src="images/form-designer.png"
+alt="Form designer: CustGroup with the rendered preview" /></p>
+<p><img src="images/erd.png" alt="Entity relationship diagram" /></p>
+<h3 id="code-editing-and-code-intelligence">Code editing and code
+intelligence</h3>
+<p>The code view looks the way Visual Studio shows a class: the
+declaration first, then the methods inside their braces. You get Go to
+Definition and Peek Definition (<code>F12</code>), Find All References
+(<code>Shift+F12</code>) through the cross-reference database, hover
+with label text and method signatures, and code folding.</p>
+<p>Code intelligence adds:</p>
+<ul>
+<li><strong>Go to Implementations</strong> (<code>Ctrl+F12</code>),
+which lists overrides, Chain of Command classes and methods, and
+pre/post and event handlers.</li>
+<li><strong>Code lens</strong> above classes and methods with
+references, overrides, Chain of Command classes and handlers.</li>
+<li><strong>Call hierarchy</strong> and <strong>type
+hierarchy</strong>.</li>
+<li><strong>Completion</strong> after <code>.</code> and <code>::</code>
+(including methods added by Chain of Command), for <code>@</code> labels
+and keywords, with signature help.</li>
+<li><strong>Checks and formatting:</strong> syntax errors as you type
+from the X++ compiler's parser, warnings on <code>[SysObsolete]</code>
+APIs, and Format Document.</li>
+<li><strong>Go to Symbol in Workspace</strong> (<code>Ctrl+T</code>),
+which finds elements and <code>Class.method</code>.</li>
+</ul>
+<p>Each feature can be switched on or off with <strong>Configure Code
+Intelligence</strong>, which matters on slower machines.</p>
+<p><img src="images/code-view.png" alt="Code view" /></p>
+<p><img src="images/implementations.png"
+alt="Peek Implementations on SalesFormLetter.run: the Chain of Command extensions and handlers" /></p>
+<p><img src="images/code-lens.png" alt="Code lens" /></p>
+<h3 id="search-and-quick-fixes">Search and quick fixes</h3>
+<ul>
+<li><strong>Search Code in All Packages</strong>
+(<code>Ctrl+Shift+Alt+F</code>) searches the X++ code of every package,
+as text or regex.</li>
+<li><strong>Find Similar Standard Implementations</strong> finds
+standard elements like the selected one, or matching a description such
+as "batch job with contract".</li>
+<li><strong>Find Message Source:</strong> paste an error, warning or
+info message exactly as the user saw it, values included, and it finds
+the labels and the code that raises it. It is also on every Infolog
+message.</li>
+<li><strong>Quick fixes</strong> (<code>Ctrl+.</code>): extract to
+label, generate <code>find()</code> and <code>exist()</code>, implement
+missing interface methods, and create a Chain of Command wrapper.</li>
+<li><strong>Rename</strong> (<code>F2</code>) on a method, field or
+element of your models updates the code in the refactor preview and the
+metadata of your other elements. Renaming a field in the designer works
+the same way. Field and element rename are preview.</li>
+<li><strong>Labels:</strong> translate missing labels (you review each
+translation before it is saved), find unused labels, and import and
+export labels as CSV with one column per language. Import shows how many
+labels are new or changed before anything is saved.</li>
+</ul>
+<p><img src="images/find-message-source.png"
+alt="Find Message Source" /></p>
+<h3 id="build-test-deploy-and-debug">Build, test, deploy and debug</h3>
+<ul>
+<li><strong>Build Project</strong> (<code>Ctrl+Shift+B</code> in an X++
+editor) reports only the project's problems. <strong>Build
+Model</strong> covers the whole model. Errors go to Problems at the
+right line, and you can run builds, deploys and database syncs from
+<code>tasks.json</code> (the deploy and sync tasks are preview).</li>
+<li><strong>Best practice checks</strong> run xppbp, the same checker
+Visual Studio runs.</li>
+<li><strong>Run Tests</strong> runs SysTest classes on the environment,
+and the project's test classes appear in VS Code's Test Explorer. You
+can also generate a SysTest class, with test data from the Acceptance
+Test Library.</li>
+<li><strong>Deploy:</strong> create a deployment package with the same
+script Visual Studio runs, deploy models and synchronize the database
+with <code>pac</code> on a UDE.</li>
+<li><strong>Debugging:</strong> Launch Debugger attaches through the
+FinOps debugger proxy, as Visual Studio does, and you set breakpoints in
+the code view. On cloud-hosted and VHD environments it attaches the .NET
+debugger to w3wp.exe or Batch.exe (preview). The Infolog shows messages
+from the debugged code.</li>
+<li><strong>Deployed or not:</strong> the status bar warns when your
+build is newer than the last deploy from this machine, and offers to
+deploy first before tests or debugging.</li>
+</ul>
+<p><img src="images/build-status.png" alt="Build status" /></p>
+<p><img src="images/infolog.png" alt="Infolog" /></p>
+<h3 id="data-in-the-editor">Data in the editor</h3>
+<p>This is one of the biggest differences from Visual Studio.</p>
+<ul>
+<li><strong>Browse Table Data</strong> shows enum names next to their
+values, has a company filter and an as-of date for date-effective
+tables, column filters, sorting and CSV export. A record inspector
+follows relations to the related rows.</li>
+<li><strong>SQL editor:</strong> read-only by default (one SELECT,
+always rolled back), with <strong>Explain Plan</strong>. You can allow
+changes, with a confirmation on every run and a warning that X++
+business logic is skipped.</li>
+<li><strong>Database access:</strong> cloud-hosted and VHD environments
+use the local AxDB with Windows authentication. UDEs use temporary
+credentials from the same request Visual Studio makes, kept in VS Code's
+secret storage until they expire.</li>
+<li><strong>Open Database in SSMS</strong> opens SQL Server Management
+Studio on the same database.</li>
+</ul>
+<h3 id="performance-and-traces">Performance and traces</h3>
+<ul>
+<li><strong>Analyze Performance</strong> puts findings in Problems with
+the fix. It finds queries and row-by-row writes inside loops, lookups
+inside <code>while select</code>, <code>while select</code> of every
+field, <code>forupdate</code> without a write, unbalanced transactions,
+unlimited <code>crossCompany</code>, set-based statements that silently
+run row by row, missing indexes and cache settings, form data sources
+that load every field but show only a few in a grid (OnlyFetchActive),
+Delayed or Active data sources shown in the parent's grid instead of
+joined, Active links, and data entity readiness problems.</li>
+<li><strong>Database Performance Insights:</strong> missing indexes, the
+most expensive queries, batch job history, and number sequences that
+slow posting.</li>
+<li><strong>Analyze Trace</strong> reads a web client <code>.etl</code>
+trace directly, with no Trace Parser and no import database. It shows
+requests on a timeline per AOS and thread, every AOS and session with
+its user (other users, dual-write and OData integrations, batch), errors
+and exceptions with the full X++ call stack, call trees, hot methods,
+SQL per method and pauses. Every method is one click from its code.</li>
+<li><strong>Telemetry queries:</strong> Application Insights KQL for the
+most used and slowest forms, X++ exceptions and custom events.</li>
+</ul>
+<p><img src="images/trace.png"
+alt="Analyze Trace: requests on a timeline, the slowest request&#39;s hot spots and call tree" /></p>
+<p><img src="images/analyze-performance.png"
+alt="Analyze Performance" /></p>
+<h3 id="security-and-licensing">Security and licensing</h3>
+<ul>
+<li><strong>Security view:</strong> your models' roles and the standard
+roles they extend, each with its user license. Expand a role down to its
+entry points and grants.</li>
+<li><strong>Analyze License</strong> shows the license a role, duty or
+privilege needs, what drives it, and where read-only access would lower
+it.</li>
+<li><strong>Who Can Access</strong> shows the privileges, duties and
+roles that reach a menu item, form, table or data entity.</li>
+<li><strong>Find Security Gaps</strong> and <strong>Check Segregation of
+Duties</strong>. You can edit the segregation of duties rules in a
+file.</li>
+<li><strong>Security Report</strong> for sign-off, as Markdown or
+CSV.</li>
+</ul>
+<p><img src="images/security-view.png" alt="Security view" /></p>
+<p><img src="images/analyze-license.png" alt="Analyze License" /></p>
+<p><img src="images/who-can-access.png" alt="Who Can Access" /></p>
+<h3 id="upgrades-review-and-release">Upgrades, review and release</h3>
+<ul>
+<li><strong>Upgrade Readiness</strong> lists uses of
+<code>[SysObsolete]</code> APIs with the replacement the attribute
+names, Chain of Command wrappers, event handlers and extensions that no
+longer match the installed application, and collisions with other
+models' extensions.</li>
+<li><strong>Standard Code Drift of Wrapped Methods</strong> compares the
+standard methods your Chain of Command code wraps between two installed
+versions, with a diff for each.</li>
+<li><strong>Review My Changes</strong> lists the elements changed
+against your base branch, each with its best practice and performance
+findings, plus a pull request summary to copy.</li>
+<li><strong>Pre-Deploy Checklist</strong> checks build, best practice,
+performance, security gaps, unlabelled text and uncommitted changes in
+one report.</li>
+<li><strong>Azure DevOps and GitHub links:</strong> <strong>Link Work
+Item</strong> adds <code>#id</code> (or <code>AB#id</code> on GitHub) to
+the commit message, <strong>Open Work Item</strong> and <strong>Open
+Pipelines</strong> open them, and Review My Changes lists the branch's
+work items.</li>
+</ul>
+<p><img src="images/upgrade-readiness.png"
+alt="Upgrade Readiness" /></p>
+<h3 id="integration">Integration</h3>
+<p><strong>Try Data Entity (OData)</strong> and <strong>Try Service
+Operation</strong> call the active environment and save each request as
+an <code>.http</code> file. Service calls ask first, and the access
+token is never written to the file. Both are marked preview.</p>
+<h3 id="environments-and-teams">Environments and teams</h3>
+<p><strong>Connect to Environment</strong> downloads the metadata,
+restores the cross-reference database and configures the machine for a
+UDE. It shows each step and can retry a failed one. <strong>Select
+Environment</strong> switches environments without a reload, and each
+workspace remembers its own, so two windows can work against two
+environments.</p>
+<p>A version drift guard warns when the environment runs a newer
+application version than the metadata on your machine, and <strong>Open
+Team Repository</strong> clones a repository, links its packages and
+builds them in dependency order. Both are marked preview.</p>
+<p>Cloud-hosted and VHD environments need no connection step. F&amp;O
+Studio uses the local PackagesLocalDirectory, AOS and AxDB.</p>
+<h2 id="ai-that-works-on-real-metadata">AI that works on real
+metadata</h2>
+<p>GitHub Copilot works in F&amp;O Studio as it does anywhere in VS
+Code, but the extension also registers 33 MCP tools that Copilot, or any
+MCP client, can call to read, create, extend, validate, build and
+package elements through the metadata API.</p>
+<p>The point is that the agent is not guessing at XML files. It works on
+the same objects the designers use, and there are guardrails:</p>
+<ul>
+<li>Writes are limited to your own models and are all or nothing.</li>
+<li>An existing name is never overwritten.</li>
+<li>Best practice findings come back after every write.</li>
+<li>The agent's plan names a standard precedent for each object, found
+with <code>xpp_find_examples</code>.</li>
+</ul>
+<p>The tools go beyond writing code. The agent can search all code, find
+references with the calling code, analyze security and licenses, find
+the code behind an error message, analyze traces and upgrade impact, run
+tests, create a deployment package and open an element in the editor at
+the right line. It can run one read-only, row-limited SELECT after you
+confirm it, and it never sees credentials.</p>
+<p>For control, there are four features I would not work without:</p>
+<ul>
+<li><strong>Checkpoints:</strong> start one, and later revert every
+element, label and project change Copilot made since.</li>
+<li><strong>Scope:</strong> limit which elements Copilot may change. The
+server enforces it.</li>
+<li><strong>Copilot Activity:</strong> every tool call the agent makes,
+with arguments, duration and result.</li>
+<li><strong>Team rules:</strong> <code>.xpp/agent-rules.md</code> adds
+your naming, prefix and pattern conventions to the instructions of
+everyone working in the repository.</li>
+</ul>
+<p>In Copilot Chat, <code>@fno</code> has six commands:
+<code>/design</code>, <code>/extend</code>, <code>/explain</code>,
+<code>/review</code>, <code>/support</code> and
+<code>/performance</code>.</p>
+<p><img src="images/copilot-activity.png" alt="Copilot Activity" /></p>
+<h2 id="getting-started">Getting started</h2>
+<p><strong>Requirements</strong></p>
+<ul>
+<li>Windows and VS Code 1.101 or later.</li>
+<li>A unified developer environment, or a cloud-hosted or VHD
+environment. On cloud-hosted and VHD, run VS Code as administrator, as
+Visual Studio does, to build into PackagesLocalDirectory.</li>
+<li>SQL Server LocalDB, for cross-references.</li>
+<li>Power Platform CLI (<code>pac</code>), for deploy and database sync
+on a UDE.</li>
+<li>GitHub Copilot, for <code>@fno</code> and the agent tools.</li>
+</ul>
+<p><strong>Install</strong></p>
+<p>Search for F&amp;O Studio in the VS Code Extensions view, or run
+<code>code --install-extension MNazmi.xpp-vscode</code>.</p>
+<p><strong>First steps</strong></p>
+<ol type="1">
+<li>Open the <strong>F&amp;O Studio</strong> view in the activity bar,
+or the <strong>Get started with F&amp;O Studio</strong>
+walkthrough.</li>
+<li>Set up the machine. On a UDE, run <strong>Connect to
+Environment</strong> from the Environment group of the Dynamics 365
+view. On cloud-hosted or VHD there is nothing to set up.</li>
+<li>Pick a starting point: <strong>Open Team Repository</strong> if your
+team has one, <strong>Open D365FO Project</strong> or <strong>Create
+D365FO Project</strong> for your own project, or just browse the
+Application Explorer.</li>
+<li>Open elements (<code>Ctrl+Alt+O</code>), build
+(<code>Ctrl+Shift+B</code>), browse data, or ask Copilot in agent mode.
+Start a Copilot checkpoint first if you want to be able to revert.</li>
+</ol>
+<p><strong>A typical flow</strong></p>
+<ul>
+<li>A user reports an error. Paste the message into <strong>Find Message
+Source</strong> to find the code that raises it.</li>
+<li>Open the class, check <strong>Go to Implementations</strong> to see
+which Chain of Command extensions and handlers touch the method.</li>
+<li>Create a code extension, write the wrapper, and use a quick fix to
+extract hard-coded text to a label.</li>
+<li>Build the project and fix what shows in Problems. Run the best
+practice checks.</li>
+<li>Run <strong>Review My Changes</strong> and the <strong>Pre-Deploy
+Checklist</strong>, then create the deployment package and deploy with
+<code>pac</code>.</li>
+</ul>
+<p>The same flow works with Copilot in agent mode, with a checkpoint set
+first and the scope limited to your model.</p>
+<p><img src="images/walkthrough.png"
+alt="Get started walkthrough" /></p>
+<p><img src="images/dynamics-365-view.png"
+alt="Dynamics 365 view grouped by task" /></p>
+<h2 id="status-and-what-is-next">Status and what is next</h2>
+<p>F&amp;O Studio is a preview. Some features have not yet been verified
+end to end on a live environment: the version drift guard, Open Team
+Repository on a real team repository, Try Data Entity and Try Service
+Operation, Verify Changes in the Running App, the deploy and database
+sync tasks, debugging on cloud-hosted and VHD environments, and the full
+rename flow for fields and elements inside VS Code.</p>
+<p>The two gaps in the comparison are the SSRS report designer and
+running tests on cloud-hosted and VHD environments.</p>
+<p>If something breaks, use <strong>Report a Problem</strong> in the
+command palette. It builds a redacted diagnostics bundle for you to
+preview and send yourself, and nothing is sent automatically. You can
+also open an issue on GitHub.</p>
+<h2 id="try-it">Try it</h2>
+<ul>
+<li>Visual Studio Marketplace: <a
+href="https://marketplace.visualstudio.com/items?itemName=MNazmi.xpp-vscode">https://marketplace.visualstudio.com/items?itemName=MNazmi.xpp-vscode</a></li>
+<li>Source, docs and screenshots: <a
+href="https://github.com/nazmolla/xpp-vscode">https://github.com/nazmolla/xpp-vscode</a></li>
+<li>Issues and feature requests: <a
+href="https://github.com/nazmolla/xpp-vscode/issues">https://github.com/nazmolla/xpp-vscode/issues</a></li>
+</ul>
+<p>I would like to hear what you try it on, and what is missing for your
+team.</p>
 <p><em>F&amp;O Studio is an independent project and is not affiliated
 with or endorsed by Microsoft. Dynamics 365 is a trademark of Microsoft
 Corporation.</em></p>
