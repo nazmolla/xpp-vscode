@@ -140,6 +140,7 @@ namespace XppVsCode.Server.MetaModel
             a.Add("get_form_layout", HandleGetFormLayout);
             a.Add("type_members", b => _discovery.TypeMembersJson(Str(b, "objectType"), Str(b, "objectName")));
             a.Add("dump_element", b => _discovery.DumpElementJson(Str(b, "objectType"), Str(b, "objectName")));
+            a.Add("complete_source", b => _discovery.CompleteSourceJson(Str(b, "objectType"), Str(b, "objectName")));
 
             // Labels
             a.Add("read_label", HandleReadLabel);
