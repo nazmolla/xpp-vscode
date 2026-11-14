@@ -22,6 +22,22 @@ const DebugSourceTypes = ['AxClass', 'AxTable', 'AxForm', 'AxView', 'AxDataEntit
 const PdbSourceRoots = ['e:\\source\\', 'e:\\\\source\\', 'E:\\source\\'];
 /** workspaceState: the debug source breakpoints that are copies of code view breakpoints. */
 const CopiesKey = 'xpp.debug.breakpointCopies';
+/** globalState: running DebuggerProxy processes and the extension host that started each. */
+const ProxiesKey = 'xpp.debug.proxies';
+/** Requests after which AXHost runs again. */
+const ResumingCommands = new Set(['continue', 'next', 'stepIn', 'stepOut', 'stepBack', 'reverseContinue', 'goto']);
+
+interface ProxyTracker {
+    started(pid: number): void;
+    ended(pid: number): void;
+}
+
+const liveAdapters = new Set<{ shutdown(): Promise<void> }>();
+
+/** On deactivation (window closed or reloaded): resume and detach every session, so no environment stays frozen. */
+export async function releaseDebuggers(): Promise<void> {
+    await Promise.all([...liveAdapters].map(a => a.shutdown()));
+}
 
 interface InfologEntry {
     kind: string;
@@ -53,12 +69,15 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
     private mirrorQueue: Promise<void> = Promise.resolve();
     /** Remembers which debug source breakpoints are copies (breakpointKey); others were set there by you. */
     private state: vscode.Memento | undefined;
+    private global: vscode.Memento | undefined;
     readonly infolog = new InfologProvider();
 
     constructor(private readonly server: XppServerClient, private readonly log: vscode.OutputChannel, private readonly deployState: DeployState) { }
 
     register(context: vscode.ExtensionContext): void {
         this.state = context.workspaceState;
+        this.global = context.globalState;
+        void this.stopOrphanedProxies().catch(error => this.log.appendLine(`Debugger cleanup failed: ${(error as Error).message}`));
         context.subscriptions.push(
             vscode.debug.registerDebugConfigurationProvider(DebugType, this),
             vscode.debug.registerDebugAdapterDescriptorFactory(DebugType, this),
@@ -224,7 +243,50 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
         const port = await freePort();
         return new vscode.DebugAdapterInlineImplementation(new ProxyDebugAdapter(pending.proxy, [
             '--port', String(port), '--remoteProxyHost', pending.host, '--VSVersion', 'vsdbg', '--accessToken', pending.token,
-        ], this.log, pending.documents, this.breakpointLinks));
+        ], this.log, pending.documents, this.breakpointLinks, this.proxyTracker()));
+    }
+
+    /** Remembers running proxies, so one left behind by a crashed window can be stopped later. */
+    private proxyTracker(): ProxyTracker | undefined {
+        const state = this.global;
+        if (!state) {
+            return undefined;
+        }
+        const list = () => state.get<{ pid: number; host: number }[]>(ProxiesKey, []);
+        return {
+            started: pid => void state.update(ProxiesKey, [...list().filter(p => p.pid !== pid), { pid, host: process.pid }]),
+            ended: pid => void state.update(ProxiesKey, list().filter(p => p.pid !== pid)),
+        };
+    }
+
+    /**
+     * A DebuggerProxy whose VS Code window is gone (crash, killed extension host) keeps the debugger attached to the
+     * environment; it is stopped here. Proxies of other open windows are left alone.
+     */
+    private async stopOrphanedProxies(): Promise<void> {
+        const state = this.global;
+        const entries = state?.get<{ pid: number; host: number }[]>(ProxiesKey, []) ?? [];
+        if (!state || entries.length === 0) {
+            return;
+        }
+        const alive = (pid: number) => {
+            try {
+                process.kill(pid, 0);
+                return true;
+            } catch {
+                return false;
+            }
+        };
+        const running = await runningProxyPids();
+        for (const entry of entries.filter(e => !alive(e.host) && running.has(e.pid))) {
+            try {
+                process.kill(entry.pid);
+                this.log.appendLine(`Stopped a debugger left attached by a closed window (DebuggerProxy ${entry.pid}).`);
+            } catch {
+                // Already gone.
+            }
+        }
+        await state.update(ProxiesKey, entries.filter(e => alive(e.host) && running.has(e.pid)));
     }
 
     /** Infolog messages arrive in the debugger output as <InfologMessage> XML, as in Visual Studio's Infolog window. */
@@ -394,7 +456,7 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
  * Runs DebuggerProxy as the debug adapter over stdio, like DebugAdapterExecutable, but keeps its stderr and exit code:
  * when the proxy stops, VS Code otherwise only reports "read error".
  */
-class ProxyDebugAdapter implements vscode.DebugAdapter {
+export class ProxyDebugAdapter implements vscode.DebugAdapter {
     private readonly sent = new vscode.EventEmitter<vscode.DebugProtocolMessage>();
     readonly onDidSendMessage = this.sent.event;
     private readonly process: ChildProcessWithoutNullStreams;
@@ -411,6 +473,13 @@ class ProxyDebugAdapter implements vscode.DebugAdapter {
     private readonly copyState = new Map<string, { verified: boolean; message?: string }>();
     private readonly copyRequests = new Map<number, string[]>();
     private readonly copyOfId = new Map<number, string>();
+    /** The thread AXHost stopped on. While set, the environment is frozen for every user, not just this session. */
+    private stoppedThread: number | undefined;
+    /** Requests this adapter sends itself; their responses are not passed to VS Code. */
+    private readonly ownRequests = new Set<number>();
+    private nextOwnSeq = 2_000_000;
+    private exited = false;
+    private readonly exitWaiters: (() => void)[] = [];
 
     /**
      * Visual Studio registers xppSource: as a debuggable protocol and sets breakpoints on the symbols' own document names
@@ -438,7 +507,7 @@ class ProxyDebugAdapter implements vscode.DebugAdapter {
     }
 
     constructor(proxy: string, args: string[], private readonly log: vscode.OutputChannel, documents: Map<string, string> = new Map(),
-        private readonly links: Map<string, string> = new Map()) {
+        private readonly links: Map<string, string> = new Map(), private readonly tracker?: ProxyTracker) {
         // Local debug source file (lower case) -> the document name in the symbols, and back.
         this.toDocument = documents;
         // vsdbg answers with the document name either as is or under its local cache, as Visual Studio sees it
@@ -456,7 +525,67 @@ class ProxyDebugAdapter implements vscode.DebugAdapter {
         });
         this.process.stdin.on('error', () => undefined);
         this.process.on('error', error => this.stopped(`DebuggerProxy could not start: ${error.message}`));
-        this.process.on('exit', (code, signal) => this.stopped(`DebuggerProxy exited with ${code !== null ? `code ${code}` : `signal ${signal}`}.`));
+        this.process.on('exit', (code, signal) => {
+            this.exited = true;
+            liveAdapters.delete(this);
+            this.exitWaiters.splice(0).forEach(done => done());
+            this.stopped(`DebuggerProxy exited with ${code !== null ? `code ${code}` : `signal ${signal}`}.`);
+        });
+        liveAdapters.add(this);
+        if (this.process.pid) {
+            this.tracker?.started(this.process.pid);
+            const pid = this.process.pid;
+            this.process.on('exit', () => this.tracker?.ended(pid));
+        }
+    }
+
+    private write(message: object): void {
+        if (this.process.stdin.writable) {
+            const json = JSON.stringify(message);
+            this.process.stdin.write(`Content-Length: ${Buffer.byteLength(json, 'utf8')}\r\n\r\n${json}`, 'utf8');
+        }
+    }
+
+    private request(command: string, args: object): void {
+        const seq = this.nextOwnSeq++;
+        this.ownRequests.add(seq);
+        this.write({ seq, type: 'request', command, arguments: args });
+    }
+
+    /** A stopped AXHost stays frozen for everyone after the debugger goes away, so it is resumed before every detach. */
+    private resume(): void {
+        if (this.stoppedThread !== undefined) {
+            this.log.appendLine('Resuming the environment before the debugger detaches.');
+            this.request('continue', { threadId: this.stoppedThread });
+            this.stoppedThread = undefined;
+        }
+    }
+
+    /**
+     * Ends the session when VS Code goes away without disconnecting (window closed or reloaded): resume, detach, and
+     * stop the proxy once it has passed that on, or after a few seconds.
+     */
+    shutdown(): Promise<void> {
+        if (this.exited) {
+            return Promise.resolve();
+        }
+        if (!this.disconnecting) {
+            this.disconnecting = true;
+            this.resume();
+            this.request('disconnect', { restart: false, terminateDebuggee: false });
+        }
+        return new Promise<void>(resolve => {
+            const timer = setTimeout(() => {
+                if (!this.exited) {
+                    this.process.kill();
+                }
+                resolve();
+            }, 3000);
+            this.exitWaiters.push(() => {
+                clearTimeout(timer);
+                resolve();
+            });
+        });
     }
 
     private localFor(p: string): string | undefined {
@@ -503,6 +632,15 @@ class ProxyDebugAdapter implements vscode.DebugAdapter {
         const command = (message as { command?: string }).command;
         if (command === 'disconnect' || command === 'terminate') {
             this.disconnecting = true;
+            this.resume();
+        }
+        // An attached debugger only detaches: AXHost serves the whole environment.
+        if (command === 'disconnect') {
+            const request = message as { arguments?: Record<string, unknown> };
+            message = { ...request, arguments: { ...request.arguments, terminateDebuggee: false } } as vscode.DebugProtocolMessage;
+        }
+        if (command && ResumingCommands.has(command)) {
+            this.stoppedThread = undefined;
         }
         // vsdbg rejects initialize with VS Code's debug type ('xpp'); 'clr' (.NET Framework, AXHost) as in VSDbgLaunch.json.
         if (command === 'initialize') {
@@ -528,18 +666,17 @@ class ProxyDebugAdapter implements vscode.DebugAdapter {
             message = JSON.parse(JSON.stringify(message));
             this.rewritePaths((message as { arguments?: unknown }).arguments, p => this.toDocument.get(p.toLowerCase()));
         }
-        if (this.process.stdin.writable) {
-            const json = JSON.stringify(message);
-            this.process.stdin.write(`Content-Length: ${Buffer.byteLength(json, 'utf8')}\r\n\r\n${json}`, 'utf8');
-        }
+        this.write(message);
     }
 
     dispose(): void {
-        this.disposed = true;
-        if (this.process.exitCode === null) {
-            this.process.kill();
-        }
         this.sent.dispose();
+        if (this.disposed && this.exited) {
+            return;
+        }
+        this.disposed = true;
+        // After a normal disconnect the proxy has detached; otherwise resume and detach first.
+        void this.shutdown();
     }
 
     /** Splits the stdout stream into DAP messages (Content-Length header, blank line, JSON body). */
@@ -564,6 +701,15 @@ class ProxyDebugAdapter implements vscode.DebugAdapter {
             this.buffer = this.buffer.subarray(end);
             try {
                 const parsed = JSON.parse(body);
+                if (parsed.type === 'response' && this.ownRequests.delete(parsed.request_seq)) {
+                    continue;
+                }
+                if (parsed.type === 'event' && parsed.event === 'stopped') {
+                    this.stoppedThread = typeof parsed.body?.threadId === 'number' ? parsed.body.threadId : this.stoppedThread ?? 0;
+                }
+                if (parsed.type === 'event' && parsed.event === 'continued') {
+                    this.stoppedThread = undefined;
+                }
                 if (parsed.type === 'response' && parsed.command === 'setBreakpoints' && this.copyRequests.has(parsed.request_seq)) {
                     const keys = this.copyRequests.get(parsed.request_seq)!;
                     this.copyRequests.delete(parsed.request_seq);
@@ -610,6 +756,14 @@ class ProxyDebugAdapter implements vscode.DebugAdapter {
         this.sent.fire({ type: 'event', seq: 0, event: 'terminated', body: {} } as vscode.DebugProtocolMessage);
         vscode.window.showErrorMessage(`X++ debugging stopped: ${reason} See the X++ output for details.`);
     }
+}
+
+/** PIDs of the running Microsoft.Dynamics.AX.DebuggerProxy.exe processes. */
+function runningProxyPids(): Promise<Set<number>> {
+    return new Promise(resolve => execFile('tasklist', ['/FI', 'IMAGENAME eq Microsoft.Dynamics.AX.DebuggerProxy.exe', '/FO', 'CSV', '/NH'],
+        { windowsHide: true, timeout: 30_000 }, (err, stdout) => {
+            resolve(new Set(err ? [] : stdout.split(/\r?\n/).map(line => /^"[^"]+","(\d+)"/.exec(line)?.[1]).filter((p): p is string => !!p).map(Number)));
+        }));
 }
 
 /** The local AOS processes: IIS worker processes (w3wp.exe) and the batch server (Batch.exe). */

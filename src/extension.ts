@@ -10,7 +10,7 @@ import { ElementDragAndDrop, ElementDropIntoCode, ElementsMime } from './dragAnd
 import { objectUri, parseObjectUri, XppCodeFileSystem, XppScheme } from './codeView';
 import { FormDesigner } from './designer';
 import { registerTools } from './d365Tools';
-import { XppDebugger } from './debug';
+import { releaseDebuggers, XppDebugger } from './debug';
 import { DesignerNodeContext, DesignerServices, ElementDesigner } from './elementDesigner';
 import { LabelEditor } from './labelEditor';
 import { initEnvironmentSelection, onDidChangeEnvironment, readActiveEnvironment } from './environment';
@@ -433,7 +433,9 @@ export function activate(context: vscode.ExtensionContext): void {
     command('xpp.pac.dbSync', () => pac.syncDatabase());
 }
 
-export function deactivate(): void { }
+export function deactivate(): Promise<void> {
+    return releaseDebuggers();
+}
 
 /** Unsaved code views would otherwise be compiled from the metadata on disk. */
 async function saveCodeViews(): Promise<void> {

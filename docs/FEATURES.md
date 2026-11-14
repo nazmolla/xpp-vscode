@@ -10,6 +10,10 @@ Develop Dynamics 365 Finance & Operations X++ code in VS Code, without Visual St
 
 ## What's new in 0.15
 
+**0.15.3: The debugger never leaves the environment frozen.**
+- While the debugger is stopped (at a breakpoint or after Pause), the environment's server is suspended for every user. Disconnecting, closing or reloading the window now resumes it first and only detaches, never ends it.
+- A debugger left attached by a VS Code window that crashed is stopped the next time F&O Studio starts.
+
 **0.15.2: Breakpoints in Microsoft's code (and in your own) bind and stop on unified developer environments.**
 - A breakpoint in a standard element's code view, for example the `init` method of the PurchTable form, now binds, stops, steps and shows its variables. Before, it stayed hollow with "No symbols have been loaded for this document".
 - The debug source is the element's code as the compiler numbers it (for forms, with their data source and control classes), so breakpoints land on the right line.
