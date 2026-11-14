@@ -48,6 +48,10 @@
       <HintPath>$(D365BinPath)\Microsoft.Dynamics.AX.Metadata.Core.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="Microsoft.Dynamics.AX.Metadata.Extensions">
+      <HintPath>$(D365BinPath)\Microsoft.Dynamics.AX.Metadata.Extensions.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="Microsoft.Dynamics.AX.Metadata.Patterns">
       <HintPath>$(D365BinPath)\Microsoft.Dynamics.AX.Metadata.Patterns.dll</HintPath>
       <Private>false</Private>

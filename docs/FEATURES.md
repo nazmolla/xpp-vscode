@@ -10,6 +10,11 @@ Develop Dynamics 365 Finance & Operations X++ code in VS Code, without Visual St
 
 ## What's new in 0.15
 
+**0.15.2: Breakpoints in Microsoft's code (and in your own) bind and stop on unified developer environments.**
+- A breakpoint in a standard element's code view, for example the `init` method of the PurchTable form, now binds, stops, steps and shows its variables. Before, it stayed hollow with "No symbols have been loaded for this document".
+- The debug source is the element's code as the compiler numbers it (for forms, with their data source and control classes), so breakpoints land on the right line.
+- The breakpoint you set in the code view shows the same state as the one the debugger binds, and breakpoints you add while debugging are picked up right away.
+
 **0.15.1: Fixes from an end-to-end trial of every tool and command.**
 - Run Best Practice Checks no longer fails with "line must be non-negative" (metadata findings without a line).
 - Forms: `xpp_read_object` returns their data sources, and `xpp_validate_object` checks form data sources and controls correctly.
