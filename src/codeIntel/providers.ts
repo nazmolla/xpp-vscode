@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { CodeTypes } from '../aot';
 import { methodUri, objectUri, parseObjectUri, XppScheme } from '../codeView';
 import { ToolNode, ToolsContribution } from '../d365Tools';
+import { isDebugSourceFile } from '../debug';
 import { currentObject, declaredType, documentText, Symbol, XppDocumentSelector, XppNavigation } from '../navigation';
 import { XppServerClient } from '../serverClient';
 import { compilerLineToDocumentLine, methodSpans } from '../xppSource';
@@ -835,7 +836,7 @@ export class CodeIntelligence implements vscode.Disposable, ToolsContribution {
     // ── Live syntax check ──
 
     private scheduleSyntax(document: vscode.TextDocument): void {
-        if (document.languageId !== 'xpp' || !enabled('syntaxCheck')) {
+        if (document.languageId !== 'xpp' || !enabled('syntaxCheck') || isDebugSourceFile(document.uri)) {
             return;
         }
         const key = document.uri.toString();

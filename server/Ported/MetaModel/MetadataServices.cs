@@ -29,6 +29,7 @@ namespace XppVsCode.Server.MetaModel
         FormLayoutResult GetFormLayout(string formName, string rootControl, int maxDepth);
         string TypeMembersJson(string objectType, string objectName);
         string DumpElementJson(string objectType, string objectName);
+        string CompleteSourceJson(string objectType, string objectName);
         EnvironmentInfo GetEnvironmentInfo();
     }
 
