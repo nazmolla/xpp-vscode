@@ -51,6 +51,7 @@ const steps = [
     b('get_element_method', { objectType: 'AxTable', objectName: 'CustGroup', path: ['Methods', 'find'] }),
     b('get_overrides', { objectType: 'AxTable', objectName: 'CustGroup', path: [] }), b('type_members', { objectType: 'AxClass', objectName: 'CustVendSettle' }),
     b('dump_element', { objectType: 'AxEdt', objectName: 'CustGroupId' }), b('table_erd', { tables: ['CustGroup', 'CustTable', 'NoSuchTableXvs'] }),
+    b('complete_source', { objectType: 'AxTable', objectName: 'CustGroup' }), b('complete_source', { objectType: 'AxEdt', objectName: 'CustGroupId' }),
     b('incoming_relations', { table: 'CustGroup' }), b('validate_object', { objectType: 'AxTable', objectName: 'CustGroup' }),
     b('read_label', { labelFileId: L, labelId: 'HSRemovalStatus' }), b('read_label', { labelFileId: 'SYS', search: 'customer group', maxResults: '3' }),
     b('label_file_entries', { labelFile: L, search: '', limit: '20' }), b('label_file_entries', { labelFile: 'NoSuchFileXvs', search: '' }),

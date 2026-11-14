@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Web.Script.Serialization;
+using Microsoft.Dynamics.AX.Metadata.Extensions;
 using Microsoft.Dynamics.AX.Metadata.MetaModel;
 
 namespace XppVsCode.Server.MetaModel
@@ -21,6 +22,25 @@ namespace XppVsCode.Server.MetaModel
             sb.Append("// ").Append(objectType).Append(' ').Append(objectName).Append("  [").Append(model ?? GetObjectModelName(objectType, objectName)).Append("]\n");
             DumpNode(sb, element, objectName, 0);
             return json.Serialize(new System.Collections.Generic.Dictionary<string, object> { ["success"] = true, ["text"] = sb.ToString() });
+        }
+
+        // The element's source as the compiler numbers it (Visual Studio's code view): for forms the declaration, form
+        // methods, then data source and control classes. PDB line numbers refer to this text.
+        public string CompleteSourceJson(string objectType, string objectName)
+        {
+            var json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+            object element = ReadViaMetadataProvider(objectType, objectName, out _);
+            string text;
+            switch (element)
+            {
+                case null: return json.Serialize(Failure(objectType + " '" + objectName + "' not found."));
+                case AxClass c: text = c.GetCompleteSource(); break;
+                case AxForm f: text = f.GetCompleteSource(); break;
+                case AxQuery q: text = q.GetCompleteSource(); break;
+                case AxDataEntity d: text = d.GetCompleteSource(); break;
+                default: return json.Serialize(Failure(objectType + " has no X++ source."));
+            }
+            return json.Serialize(new System.Collections.Generic.Dictionary<string, object> { ["success"] = true, ["text"] = text });
         }
 
         private static void DumpNode(StringBuilder sb, object node, string name, int depth)
