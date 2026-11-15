@@ -154,19 +154,17 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
                 processName: config.processName ?? 'AXHost.exe',
                 console: 'internalConsole',
                 requireExactSource: false,
-                // Microsoft's packages are optimized "non-user" code: Just My Code would skip their breakpoints.
-                justMyCode: config.justMyCode ?? standard.length === 0,
-                // X++ throws and catches exceptions all the time; without Just My Code each one would be printed.
-                logging: config.logging ?? { exceptions: false },
+                // Visual Studio's own settings (FinOpsTools\DebuggerProxy\VSDbgLaunch.json). Just My Code stays on: with
+                // it off, every exception AXHost throws (X++ throws many) goes through the debugger and the environment
+                // hardly responds while attached.
+                ...(config.justMyCode !== undefined ? { justMyCode: config.justMyCode } : {}),
                 sourceFileMap: { ...sourceFileMap, ...(config.sourceFileMap ?? {}) },
                 symbolOptions: config.symbolOptions ?? {
-                    // Your modules and the module holding each standard breakpoint first; any other module's symbols
-                    // load when it appears in a call stack or you step into it.
+                    // Your modules and the module holding each standard breakpoint.
                     moduleFilter: {
                         mode: 'loadOnlyIncluded',
                         includedModules: XppDebugger.includedModules(packages, standard),
                         includeSymbolsNextToModules: false,
-                        includeSymbolsOnDemand: true,
                     },
                 },
             };
@@ -355,7 +353,7 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
     private static includedModules(packages: string[], standard: StandardBreakpointElement[]): string[] {
         return [...new Set([
             ...packages.flatMap(p => [`Dynamics.AX.${p}.dll`, `Dynamics.AX.${p}.*`]),
-            ...standard.flatMap(e => e.module ? [`${e.module}.*`, `${e.module}.dll`, `Dynamics.AX.${e.packageName}.dll`] : [`Dynamics.AX.${e.packageName}.*`]),
+            ...standard.flatMap(e => e.module ? [`${e.module}.netmodule`] : [`Dynamics.AX.${e.packageName}.*.netmodule`]),
         ])];
     }
 
