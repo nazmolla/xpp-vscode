@@ -163,7 +163,7 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
                     // Your modules and the module holding each standard breakpoint.
                     moduleFilter: {
                         mode: 'loadOnlyIncluded',
-                        includedModules: XppDebugger.includedModules(packages, standard),
+                        includedModules: [...XppDebugger.includedModules(packages, standard), ...additionalModules(config)],
                         includeSymbolsNextToModules: false,
                     },
                 },
@@ -222,7 +222,7 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
                 searchMicrosoftSymbolServer: false,
                 moduleFilter: {
                     mode: 'loadOnlyIncluded',
-                    includedModules: XppDebugger.includedModules(packages, standard),
+                    includedModules: [...XppDebugger.includedModules(packages, standard), ...additionalModules(config)],
                     includeSymbolsNextToModules: true,
                     includeSymbolsOnDemand: true,
                 },
@@ -754,6 +754,11 @@ export class ProxyDebugAdapter implements vscode.DebugAdapter {
         this.sent.fire({ type: 'event', seq: 0, event: 'terminated', body: {} } as vscode.DebugProtocolMessage);
         vscode.window.showErrorMessage(`X++ debugging stopped: ${reason} See the X++ output for details.`);
     }
+}
+
+/** launch.json "additionalModules": more modules whose symbols load, added to the ones F&O Studio picks. */
+function additionalModules(config: vscode.DebugConfiguration): string[] {
+    return Array.isArray(config.additionalModules) ? config.additionalModules.filter((m: unknown): m is string => typeof m === 'string' && m.trim() !== '') : [];
 }
 
 /** PIDs of the running Microsoft.Dynamics.AX.DebuggerProxy.exe processes. */
