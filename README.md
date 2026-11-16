@@ -27,7 +27,7 @@ The full list is in the [feature reference](https://github.com/nazmolla/xpp-vsco
 - Windows.
 - A Dynamics 365 Finance & Operations unified developer environment (**F&O Studio: Connect to Environment** installs the metadata, compiler and FinOps tools), or a cloud-hosted or VHD environment. On a cloud-hosted or VHD environment, run VS Code as administrator, as Visual Studio does, to build into PackagesLocalDirectory.
 - SQL Server LocalDB, for cross references.
-- [Power Platform CLI](https://learn.microsoft.com/power-platform/developer/cli/introduction) (`pac`), for deploy and database sync.
+- Optional: [Power Platform CLI](https://learn.microsoft.com/power-platform/developer/cli/introduction) (`pac`), only for the `(pac)` commands; deploy and database sync don't need it.
 
 ## Getting started
 
@@ -46,7 +46,7 @@ The full list is in the [feature reference](https://github.com/nazmolla/xpp-vsco
 | `xpp.auth.clientId` | Optional Entra app ID for sign-in |
 | `xpp.build.crossReference` | Update cross references while building |
 | `xpp.build.runAppCheckerRules` | Run AppChecker rules during the build |
-| `xpp.pacPath` | Path to `pac` |
+| `xpp.pacPath` | Path to `pac`, for the `(pac)` commands |
 | `xpp.debuggerProxyPath` | Path to `Microsoft.Dynamics.AX.DebuggerProxy.exe`, if not in the default location |
 | `xpp.erd.depth`, `xpp.erd.direction`, `xpp.erd.fields` | Defaults for the entity relationship diagram (also changeable in the diagram) |
 | `xpp.security.sodRulesFile` | Segregation of duties rules (JSON); empty uses the built-in rules |

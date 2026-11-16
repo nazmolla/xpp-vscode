@@ -11,7 +11,7 @@ import { readProject } from './project';
 import { compilerLineToDocumentLine } from './xppSource';
 
 /** The package (folder in the custom metadata store) holding a model; a package name resolves to itself. */
-async function packageOf(store: string, model: string): Promise<string> {
+export async function packageOf(store: string, model: string): Promise<string> {
     if (existsSync(path.join(store, model, 'Descriptor'))) {
         return model;
     }

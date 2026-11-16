@@ -10,6 +10,13 @@ Develop Dynamics 365 Finance & Operations X++ code in VS Code, without Visual St
 
 ## What's new in 0.15
 
+**Next: Deploy to a unified developer environment the way Visual Studio does, and debug your own code there.**
+- **Deploy Models to Environment** uploads your packages as you built them, through the environment's Dataverse, as Visual Studio's Deploy Models to Online Environment does. Nothing is recompiled, so the environment runs the build you debug, with the PDBs your build converted for the debugger. The Power Platform CLI (`pac`) is no longer needed for deploy or database sync.
+- Pick the packages to deploy (your project's package is preselected) and the database sync: None, Module (the deployed packages) or Full. Progress shows in the **X++ Deploy** output.
+- **Synchronize Database** on a unified environment also runs through Dataverse.
+- The `deploy` task takes `"dbSync": "None" | "Module" | "Full"`; `Incremental` (which needed an argument file with pac) now runs a Module sync.
+- Breakpoints in your own code stop on a unified environment after the deploy: they bind, step, show variables, and the stop shows in your code view.
+
 **Next: Debugging on cloud-hosted and VHD environments, like Visual Studio's F5.**
 - Start debugging and F&O Studio attaches to the AOS of the runtime host type set in Visual Studio's Dynamics 365 options: the AOS site's application pool in IIS, or IIS Express. No process list to pick from. To debug the batch service, set `"processName": "Batch.exe"`.
 - Breakpoints in your own code bind and stop. The compiler writes Windows PDBs, which the VS Code debugger can't read, so a build converts them to portable PDBs with Microsoft's Pdb2Pdb (included). Visual Studio debugs the converted PDBs too.
@@ -215,7 +222,8 @@ Turn each feature on or off with **Configure Code Intelligence…**, or with the
   - tests run the deployed code, and you get a warning when your build is newer than the last deploy.
 - **Deploy:**
   - **Create Deployment Package…** (the same script Visual Studio runs);
-  - **Deploy Models to Environment (pac)**, **Synchronize Database (pac)**, **Initialize Deployment Solution (pac)**;
+  - **Deploy Models to Environment** deploys your packages as built on this machine, as Visual Studio does, and **Synchronize Database** runs a Full or Module sync (both through the environment's Dataverse);
+  - **Initialize Deployment Solution (pac)** and **Sign In to Environment (pac)** set up a Power Platform CLI solution if you deploy with `pac` yourself;
   - **Synchronize Tables** syncs only your project's tables on cloud-hosted and VHD environments.
 - **Debugging:**
   - **Launch Debugger** attaches through the FinOps debugger proxy, as Visual Studio does, and you can set breakpoints in the code view.
@@ -294,10 +302,10 @@ Turn each feature on or off with **Configure Code Intelligence…**, or with the
 - **Connect to Environment…** downloads the metadata, restores the cross-reference database and configures the machine. It shows each step and can retry a failed one.
 - **Select Environment…** (also from the status bar) switches environments without a reload.
   - Each workspace remembers its own environment, so two windows can work with two environments.
-  - **Sign In to Environment (pac)** keeps one pac profile per environment.
+  - **Sign In to Environment (pac)** keeps one pac profile per environment, for your own `pac` commands.
 - **Version drift guard** (*preview*): you get a warning when the environment runs a newer application version. **Update Metadata** downloads it, and **Clean Up Old Application Versions…** removes old versions after a confirmation.
 - **Open Team Repository…** (*preview*): clone or pick a repository, link its packages into the metadata folder and build them in dependency order.
-- **Cloud-hosted and VHD environments** work without a connection step. F&O Studio uses the local PackagesLocalDirectory, AOS and AxDB. Deploy (pac) and Run Tests are UDE-only and are hidden there; the debugger attaches to the local AOS (*preview*, needs the C# extension).
+- **Cloud-hosted and VHD environments** work without a connection step. F&O Studio uses the local PackagesLocalDirectory, AOS and AxDB. Deploy and Run Tests are UDE-only and are hidden there; the debugger attaches to the local AOS (*preview*, needs the C# extension).
 
 ### Copilot
 - **Agents** in the Copilot agent picker, each with its own instructions and next-step handoffs:
@@ -343,8 +351,8 @@ The tools are registered automatically. Copilot can:
 | Code editor | X++ code view with completion, definitions, references, Chain of Command implementations, code lens, folding and formatting | Same code layout |
 | Build models, build project | Build Model, Build Project; errors in Problems | Same (xppc, LabelC) |
 | Best practice checks | Run Best Practice Checks on Project | Same (xppbp) |
-| Synchronize database | Synchronize Database (pac on UDE, SyncEngine on cloud-hosted and VHD), Synchronize Tables | Same |
-| Create deployment package, deploy | Create Deployment Package…, Deploy Models to Environment (pac) | Same |
+| Synchronize database | Synchronize Database (Dataverse on UDE, SyncEngine on cloud-hosted and VHD), Synchronize Tables | Same |
+| Create deployment package, deploy | Create Deployment Package…, Deploy Models to Environment | Same: the locally built packages go up through Dataverse |
 | Model management | Create Model…, Update Model Parameters…, View Model Dependencies… | Same |
 | Import/Export project (.axpp) | Import Project…, Export Project… | Same file format |
 | Find references, metadata search, find labels, tag references | Find References, Open Element…, Find Labels…, Find Tag References… | Same cross-reference database |
@@ -365,7 +373,7 @@ The tools are registered automatically. Copilot can:
   - **Unified developer environment:** **Connect to Environment…** installs the metadata, compiler and FinOps tools.
   - **Cloud-hosted or VHD environment:** run VS Code as administrator, as Visual Studio does, to build into PackagesLocalDirectory.
 - SQL Server LocalDB, for cross references.
-- [Power Platform CLI](https://learn.microsoft.com/power-platform/developer/cli/introduction) (`pac`), for deploy and database sync on a UDE.
+- Optional: [Power Platform CLI](https://learn.microsoft.com/power-platform/developer/cli/introduction) (`pac`), only for the `(pac)` commands. Deploy and database sync don't need it.
 - GitHub Copilot, for `@fno` and the agent tools. Verify Changes in the Running App also needs the Dynamics 365 ERP MCP server.
 
 ## Getting started
@@ -392,7 +400,7 @@ The tools are registered automatically. Copilot can:
 | `xpp.build.runAppCheckerRules` | Run AppChecker rules during the build |
 | `xpp.build.saveBeforeBuild` | Save unsaved X++ code views before a build |
 | `xpp.build.restartLocalAos` | Cloud-hosted and VHD: restart the running AOS hosts (IIS Express or IIS application pool, batch service) after a successful build |
-| `xpp.pacPath` | Path to `pac` |
+| `xpp.pacPath` | Path to `pac`, for the `(pac)` commands |
 | `xpp.debuggerProxyPath` | Path to `Microsoft.Dynamics.AX.DebuggerProxy.exe`, if it isn't in the default location |
 | `xpp.erd.depth`, `xpp.erd.direction`, `xpp.erd.fields` | Defaults for the entity relationship diagram |
 | `xpp.security.sodRulesFile` | Segregation of duties rules (JSON); leave empty to use the built-in rules |

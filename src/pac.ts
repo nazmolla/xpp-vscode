@@ -1,14 +1,17 @@
 import { exec, execFile } from 'child_process';
-import { existsSync, promises as fs } from 'fs';
+import { promises as fs } from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { packageOf } from './build';
 import { orgName, readActiveEnvironment, selectedEnvironmentUrl, XppEnvironment } from './environment';
 import { readProject } from './project';
+import { builtPackages, DbSync, DeployPackage, deployPackages, syncUdeDatabase } from './udeDeploy';
 
 /**
- * Deploy and database sync for unified developer environments run through the Power Platform CLI
- * (pac package ... --package-type erp), which needs a solution folder with .erp/xpp.json. Cloud-hosted and VHD
- * environments have their own AOS and database: no deploy, and the database is synchronized with SyncEngine.
+ * Deploy and database sync for unified developer environments, as Visual Studio does them: the packages built on this
+ * machine go to the environment through Dataverse (udeDeploy.ts). The Power Platform CLI commands (sign in, initialize
+ * a pac solution) stay for those who deploy with pac themselves. Cloud-hosted and VHD environments have their own AOS
+ * and database: no deploy, and the database is synchronized with SyncEngine.
  */
 export class PacCommands {
     async initSolution(): Promise<void> {
@@ -44,28 +47,56 @@ export class PacCommands {
         await this.run('Sign in', ['auth', 'create', '--name', profileName(url), '--environment', url]);
     }
 
-    /** Returns the deployed models, or undefined when nothing was deployed. dbSync skips the question (tasks). */
+    /**
+     * Deploys the packages as built on this machine, as Visual Studio does (no recompile, so the debugger finds the build's
+     * symbols). Returns the deployed models, or undefined when nothing was deployed. dbSync skips the questions (tasks).
+     */
     async deploy(options?: { dbSync?: string }): Promise<string[] | undefined> {
         if (await this.local()) {
             return undefined;
         }
-        const root = await this.ensureSolution();
-        if (!root) {
-            return undefined;
+        const env = await readActiveEnvironment();
+        const built = await builtPackages(env.modelStoreFolder);
+        if (!built.length) {
+            throw new Error(`Nothing to deploy: no package in ${env.modelStoreFolder} has been built. Build your model first.`);
         }
-        const sync = options?.dbSync ?? await vscode.window.showQuickPick(['None', 'Incremental', 'Full'], { title: 'Database sync after deploy' });
+        const project = await readProject().catch(() => undefined);
+        const projectPackage = project?.model ? (await packageOf(env.modelStoreFolder, project.model)).toLowerCase() : undefined;
+        let packages: DeployPackage[];
+        if (options?.dbSync !== undefined) {
+            packages = built.filter(p => p.name.toLowerCase() === projectPackage);
+            if (!packages.length) {
+                throw new Error(project?.model ? `The package of ${project.model} has not been built.` : 'Open a D365FO project first: the task deploys the package of its model.');
+            }
+        } else {
+            const picked = await vscode.window.showQuickPick(
+                built.map(p => ({ label: p.name, description: p.folder, picked: p.name.toLowerCase() === projectPackage, pkg: p })),
+                { title: 'Packages to deploy (as built on this machine)', canPickMany: true });
+            if (!picked?.length) {
+                return undefined;
+            }
+            packages = picked.map(p => p.pkg);
+        }
+        const sync = normalizeDbSync(options?.dbSync) ?? (await vscode.window.showQuickPick([
+            { label: 'None' as DbSync, description: 'No database sync' },
+            { label: 'Module' as DbSync, description: `Synchronize the tables of ${packages.map(p => p.name).join(', ')}` },
+            { label: 'Full' as DbSync, description: 'Synchronize the whole database (slow)' },
+        ], { title: 'Database sync after deploy' }))?.label;
         if (!sync) {
             return undefined;
         }
-        if (!await this.useProfile()) {
-            return undefined;
-        }
-        // Compile against the selected environment's version, not the one registered for pac's active environment.
-        const env = await readActiveEnvironment().catch(() => undefined);
-        const version = env?.dataverseUrl && env.applicationVersion ? ['--app-version', env.applicationVersion] : [];
-        await this.run('Compile packages', ['package', 'compile', '--package-type', 'erp', '--solution-root', root, ...version]);
-        await this.run('Deploy packages', ['package', 'deploy', '--package-type', 'erp', '--solution-root', root, '--db-sync', sync, ...this.environmentArgs()]);
-        return solutionModels(root);
+        const output = this.output();
+        output.show(true);
+        output.appendLine(`Deploying ${packages.map(p => p.name).join(', ')} to ${selectedEnvironmentUrl() ?? 'the selected environment'} (database sync: ${sync})…`);
+        await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: `Deploying ${packages.map(p => p.name).join(', ')}`, cancellable: true },
+            (progress, token) => deployPackages(packages, sync, line => {
+                output.appendLine(line);
+                progress.report({ message: line.trim() });
+            }, token));
+        output.appendLine('Deployed.');
+        vscode.window.showInformationMessage(`Deployed ${packages.map(p => p.name).join(', ')}.`);
+        return modelsOf(packages);
     }
 
     /** mode and modules skip the questions (tasks). */
@@ -76,23 +107,35 @@ export class PacCommands {
             return;
         }
         const mode = options?.mode ?? await vscode.window.showQuickPick(['Full', 'Module'], { title: 'Database synchronization' });
-        if (!mode) {
+        if (mode !== 'Full' && mode !== 'Module') {
             return;
         }
-        const args = ['package', 'db-sync', '--db-sync', mode, ...this.environmentArgs()];
+        let modules: string[] = [];
         if (mode === 'Module') {
-            const project = await readProject();
-            const modules = options?.modules ?? (options?.mode ? project?.model : undefined)
+            const project = await readProject().catch(() => undefined);
+            const value = options?.modules ?? (options?.mode ? project?.model : undefined)
                 ?? await vscode.window.showInputBox({ title: 'Modules to synchronize', value: project?.model ?? '' });
-            if (!modules) {
+            if (!value) {
                 return;
             }
-            args.push('--modules', modules);
+            modules = value.split(',').map(m => m.trim()).filter(Boolean);
         }
-        if (!await this.useProfile()) {
-            return;
-        }
-        await this.run('Synchronize database', args);
+        const output = this.output();
+        output.show(true);
+        output.appendLine(`Synchronizing the database (${mode}${modules.length ? `: ${modules.join(', ')}` : ''})…`);
+        await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: 'Synchronizing the database', cancellable: true },
+            (progress, token) => syncUdeDatabase(mode, modules, line => {
+                output.appendLine(line);
+                progress.report({ message: line.trim() });
+            }, token));
+        output.appendLine('Database synchronized.');
+    }
+
+    private channel?: vscode.OutputChannel;
+
+    private output(): vscode.OutputChannel {
+        return this.channel ??= vscode.window.createOutputChannel('X++ Deploy');
     }
 
     /** Full synchronization of the local business database, as the metadata server's build does. */
@@ -108,33 +151,13 @@ export class PacCommands {
         ]), exitCode => `SyncEngine failed (exit ${exitCode}). It needs VS Code running as administrator; see the terminal output.`);
     }
 
-    /** Tells the user that pac does not apply to a cloud-hosted or VHD environment. */
+    /** Tells the user that deploying does not apply to a cloud-hosted or VHD environment. */
     private async local(): Promise<boolean> {
         const local = !!(await readActiveEnvironment().catch(() => undefined))?.local;
         if (local) {
-            vscode.window.showInformationMessage('This is a cloud-hosted or VHD environment: your models run on the local AOS once they are built, so there is nothing to deploy with pac.');
+            vscode.window.showInformationMessage('This is a cloud-hosted or VHD environment: your models run on the local AOS once they are built, so there is nothing to deploy.');
         }
         return local;
-    }
-
-    private environmentArgs(): string[] {
-        const url = selectedEnvironmentUrl();
-        return url ? ['--environment', url] : [];
-    }
-
-    /** Selects the environment's profile; without one, asks before running on pac's active profile, which may be another tenant's. */
-    private async useProfile(): Promise<boolean> {
-        const url = selectedEnvironmentUrl();
-        if (!url || await this.selectProfile(url)) {
-            return true;
-        }
-        const choice = await vscode.window.showWarningMessage(
-            `pac has no profile for ${orgName(url)}, so it would use its active profile.`, 'Sign In (pac)', 'Continue');
-        if (choice === 'Sign In (pac)') {
-            await this.signIn();
-            return this.selectProfile(url);
-        }
-        return choice === 'Continue';
     }
 
     /** Makes the environment's profile from Sign In active. */
@@ -159,22 +182,6 @@ export class PacCommands {
             vscode.window.showErrorMessage('Open a workspace folder first.');
         }
         return root;
-    }
-
-    /** The deployment solution of the workspace; the first deploy initializes it (pac package init) for the project's model. */
-    private async ensureSolution(): Promise<string | undefined> {
-        const root = this.workspaceRoot();
-        if (!root || existsSync(path.join(root, '.erp', 'xpp.json'))) {
-            return root;
-        }
-        const project = await readProject().catch(() => undefined);
-        const choice = await vscode.window.showInformationMessage(
-            `The first deploy from this workspace sets up its deployment solution (.erp/xpp.json)${project?.model ? ` for ${project.model}` : ''}.`, 'Set Up and Deploy');
-        if (!choice) {
-            return undefined;
-        }
-        await this.initSolution();
-        return existsSync(path.join(root, '.erp', 'xpp.json')) ? root : undefined;
     }
 
     /** Runs pac (a .cmd, so through a shell) as a visible task. */
@@ -207,28 +214,22 @@ function profileName(url: string): string {
     return orgName(url).slice(0, 30);
 }
 
-/** The models of a deployment solution: every "model"/"models" value in .erp/xpp.json, else the project's model. */
-async function solutionModels(root: string): Promise<string[]> {
-    const found = new Set<string>();
-    const collect = (value: unknown, key = '') => {
-        if (typeof value === 'string' && /^models?$/i.test(key)) {
-            value.split(',').map(v => v.trim()).filter(Boolean).forEach(v => found.add(v));
-        } else if (Array.isArray(value)) {
-            value.forEach(v => collect(v, key));
-        } else if (value && typeof value === 'object') {
-            Object.entries(value).forEach(([k, v]) => collect(v, k));
-        }
-    };
-    try {
-        collect(JSON.parse((await fs.readFile(path.join(root, '.erp', 'xpp.json'), 'utf8')).replace(/^\uFEFF/, '')));
-    } catch {
-        // An unreadable solution file: fall back to the project.
+
+function normalizeDbSync(value: string | undefined): DbSync | undefined {
+    if (value === undefined) {
+        return undefined;
     }
-    if (!found.size) {
-        const model = (await readProject().catch(() => undefined))?.model;
-        if (model) {
-            found.add(model);
-        }
+    // Incremental needed an argument file with pac; the closest sync for the deployed packages is Module.
+    return value === 'Full' ? 'Full' : value === 'None' ? 'None' : 'Module';
+}
+
+/** The models in deployed packages (their descriptors), so the deploy state of each model is updated. */
+async function modelsOf(packages: DeployPackage[]): Promise<string[]> {
+    const models: string[] = [];
+    for (const pkg of packages) {
+        const descriptors = await fs.readdir(path.join(pkg.folder, 'Descriptor')).catch(() => [] as string[]);
+        const names = descriptors.filter(f => f.toLowerCase().endsWith('.xml')).map(f => f.slice(0, -4));
+        models.push(...(names.length ? names : [pkg.name]));
     }
-    return [...found];
+    return models;
 }
