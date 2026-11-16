@@ -28,6 +28,7 @@ Target environments: unified developer environments (UDE, Power Platform hosted)
 - Metadata changes go through the metadata API, never by writing AOT XML by hand. (`.rnrproj` and label `.txt` files are not AOT metadata and are edited directly.)
 - Keep tool output bounded (the agent's context is the budget) and queries narrow.
 - Git identity for this repo is repo-local: "Mohamed Nazmi" <nazmyeg@gmail.com>, GitHub user `nazmolla`, remote `https://github.com/nazmolla/xpp-vscode.git`. Never change global git config. Never handle credentials; the user signs in via the browser prompt.
+- Work directly on `main`; releases are tags (`vX.Y.Z`), not branches. No long-lived, per-fix or `release/*` branches: a short feature branch is fine only if it is merged and deleted right away. Keep `gh-pages` (it serves GitHub Pages); never merge it into `main`.
 
 ## Build and test
 - `npm install`, then `npm run build` (= `build:server` + `compile`).
