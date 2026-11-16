@@ -10,20 +10,30 @@ Develop Dynamics 365 Finance & Operations X++ code in VS Code, without Visual St
 
 ## What's new in 0.15
 
-**Next: Deploy to a unified developer environment the way Visual Studio does, and debug your own code there.**
-- **Deploy Models to Environment** uploads your packages as you built them, through the environment's Dataverse, as Visual Studio's Deploy Models to Online Environment does. Nothing is recompiled, so the environment runs the build you debug, with the PDBs your build converted for the debugger. The Power Platform CLI (`pac`) is no longer needed for deploy or database sync.
-- Pick the packages to deploy (your project's package is preselected) and the database sync: None, Module (the deployed packages) or Full. Progress shows in the **X++ Deploy** output.
-- **Synchronize Database** on a unified environment also runs through Dataverse.
-- The `deploy` task takes `"dbSync": "None" | "Module" | "Full"`; `Incremental` (which needed an argument file with pac) now runs a Module sync.
-- Breakpoints in your own code stop on a unified environment after the deploy: they bind, step, show variables, and the stop shows in your code view.
+**0.15.6: Deploy and debug your own code like Visual Studio, on unified, VHD and cloud-hosted environments.**
 
-**Next: Debugging on cloud-hosted and VHD environments, like Visual Studio's F5.**
+*Unified developer environments (UDE):*
+- **Deploy Models to Environment** uploads your packages as you built them, through the environment's Dataverse, as Visual Studio's Deploy Models to Online Environment does. Nothing is recompiled, so the environment runs the build you debug. Before, the command recompiled an empty copy of your model with pac's own compiler.
+- Pick the packages to deploy (your project's package is preselected) and the database sync: None, Module (the deployed packages) or Full. Progress shows in the **X++ Deploy** output.
+- **Synchronize Database** also runs through Dataverse. The Power Platform CLI (`pac`) is no longer needed for deploy or database sync.
+- The `deploy` task takes `"dbSync": "None" | "Module" | "Full"`; `Incremental` (which needed an argument file with pac) now runs a Module sync.
+- Breakpoints in your own code stop after the deploy: they bind, step, show variables, and the stop shows in your code view.
+
+*Cloud-hosted and VHD environments, like Visual Studio's F5:*
 - Start debugging and F&O Studio attaches to the AOS of the runtime host type set in Visual Studio's Dynamics 365 options: the AOS site's application pool in IIS, or IIS Express. No process list to pick from. To debug the batch service, set `"processName": "Batch.exe"`.
-- Breakpoints in your own code bind and stop. The compiler writes Windows PDBs, which the VS Code debugger can't read, so a build converts them to portable PDBs with Microsoft's Pdb2Pdb (included). Visual Studio debugs the converted PDBs too.
-- After a successful build, the AOS hosts that are running (IIS Express or the IIS application pool, and the batch service) restart so they load the new build, as Visual Studio does. The debugger detaches first. The batch service is ended and started again right away; batch tasks that were running are cut off. Turn this off with `xpp.build.restartLocalAos`. Unified developer environments are not affected.
+- Breakpoints in your own code bind and stop.
+- After a successful build, the AOS hosts that are running (IIS Express or the IIS application pool, and the batch service) restart so they load the new build, as Visual Studio does. The debugger detaches first. The batch service is ended and started again right away; batch tasks that were running are cut off. Turn this off with `xpp.build.restartLocalAos`.
 - Stopping the debugger only detaches; the AOS keeps running.
 - PackagesLocalDirectory and the AOS are found from Visual Studio's Dynamics 365 options, the batch service and the AOS web.config, on any drive.
 - Needs the C# extension (its .NET debugger); F&O Studio offers to install it and waits for its debugger download.
+
+*All environments:* the compiler writes Windows PDBs, which the VS Code debugger can't read, so every successful build converts them to portable PDBs with Microsoft's Pdb2Pdb (included). Visual Studio debugs the converted PDBs too.
+
+*Tested on:*
+- **UDE** (10.0.2790.108): deploy without a database sync, Synchronize Database (Module), then a breakpoint in a class of your own bound, stopped in the code view, stepped and showed variables and the Infolog; standard-code breakpoints as in 0.15.4–0.15.5.
+- **VHD** (10.0.46, on IIS and on IIS Express): build converts the PDBs and restarts the AOS, attach without a process list, breakpoints in your own and in standard code stop, step, continue, Infolog; stopping leaves the AOS running. The new way of restarting the batch service has not been run on a VHD yet.
+- **Cloud-hosted environments** use the same code path as VHD environments but have **not been tested** yet.
+- Not tested yet: deploying with a Module or Full sync, several packages in one deploy, packages larger than 100 MB.
 
 **0.15.5: Debugging shows your code view, and the debugger is configurable.**
 - When the debugger stops in an element, it shows the X++ code view you set the breakpoint in (for example `PurchTable.xpp`), not a separate debug copy of the file.
