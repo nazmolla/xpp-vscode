@@ -434,7 +434,7 @@
               "deploy",
               "syncDatabase"
             ],
-            "description": "buildProject reports the problems of the project's elements; buildModel those of the whole model. deploy deploys the solution's models to the unified environment (pac); syncDatabase synchronizes the database (pac on a unified environment, SyncEngine on cloud-hosted and VHD)."
+            "description": "buildProject reports the problems of the project's elements; buildModel those of the whole model. deploy deploys the package of the active project's model, as built on this machine, to the unified environment; syncDatabase synchronizes the database (through Dataverse on a unified environment, SyncEngine on cloud-hosted and VHD)."
           },
           "model": {
             "type": "string",
@@ -444,10 +444,10 @@
             "type": "string",
             "enum": [
               "None",
-              "Incremental",
+              "Module",
               "Full"
             ],
-            "description": "deploy: database sync after the deploy. Default None."
+            "description": "deploy: database sync after the deploy (Module synchronizes the deployed package). Default None."
           },
           "mode": {
             "type": "string",
@@ -1325,12 +1325,12 @@
       },
       {
         "command": "xpp.pac.deploy",
-        "title": "Deploy Models to Environment (pac)",
+        "title": "Deploy Models to Environment",
         "category": "F&O Studio"
       },
       {
         "command": "xpp.pac.dbSync",
-        "title": "Synchronize Database (pac)",
+        "title": "Synchronize Database",
         "category": "F&O Studio"
       },
       {

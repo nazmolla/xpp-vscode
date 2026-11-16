@@ -10,7 +10,7 @@ const StateKey = 'xpp.deployState';
 /**
  * Built versus deployed, per environment and model. A unified environment runs the code last deployed to it, so tests,
  * the debugger and Run Snippet see old code after a build until the next deploy. Deploys are those run from this machine
- * (pac); cloud-hosted and VHD environments run what was built.
+ * (Deploy Models to Environment); cloud-hosted and VHD environments run what was built.
  */
 export class DeployState implements vscode.Disposable {
     private readonly changed = new vscode.EventEmitter<void>();
