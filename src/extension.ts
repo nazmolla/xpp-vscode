@@ -10,7 +10,7 @@ import { ElementDragAndDrop, ElementDropIntoCode, ElementsMime } from './dragAnd
 import { objectUri, parseObjectUri, XppCodeFileSystem, XppScheme } from './codeView';
 import { FormDesigner } from './designer';
 import { registerTools } from './d365Tools';
-import { releaseDebuggers, XppDebugger } from './debug';
+import { detachLocalAos, releaseDebuggers, XppDebugger } from './debug';
 import { DesignerNodeContext, DesignerServices, ElementDesigner } from './elementDesigner';
 import { LabelEditor } from './labelEditor';
 import { initEnvironmentSelection, onDidChangeEnvironment, readActiveEnvironment } from './environment';
@@ -20,6 +20,7 @@ import { registerHistory } from './history';
 import { registerMcpProvider } from './mcpProvider';
 import { openObject, XppDocumentSelector, XppNavigation } from './navigation';
 import { PacCommands } from './pac';
+import { pdb2pdbPath } from './portablePdb';
 import { createProject, findActiveProject, ProjectTreeProvider, ProjectWorkspaces, readProject } from './project';
 import { XppServerClient } from './serverClient';
 import { ServerStatus } from './serverStatus';
@@ -67,7 +68,8 @@ export function activate(context: vscode.ExtensionContext): void {
     const server = new XppServerClient(context, log, findActiveProject);
     // Language features run in a server process of their own, so index builds never block the designers.
     const languageServer = new XppServerClient(context, log, findActiveProject);
-    const builder = new XppBuilder(buildOutput);
+    const builder = new XppBuilder(buildOutput, pdb2pdbPath(context.extensionPath));
+    builder.detachLocalDebugger = detachLocalAos;
     const deployState = new DeployState(context, builder);
     const projectTree = new ProjectTreeProvider();
     const aotTree = new AotTreeProvider();

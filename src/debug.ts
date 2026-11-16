@@ -7,6 +7,8 @@ import * as vscode from 'vscode';
 import { listModels } from './aot';
 import { objectUri, parseObjectUri, XppScheme } from './codeView';
 import { dynamics365Folder, readActiveEnvironment, selectedEnvironmentUrl } from './environment';
+import { aosHostProcesses, AosProcess, discoverLocalAos } from './localAos';
+import { convertPackagePdbs, pdb2pdbPath } from './portablePdb';
 import { XppServerClient } from './serverClient';
 import { DeployState } from './deployState';
 import { getDataverseToken, readUdeEnvironment, resolveDataverseUrl } from './ude';
@@ -20,6 +22,8 @@ const DebugSourceTypes = ['AxClass', 'AxTable', 'AxForm', 'AxView', 'AxDataEntit
 // Compiled packages record their sources as e:\source\<package>\ax<type>_<name>.xpp (see the .pdb next to the dll).
 // Standard packages name them xppSource://Source/<Model>\Ax<Type>_<Name>.xpp: those are sent as is (ProxyDebugAdapter).
 const PdbSourceRoots = ['e:\\source\\', 'e:\\\\source\\', 'E:\\source\\'];
+/** How vsdbg reports the symbols' xppSource://Source/<model folder>\... documents; the local AOS maps them to the debug sources. */
+const XppSourceRoot = 'xppSource:\\\\Source\\';
 /** workspaceState: the debug source breakpoints that are copies of code view breakpoints. */
 const CopiesKey = 'xpp.debug.breakpointCopies';
 /** globalState: running DebuggerProxy processes and the extension host that started each. */
@@ -33,6 +37,17 @@ interface ProxyTracker {
 }
 
 const liveAdapters = new Set<{ shutdown(): Promise<void> }>();
+
+/** Marks the clr sessions attached to the local AOS (attachLocal). */
+const LocalAosMarker = 'xppLocalAos';
+const localAosSessions = new Set<vscode.DebugSession>();
+
+/** Detaches the debugger from the local AOS (the build restarts the AOS); returns how many sessions were detached. */
+export async function detachLocalAos(): Promise<number> {
+    const sessions = [...localAosSessions];
+    await Promise.all(sessions.map(s => Promise.resolve(vscode.debug.stopDebugging(s)).catch(() => undefined)));
+    return sessions.length;
+}
 
 /** On deactivation (window closed or reloaded): resume and detach every session, so no environment stays frozen. */
 export async function releaseDebuggers(): Promise<void> {
@@ -73,6 +88,7 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
     /** Remembers which debug source breakpoints are copies (breakpointKey); others were set there by you. */
     private state: vscode.Memento | undefined;
     private global: vscode.Memento | undefined;
+    private pdb2pdb: string | undefined;
     readonly infolog = new InfologProvider();
 
     constructor(private readonly server: XppServerClient, private readonly log: vscode.OutputChannel, private readonly deployState: DeployState) { }
@@ -80,13 +96,20 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
     register(context: vscode.ExtensionContext): void {
         this.state = context.workspaceState;
         this.global = context.globalState;
+        this.pdb2pdb = pdb2pdbPath(context.extensionPath);
         void this.stopOrphanedProxies().catch(error => this.log.appendLine(`Debugger cleanup failed: ${(error as Error).message}`));
         context.subscriptions.push(
             vscode.debug.registerDebugConfigurationProvider(DebugType, this),
             vscode.debug.registerDebugAdapterDescriptorFactory(DebugType, this),
             vscode.debug.registerDebugAdapterTrackerFactory(DebugType, { createDebugAdapterTracker: () => this.tracker() }),
             // The local AOS is debugged with the C# extension's clr debugger; its output carries the same Infolog messages.
-            vscode.debug.registerDebugAdapterTrackerFactory('clr', { createDebugAdapterTracker: () => this.tracker() }),
+            vscode.debug.registerDebugAdapterTrackerFactory('clr', { createDebugAdapterTracker: session => this.tracker(session) }),
+            vscode.debug.onDidStartDebugSession(session => {
+                if (session.configuration[LocalAosMarker]) {
+                    localAosSessions.add(session);
+                }
+            }),
+            vscode.debug.onDidTerminateDebugSession(session => localAosSessions.delete(session)),
             this.infolog.view = vscode.window.createTreeView('xpp.infolog', { treeDataProvider: this.infolog }),
             vscode.commands.registerCommand('xpp.debug.start', () => vscode.debug.startDebugging(undefined, {
                 type: DebugType, request: 'attach', name: 'Attach to Dynamics 365 (unified developer environment)',
@@ -175,62 +198,92 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
     }
 
     /**
-     * Cloud-hosted and VHD environments run the AOS on this machine (w3wp.exe in IIS, Batch.exe for batch): their .NET
-     * Framework process is attached with the C# extension's vsdbg ("clr"), with the symbols in each package's bin folder.
-     * Local builds record the same e:\source\ paths as the cloud's, so the debug sources are written the same way.
+     * Cloud-hosted and VHD environments run the AOS on this machine; its .NET Framework process is attached with the C#
+     * extension's vsdbg ("clr"), with the symbols in each package's bin folder. As on Visual Studio's F5, the process is
+     * the one of the runtime host type the developer chose in Visual Studio's Dynamics 365 options: the AOS site's
+     * application pool worker (IIS) or IIS Express. processName (e.g. Batch.exe) attaches to that process instead.
      */
     private async attachLocal(config: vscode.DebugConfiguration): Promise<void> {
-        if (!vscode.extensions.getExtension('ms-dotnettools.csharp')) {
-            const choice = await vscode.window.showErrorMessage('Debugging the local AOS uses the C# extension\'s .NET Framework debugger. Install the C# extension (ms-dotnettools.csharp) and try again.', 'Install');
-            if (choice) {
-                await vscode.commands.executeCommand('workbench.extensions.installExtension', 'ms-dotnettools.csharp');
-            }
+        if (!await ensureClrDebugger()) {
             return;
         }
-        const processes = await localAosProcesses();
+        const aos = await discoverLocalAos();
+        if (!aos) {
+            vscode.window.showErrorMessage('The local AOS was not found: neither Visual Studio\'s Dynamics 365 options nor the batch service name its web.config and PackagesLocalDirectory.');
+            return;
+        }
+        // On a unified developer environment processName is the cloud process (AXHost.exe); here it picks a process by name.
+        const byName = typeof config.processName === 'string' && config.processName.trim() && !/^axhost(\.exe)?$/i.test(config.processName.trim())
+            ? config.processName.trim() : undefined;
+        let processes: AosProcess[];
+        try {
+            processes = await aosHostProcesses(aos, byName);
+        } catch (error) {
+            vscode.window.showErrorMessage(`Could not find the AOS process: ${(error as Error).message}`);
+            return;
+        }
         if (!processes.length) {
-            vscode.window.showErrorMessage('No AOS process is running (w3wp.exe or Batch.exe). Open the web client once to start it, then try again.');
-            return;
-        }
-        const picked = processes.length === 1 && processes[0].name.toLowerCase() === 'w3wp.exe' ? processes[0]
-            : (await vscode.window.showQuickPick(processes.map(p => ({ label: p.name, description: `process ${p.pid}`, process: p })),
-                { title: 'Attach the X++ debugger to' }))?.process;
-        if (!picked) {
+            const host = byName ?? (/^iisexpress$/i.test(aos.runtimeHostType) ? 'IIS Express (iisexpress.exe)' : `IIS site ${aos.aosWebsiteName} (w3wp.exe)`);
+            vscode.window.showErrorMessage(`No ${host} process is running. Open the web client once to start the AOS, then try again. The runtime host type (${aos.runtimeHostType}) is set in Visual Studio's Dynamics 365 options.`);
             return;
         }
         const models = (await listModels()).filter(m => m.isCustom);
         const standard = await this.standardBreakpointElements();
-        const packages = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Preparing X++ debugging: writing debug sources…' },
-            () => this.writeDebugSources(standard));
+        const packages = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Preparing X++ debugging…' }, async progress => {
+            progress.report({ message: 'converting symbols to portable PDBs' });
+            await this.portableSymbols([...new Set(models.map(m => path.join(path.dirname(m.folder), 'bin')))]);
+            progress.report({ message: 'writing debug sources' });
+            return this.writeDebugSources(standard);
+        });
         await this.mirrorBreakpoints(standard);
-        const sourceFileMap: Record<string, string> = {};
+        const sourceFileMap: Record<string, string> = { [XppSourceRoot]: debugSourceRoot() + path.sep };
         for (const root of PdbSourceRoots) {
             sourceFileMap[root] = debugSourceRoot() + path.sep;
         }
         const env = await readActiveEnvironment();
-        await vscode.debug.startDebugging(undefined, {
-            type: 'clr',
-            request: 'attach',
-            name: `Attach to the local AOS (${picked.name} ${picked.pid})`,
-            processId: picked.pid,
-            justMyCode: config.justMyCode ?? standard.length === 0,
-            logging: config.logging ?? { exceptions: false },
-            requireExactSource: false,
-            sourceFileMap: { ...sourceFileMap, ...(config.sourceFileMap ?? {}) },
-            symbolOptions: {
-                searchPaths: [...new Set([
-                    ...models.map(m => path.join(path.dirname(m.folder), 'bin')),
-                    ...standard.map(e => path.join(env.frameworkDirectory, e.packageName, 'bin')),
-                ])],
-                searchMicrosoftSymbolServer: false,
-                moduleFilter: {
-                    mode: 'loadOnlyIncluded',
-                    includedModules: [...XppDebugger.includedModules(packages, standard), ...additionalModules(config)],
-                    includeSymbolsNextToModules: true,
-                    includeSymbolsOnDemand: true,
+        // Visual Studio attaches to every process of the host; vsdbg takes one process per session.
+        for (const target of processes) {
+            await vscode.debug.startDebugging(undefined, {
+                type: 'clr',
+                request: 'attach',
+                name: `Attach to the local AOS (${target.name} ${target.pid}${target.description ? `, ${target.description}` : ''})`,
+                processId: target.pid,
+                [LocalAosMarker]: true,
+                justMyCode: config.justMyCode ?? standard.length === 0,
+                logging: config.logging ?? { exceptions: false },
+                requireExactSource: false,
+                sourceFileMap: { ...sourceFileMap, ...(config.sourceFileMap ?? {}) },
+                symbolOptions: {
+                    searchPaths: [...new Set([
+                        ...models.map(m => path.join(path.dirname(m.folder), 'bin')),
+                        ...standard.map(e => path.join(env.frameworkDirectory, e.packageName, 'bin')),
+                    ])],
+                    searchMicrosoftSymbolServer: false,
+                    moduleFilter: {
+                        mode: 'loadOnlyIncluded',
+                        includedModules: [...XppDebugger.includedModules(packages, standard), ...additionalModules(config)],
+                        includeSymbolsNextToModules: true,
+                        includeSymbolsOnDemand: true,
+                    },
                 },
-            },
-        });
+            });
+        }
+    }
+
+    /** Converts the Windows PDBs xppc wrote (builds outside VS Code too: Visual Studio, the agent's build) for vsdbg. */
+    private async portableSymbols(binFolders: string[]): Promise<void> {
+        if (!this.pdb2pdb) {
+            return;
+        }
+        for (const bin of binFolders) {
+            const result = await convertPackagePdbs(this.pdb2pdb, bin).catch(error => ({ converted: [], failed: [{ file: bin, error: (error as Error).message }] }));
+            if (result.converted.length) {
+                this.log.appendLine(`Converted ${result.converted.length} PDB(s) in ${bin} to portable PDBs.`);
+            }
+            for (const failure of result.failed) {
+                this.log.appendLine(`${path.basename(failure.file)} was not converted to a portable PDB, so its breakpoints will not bind: ${failure.error}`);
+            }
+        }
     }
 
     async createDebugAdapterDescriptor(): Promise<vscode.DebugAdapterDescriptor> {
@@ -310,8 +363,15 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
     }
 
     /** Infolog messages arrive in the debugger output as <InfologMessage> XML, as in Visual Studio's Infolog window. */
-    private tracker(): vscode.DebugAdapterTracker {
+    private tracker(session?: vscode.DebugSession): vscode.DebugAdapterTracker {
         return {
+            onWillReceiveMessage: (message: any) => {
+                // Stop on an attach session sends disconnect with terminateDebuggee, and vsdbg then ends the process:
+                // the local AOS (or batch service) would go down for every user. It is always detached instead.
+                if (session?.configuration[LocalAosMarker] && message?.type === 'request' && message.command === 'disconnect' && message.arguments?.terminateDebuggee) {
+                    message.arguments.terminateDebuggee = false;
+                }
+            },
             onDidSendMessage: (message: any) => {
                 if (message?.type === 'event' && message.event === 'output' && typeof message.body?.output === 'string') {
                     for (const entry of parseInfolog(message.body.output)) {
@@ -333,7 +393,9 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
         this.debugElements.clear();
         this.lineMaps.clear();
         for (const model of models) {
-            const dir = path.join(root, model.packageName.toLowerCase());
+            // Under the folder the symbols name (xppSource://Source/<model folder>\...), so the local AOS can map them.
+            const folder = path.basename(model.folder);
+            const dir = path.join(root, folder.toLowerCase());
             await fs.mkdir(dir, { recursive: true });
             for (const objectType of DebugSourceTypes) {
                 const files = await fs.readdir(path.join(model.folder, objectType)).catch(() => [] as string[]);
@@ -341,10 +403,10 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
                     const objectName = file.slice(0, -4);
                     const text = await this.debugSourceText(objectType, objectName);
                     if (text !== undefined) {
-                        const local = debugSourceFile(model.packageName, objectType, objectName);
+                        const local = debugSourceFile(folder, objectType, objectName);
                         await fs.writeFile(local, text, 'utf8');
                         // The symbols name it xppSource://Source/<model folder>\<AxType>_<Name>.xpp (e.g. testcust\AxClass_X.xpp).
-                        this.ownDocuments.set(local.toLowerCase(), `xppSource://Source/${path.basename(model.folder)}\\${objectType}_${objectName}.xpp`);
+                        this.ownDocuments.set(local.toLowerCase(), `xppSource://Source/${folder}\\${objectType}_${objectName}.xpp`);
                         this.debugElements.set(local.toLowerCase(), { objectType, objectName });
                     }
                 }
@@ -376,10 +438,13 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
         return result?.success ? compilerView(result.declaration ?? '', result.methods ?? []) : undefined;
     }
 
-    /** The modules whose symbols are loaded: your packages, and for standard breakpoints only the module holding the element. */
+    /**
+     * The modules whose symbols are loaded: as Visual Studio does, your packages' netmodules and modules
+     * (Dynamics.AX.<package>.*.netmodule / .*.dll), and for standard breakpoints only the module holding the element.
+     */
     private static includedModules(packages: string[], standard: StandardBreakpointElement[]): string[] {
         return [...new Set([
-            ...packages.flatMap(p => [`Dynamics.AX.${p}.dll`, `Dynamics.AX.${p}.*`]),
+            ...packages.flatMap(p => [`Dynamics.AX.${p}.*.netmodule`, `Dynamics.AX.${p}.*.dll`]),
             ...standard.flatMap(e => e.module ? [`${e.module}.netmodule`] : [`Dynamics.AX.${e.packageName}.*.netmodule`]),
         ])];
     }
@@ -440,7 +505,8 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
             let folder = std?.sourceFolder;
             if (!folder) {
                 const owner = await this.server.bridge('read_object', { objectType, objectName });
-                folder = models.find(m => m.name.toLowerCase() === String(owner.modelName ?? '').toLowerCase())?.packageName;
+                const model = models.find(m => m.name.toLowerCase() === String(owner.modelName ?? '').toLowerCase());
+                folder = model ? path.basename(model.folder) : undefined;
             }
             if (!folder) {
                 continue;
@@ -821,16 +887,50 @@ function runningProxyPids(): Promise<Set<number>> {
         }));
 }
 
-/** The local AOS processes: IIS worker processes (w3wp.exe) and the batch server (Batch.exe). */
-function localAosProcesses(): Promise<{ name: string; pid: number }[]> {
-    return new Promise(resolve => execFile('tasklist', ['/FO', 'CSV', '/NH'], { windowsHide: true, timeout: 30_000 }, (err, stdout) => {
-        if (err) {
-            resolve([]);
-            return;
+/**
+ * The C# extension's .NET debugger (vsdbg). The extension downloads it on its first activation; until then the "clr"
+ * debug type has no adapter, so debugging waits for the download instead of failing.
+ */
+async function ensureClrDebugger(): Promise<boolean> {
+    const id = 'ms-dotnettools.csharp';
+    let extension = vscode.extensions.getExtension(id);
+    if (!extension) {
+        const choice = await vscode.window.showErrorMessage('Debugging the local AOS uses the C# extension\'s .NET debugger. Install the C# extension (ms-dotnettools.csharp)?', 'Install');
+        if (!choice) {
+            return false;
         }
-        resolve(stdout.split(/\r?\n/).map(line => /^"([^"]+)","(\d+)"/.exec(line)).filter((m): m is RegExpExecArray => !!m)
-            .filter(m => /^(w3wp|batch)\.exe$/i.test(m[1])).map(m => ({ name: m[1], pid: Number(m[2]) })));
-    }));
+        await vscode.commands.executeCommand('workbench.extensions.installExtension', id);
+        extension = await waitFor(() => vscode.extensions.getExtension(id), 60_000);
+        if (!extension) {
+            vscode.window.showErrorMessage('The C# extension is installed. Reload the window, then start debugging again.');
+            return false;
+        }
+    }
+    const csharp = extension;
+    const installed = () => existsSync(path.join(csharp.extensionPath, '.debugger', 'install.complete'))
+        || (csharp.isActive && ['x86_64', 'arm64'].some(arch => existsSync(path.join(csharp.extensionPath, '.debugger', arch, 'vsdbg-ui.exe'))));
+    if (installed() && csharp.isActive) {
+        return true;
+    }
+    return vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Waiting for the C# extension to install its debugger…', cancellable: true }, async (_progress, token) => {
+        await csharp.activate().then(undefined, () => undefined);
+        const ready = await waitFor(() => installed() || undefined, 10 * 60_000, token);
+        if (!ready && !token.isCancellationRequested) {
+            vscode.window.showErrorMessage('The C# extension\'s debugger is not installed yet. Check the C# output, then start debugging again.');
+        }
+        return !!ready;
+    });
+}
+
+async function waitFor<T>(probe: () => T | undefined, timeoutMs: number, token?: vscode.CancellationToken): Promise<T | undefined> {
+    const end = Date.now() + timeoutMs;
+    for (;;) {
+        const value = probe();
+        if (value || Date.now() > end || token?.isCancellationRequested) {
+            return value;
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
 }
 
 function freePort(): Promise<number> {
@@ -930,7 +1030,7 @@ function breakpointKey(source: string, line: number): string {
     return `${decoded.toLowerCase()}|${line}`;
 }
 
-/** folder: the package for your own packages; for Microsoft's packages the model folder their symbols record (e.g. Foundation). */
+/** folder: the model folder the symbols record (e.g. testcust, or Foundation for ApplicationSuite's elements). */
 function debugSourceFile(folder: string, objectType: string, objectName: string): string {
     return path.join(debugSourceRoot(), folder.toLowerCase(), `${objectType.toLowerCase()}_${objectName.toLowerCase()}.xpp`);
 }

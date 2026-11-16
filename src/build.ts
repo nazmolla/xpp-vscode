@@ -5,6 +5,8 @@ import * as vscode from 'vscode';
 import { objectUri } from './codeView';
 import { CompilerDiagnostic, diagnosticTarget, parseDiagnostics } from './diagnostics';
 import { readActiveEnvironment, XppEnvironment } from './environment';
+import { discoverLocalAos, restartLocalAos } from './localAos';
+import { convertPackagePdbs } from './portablePdb';
 import { readProject } from './project';
 import { compilerLineToDocumentLine } from './xppSource';
 
@@ -38,8 +40,11 @@ export class XppBuilder {
     private readonly finished = new vscode.EventEmitter<BuildResult>();
     readonly onDidFinish = this.finished.event;
     lastResult: BuildResult | undefined;
+    /** Detaches the debugger from the local AOS before the build restarts it; returns the number of sessions detached. */
+    detachLocalDebugger: (() => Promise<number>) | undefined;
 
-    constructor(private readonly output: vscode.OutputChannel) {
+    /** pdb2pdb: the shipped Pdb2Pdb.exe; a successful build converts the package's PDBs for the VS Code debugger. */
+    constructor(private readonly output: vscode.OutputChannel, private readonly pdb2pdb?: string) {
         this.onDidFinish(result => this.lastResult = result);
     }
 
@@ -146,9 +151,50 @@ export class XppBuilder {
         const assemblyWritten = existsSync(assembly) && (await fs.stat(assembly)).mtimeMs > assemblyBefore;
         const ok = compiled && !all.some(isBlocking) && assemblyWritten;
         const reason = !compiled ? ' (xppc exited with an error)' : !assemblyWritten && errors === 0 ? ' (no assembly was produced)' : '';
+        if (ok && this.pdb2pdb) {
+            await this.portablePdbs(path.join(packageFolder, 'bin'));
+        }
+        if (ok && env.local) {
+            await this.restartAos();
+        }
         this.output.appendLine(`=== ${model}${scope ? ' (project items)' : ''}: ${ok ? 'BUILD SUCCEEDED' : 'BUILD FAILED' + reason} - ${errors} error(s), ${found.length - errors} warning(s) ===`);
         this.finished.fire({ model, ok, errors, warnings: found.length - errors, projectOnly: !!scope, time: new Date() });
         return ok;
+    }
+
+    /**
+     * Cloud-hosted and VHD environments: the AOS keeps running the old assemblies, so, as Visual Studio does after a
+     * build, its running hosts (IIS Express or the IIS application pool, and the batch service) are restarted. Unified
+     * developer environments deploy the package instead.
+     */
+    private async restartAos(): Promise<void> {
+        if (!vscode.workspace.getConfiguration('xpp').get<boolean>('build.restartLocalAos', true)) {
+            return;
+        }
+        const aos = await discoverLocalAos();
+        if (!aos) {
+            return;
+        }
+        const detached = await this.detachLocalDebugger?.().catch(() => 0) ?? 0;
+        if (detached) {
+            this.output.appendLine(`Detached the debugger from the AOS for the restart (${detached} session(s)); start debugging again when the AOS is back.`);
+        }
+        this.output.appendLine('Restarting the local AOS so it loads the new build:');
+        const ok = await restartLocalAos(aos, line => this.output.appendLine(`  ${line}`));
+        if (!ok) {
+            this.output.appendLine('Warning: the AOS may still run the previous build until it is restarted.');
+        }
+    }
+
+    /** xppc writes Windows PDBs, which the C# extension's debugger cannot read; a conversion problem doesn't fail the build. */
+    private async portablePdbs(binFolder: string): Promise<void> {
+        const result = await convertPackagePdbs(this.pdb2pdb!, binFolder).catch(error => ({ converted: [], failed: [{ file: binFolder, error: (error as Error).message }] }));
+        if (result.converted.length) {
+            this.output.appendLine(`Converted ${result.converted.length} PDB(s) to portable PDBs for debugging in VS Code.`);
+        }
+        for (const failure of result.failed) {
+            this.output.appendLine(`Warning: ${path.basename(failure.file)} was not converted to a portable PDB; the VS Code debugger cannot read it. ${failure.error}`);
+        }
     }
 
     private async pickModel(env: XppEnvironment): Promise<string | undefined> {

@@ -164,7 +164,7 @@
               "processName": {
                 "type": "string",
                 "default": "AXHost.exe",
-                "description": "Process to attach to in the environment."
+                "description": "Process to attach to in the environment. On cloud-hosted and VHD environments, e.g. Batch.exe to debug the batch server; without it the debugger attaches to the AOS of the runtime host type set in Visual Studio's Dynamics 365 options (IIS or IIS Express)."
               },
               "justMyCode": {
                 "type": "boolean",
@@ -2480,6 +2480,11 @@
           "default": true,
           "description": "Save unsaved X++ code views before a build, so the compiler sees your latest changes."
         },
+        "xpp.build.restartLocalAos": {
+          "type": "boolean",
+          "default": true,
+          "description": "Cloud-hosted and VHD environments: after a successful build, restart the AOS hosts that are running (IIS Express or the AOS application pool in IIS, and the batch service) so they load the new build, as Visual Studio does. Not used on unified developer environments."
+        },
         "xpp.pacPath": {
           "type": "string",
           "default": "",
@@ -2621,10 +2626,11 @@
     "watch": "tsc -watch -p .",
     "build:server": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-server.ps1",
     "test:server": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-server.ps1 -Test && node scripts/check-bridge-actions.js",
-    "build": "npm run build:server && npm run compile",
+    "build:tools": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-pdb2pdb.ps1",
+    "build": "npm run build:server && npm run build:tools && npm run compile",
     "agents": "node scripts/build-agents.js",
-    "package": "vsce package --readme-path docs/FEATURES.md --baseContentUrl https://github.com/nazmolla/xpp-vscode/blob/HEAD/docs --baseImagesUrl https://github.com/nazmolla/xpp-vscode/raw/HEAD/docs",
-    "publish": "vsce publish --readme-path docs/FEATURES.md --baseContentUrl https://github.com/nazmolla/xpp-vscode/blob/HEAD/docs --baseImagesUrl https://github.com/nazmolla/xpp-vscode/raw/HEAD/docs"
+    "package": "npm run build:tools && vsce package --readme-path docs/FEATURES.md --baseContentUrl https://github.com/nazmolla/xpp-vscode/blob/HEAD/docs --baseImagesUrl https://github.com/nazmolla/xpp-vscode/raw/HEAD/docs",
+    "publish": "npm run build:tools && vsce publish --readme-path docs/FEATURES.md --baseContentUrl https://github.com/nazmolla/xpp-vscode/blob/HEAD/docs --baseImagesUrl https://github.com/nazmolla/xpp-vscode/raw/HEAD/docs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
