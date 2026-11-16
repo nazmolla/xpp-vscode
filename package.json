@@ -2,7 +2,7 @@
   "name": "xpp-vscode",
   "displayName": "F&O Studio for VS Code",
   "description": "Dynamics 365 Finance & Operations X++ development without Visual Studio: Application Explorer, designers, X++ code intelligence, build, deploy, debugging, data, performance and trace analysis, and Copilot agent tools on the real metadata API.",
-  "version": "0.15.4",
+  "version": "0.15.5",
   "publisher": "MNazmi",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -168,7 +168,32 @@
               },
               "justMyCode": {
                 "type": "boolean",
-                "default": true
+                "default": true,
+                "description": "Step only through code that has symbols loaded. On by default, as in Visual Studio. Turning it off makes every exception the environment throws go through the debugger, which can make the environment stop responding."
+              },
+              "additionalModules": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "More modules whose symbols load, added to the ones F&O Studio picks (your packages and the module of each standard element with a breakpoint). Wildcards allowed, e.g. \"Dynamics.AX.ApplicationSuite.Forms.*.netmodule\". Each extra module makes loading slower.",
+                "default": []
+              },
+              "symbolOptions": {
+                "type": "object",
+                "description": "Replaces F&O Studio's symbol options entirely (vsdbg symbolOptions, e.g. moduleFilter). Use additionalModules to add modules instead."
+              },
+              "logging": {
+                "type": "object",
+                "description": "vsdbg logging options, e.g. { \"exceptions\": false } to stop printing exceptions in the Debug Console.",
+                "properties": {
+                  "exceptions": {
+                    "type": "boolean"
+                  },
+                  "moduleLoad": {
+                    "type": "boolean"
+                  }
+                }
               },
               "sourceFileMap": {
                 "type": "object",
