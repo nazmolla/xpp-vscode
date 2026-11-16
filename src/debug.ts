@@ -61,6 +61,9 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
     private pending: PendingAdapter | undefined;
     /** Your elements' debug source files (lower case) -> their document names in the symbols. */
     private readonly ownDocuments = new Map<string, string>();
+    /** Debug source files (lower case) -> their element, to show stopped frames in its code view. */
+    private readonly debugElements = new Map<string, { objectType: string; objectName: string }>();
+    private readonly lineMaps = new Map<string, Promise<number[] | undefined>>();
     /** Code view breakpoint (breakpointKey) -> its copy on the debug source file, which is what the debugger binds. */
     private readonly breakpointLinks = new Map<string, string>();
     /** Standard elements prepared for the running session; breakpoints added meanwhile are copied for them too. */
@@ -241,7 +244,26 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
         const port = await freePort();
         return new vscode.DebugAdapterInlineImplementation(new ProxyDebugAdapter(pending.proxy, [
             '--port', String(port), '--remoteProxyHost', pending.host, '--VSVersion', 'vsdbg', '--accessToken', pending.token,
-        ], this.log, pending.documents, this.breakpointLinks, this.proxyTracker()));
+        ], this.log, pending.documents, this.breakpointLinks, this.proxyTracker(), (file, line) => this.toCodeView(file, line)));
+    }
+
+    /** A line of a debug source file as the same line of the element's X++ code view, when the code view shows it. */
+    private async toCodeView(file: string, line: number): Promise<{ path: string; line: number } | undefined> {
+        const key = file.toLowerCase();
+        const element = this.debugElements.get(key);
+        if (!element) {
+            return undefined;
+        }
+        const uri = objectUri(element.objectType, element.objectName);
+        let map = this.lineMaps.get(key);
+        if (!map) {
+            map = Promise.all([vscode.workspace.openTextDocument(uri), fs.readFile(file, 'utf8')])
+                .then(([document, debugText]) => debugToCodeViewLines(document.getText(), debugText))
+                .catch(() => undefined);
+            this.lineMaps.set(key, map);
+        }
+        const codeLine = (await map)?.[line - 1];
+        return codeLine === undefined ? undefined : { path: uri.toString(), line: codeLine + 1 };
     }
 
     /** Remembers running proxies, so one left behind by a crashed window can be stopped later. */
@@ -308,6 +330,8 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
         const models = (await listModels()).filter(m => m.isCustom);
         const packages = [...new Set(models.map(m => m.packageName))];
         this.ownDocuments.clear();
+        this.debugElements.clear();
+        this.lineMaps.clear();
         for (const model of models) {
             const dir = path.join(root, model.packageName.toLowerCase());
             await fs.mkdir(dir, { recursive: true });
@@ -321,6 +345,7 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
                         await fs.writeFile(local, text, 'utf8');
                         // The symbols name it xppSource://Source/<model folder>\<AxType>_<Name>.xpp (e.g. testcust\AxClass_X.xpp).
                         this.ownDocuments.set(local.toLowerCase(), `xppSource://Source/${path.basename(model.folder)}\\${objectType}_${objectName}.xpp`);
+                        this.debugElements.set(local.toLowerCase(), { objectType, objectName });
                     }
                 }
             }
@@ -331,6 +356,8 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
             if (text !== undefined) {
                 await fs.mkdir(path.join(root, element.sourceFolder.toLowerCase()), { recursive: true });
                 await fs.writeFile(debugSourceFile(element.sourceFolder, element.objectType, element.objectName), text, 'utf8');
+                this.debugElements.set(debugSourceFile(element.sourceFolder, element.objectType, element.objectName).toLowerCase(),
+                    { objectType: element.objectType, objectName: element.objectName });
             }
         }
         return packages;
@@ -478,6 +505,29 @@ export class ProxyDebugAdapter implements vscode.DebugAdapter {
     private nextOwnSeq = 2_000_000;
     private exited = false;
     private readonly exitWaiters: (() => void)[] = [];
+    private outgoing: Promise<void> = Promise.resolve();
+
+    /** Stack frames in a debug source file are shown at the same line of the element's code view (xpp:), where you set the breakpoint. */
+    private async showInCodeView(message: { type?: string; command?: string; body?: { stackFrames?: DapStackFrame[] } }): Promise<void> {
+        if (!this.codeView || message.type !== 'response' || message.command !== 'stackTrace') {
+            return;
+        }
+        for (const frame of message.body?.stackFrames ?? []) {
+            const file = frame.source?.path;
+            if (!file || typeof frame.line !== 'number') {
+                continue;
+            }
+            const target = await this.codeView(file, frame.line);
+            if (target) {
+                frame.source = { name: path.posix.basename(target.path), path: target.path };
+                const span = typeof frame.endLine === 'number' ? frame.endLine - frame.line : 0;
+                frame.line = target.line;
+                if (typeof frame.endLine === 'number') {
+                    frame.endLine = target.line + Math.max(0, span);
+                }
+            }
+        }
+    }
 
     /**
      * Visual Studio registers xppSource: as a debuggable protocol and sets breakpoints on the symbols' own document names
@@ -505,7 +555,8 @@ export class ProxyDebugAdapter implements vscode.DebugAdapter {
     }
 
     constructor(proxy: string, args: string[], private readonly log: vscode.OutputChannel, documents: Map<string, string> = new Map(),
-        private readonly links: Map<string, string> = new Map(), private readonly tracker?: ProxyTracker) {
+        private readonly links: Map<string, string> = new Map(), private readonly tracker?: ProxyTracker,
+        private readonly codeView?: (file: string, line: number) => Promise<{ path: string; line: number } | undefined>) {
         // Local debug source file (lower case) -> the document name in the symbols, and back.
         this.toDocument = documents;
         // vsdbg answers with the document name either as is or under its local cache, as Visual Studio sees it
@@ -729,7 +780,8 @@ export class ProxyDebugAdapter implements vscode.DebugAdapter {
                 if (this.toLocal.size && /xppSource/i.test(body)) {
                     this.rewritePaths(parsed.body, p => this.localFor(p));
                 }
-                this.sent.fire(parsed);
+                // Messages go out in order; a stack trace waits until its frames point at the code view.
+                this.outgoing = this.outgoing.then(() => this.showInCodeView(parsed)).catch(() => undefined).then(() => this.sent.fire(parsed));
             } catch (error) {
                 this.log.appendLine(`[DebuggerProxy] Unreadable message: ${(error as Error).message}`);
             }
@@ -833,6 +885,38 @@ interface DapBreakpoint {
     verified?: boolean;
     line?: number;
     message?: string;
+}
+
+interface DapStackFrame {
+    source?: { name?: string; path?: string };
+    line?: number;
+    endLine?: number;
+}
+
+/**
+ * For each line of the debug source, the code view line with the same text (-1 when the code view doesn't show it, e.g.
+ * data source and control methods of a form). The code view's lines appear in the debug source in the same order.
+ */
+export function debugToCodeViewLines(codeView: string, debugSource: string): number[] {
+    const norm = (s: string) => s.trim().replace(/\s+/g, ' ');
+    const code = codeView.replace(/\r\n/g, '\n').split('\n').map(norm);
+    const debug = debugSource.replace(/\r\n/g, '\n').split('\n').map(norm);
+    const map = new Array<number>(debug.length).fill(-1);
+    let j = 0;
+    for (let i = 0; i < code.length; i++) {
+        if (!code[i]) {
+            continue;
+        }
+        let k = j;
+        while (k < debug.length && debug[k] !== code[i]) {
+            k++;
+        }
+        if (k < debug.length) {
+            map[k] = i;
+            j = k + 1;
+        }
+    }
+    return map;
 }
 
 /** A breakpoint's identity in the code view and on the debug source files: the source (path or URI) and its 1-based line. */
