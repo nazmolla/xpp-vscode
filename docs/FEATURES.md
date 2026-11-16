@@ -387,6 +387,31 @@ The tools are registered automatically. Copilot can:
 | `xpp.git.baseBranch` | The branch Review My Changes and Show Changed Elements compare with |
 | `xpp.usageStatistics` | Count command use on this machine only; nothing is sent. Show Usage Statistics lists the counts |
 
+### Debugger options
+
+The debugger works without a configuration. To change it, add an `xpp` configuration to `.vscode/launch.json` (Run and Debug > create a launch.json file > X++), for example:
+
+```json
+{
+  "type": "xpp",
+  "request": "attach",
+  "name": "Attach to Dynamics 365",
+  "justMyCode": true,
+  "additionalModules": ["Dynamics.AX.ApplicationSuite.Forms.*.netmodule"],
+  "logging": { "exceptions": false }
+}
+```
+
+| Option | Description |
+| --- | --- |
+| `justMyCode` | On by default. Turning it off makes every exception the environment throws go through the debugger, which can make the environment stop responding |
+| `additionalModules` | More modules whose symbols load, added to your packages and the module of each standard element with a breakpoint. Wildcards allowed |
+| `symbolOptions` | Replaces the symbol options entirely (vsdbg `symbolOptions`) |
+| `logging` | vsdbg logging, e.g. `{ "exceptions": false }` |
+| `processName`, `sourceFileMap` | Process to attach to (`AXHost.exe`) and extra source mappings |
+
+While the debugger is stopped, the environment's server is paused for every user: continue or disconnect promptly.
+
 ## Status
 
 This extension is a preview. Some features have not been verified end to end on a live environment:
