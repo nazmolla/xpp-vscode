@@ -3,6 +3,7 @@ out/
 *.vsix
 server/bin/
 server/obj/
+tools/pdb2pdb/
 test/server/bin/
 test/server/obj/
 .vs/

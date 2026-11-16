@@ -10,6 +10,14 @@ Develop Dynamics 365 Finance & Operations X++ code in VS Code, without Visual St
 
 ## What's new in 0.15
 
+**Next: Debugging on cloud-hosted and VHD environments, like Visual Studio's F5.**
+- Start debugging and F&O Studio attaches to the AOS of the runtime host type set in Visual Studio's Dynamics 365 options: the AOS site's application pool in IIS, or IIS Express. No process list to pick from. To debug the batch service, set `"processName": "Batch.exe"`.
+- Breakpoints in your own code bind and stop. The compiler writes Windows PDBs, which the VS Code debugger can't read, so a build converts them to portable PDBs with Microsoft's Pdb2Pdb (included). Visual Studio debugs the converted PDBs too.
+- After a successful build, the AOS hosts that are running (IIS Express or the IIS application pool, and the batch service) restart so they load the new build, as Visual Studio does. The debugger detaches first. Turn this off with `xpp.build.restartLocalAos`. Unified developer environments are not affected.
+- Stopping the debugger only detaches; the AOS keeps running.
+- PackagesLocalDirectory and the AOS are found from Visual Studio's Dynamics 365 options, the batch service and the AOS web.config, on any drive.
+- Needs the C# extension (its .NET debugger); F&O Studio offers to install it and waits for its debugger download.
+
 **0.15.5: Debugging shows your code view, and the debugger is configurable.**
 - When the debugger stops in an element, it shows the X++ code view you set the breakpoint in (for example `PurchTable.xpp`), not a separate debug copy of the file.
 - Configure the debugger in `.vscode/launch.json`: `justMyCode`, `additionalModules`, `symbolOptions` and `logging` (see Debugger options under Settings).
@@ -383,6 +391,7 @@ The tools are registered automatically. Copilot can:
 | `xpp.build.crossReference` | Update cross references while building |
 | `xpp.build.runAppCheckerRules` | Run AppChecker rules during the build |
 | `xpp.build.saveBeforeBuild` | Save unsaved X++ code views before a build |
+| `xpp.build.restartLocalAos` | Cloud-hosted and VHD: restart the running AOS hosts (IIS Express or IIS application pool, batch service) after a successful build |
 | `xpp.pacPath` | Path to `pac` |
 | `xpp.debuggerProxyPath` | Path to `Microsoft.Dynamics.AX.DebuggerProxy.exe`, if it isn't in the default location |
 | `xpp.erd.depth`, `xpp.erd.direction`, `xpp.erd.fields` | Defaults for the entity relationship diagram |

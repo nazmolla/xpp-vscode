@@ -7,7 +7,8 @@ function Get-ConfigFramework([string]$path) {
 
 # Candidate PackagesLocalDirectory\bin folders, first match wins:
 # XPP_BIN; the active UDE configuration (its FrameworkDirectory can be anywhere); the registry's FrameworkDirectory;
-# any other UDE configuration, newest first; cloud-hosted (K:) and VHD (C: only) environments.
+# any other UDE configuration, newest first; on cloud-hosted and VHD environments the local AOS's own configuration
+# (the AOS web.config the batch service runs with, and Visual Studio's machine default DynamicsDevConfig.xml).
 $key = 'HKCU:\Software\Microsoft\Dynamics\AX7\Development\Configurations'
 $registry = Get-ItemProperty -Path $key -ErrorAction SilentlyContinue
 $frameworks = @()
@@ -17,7 +18,13 @@ if ($registry.CurrentMetadataConfig -like '*.json') {
 $frameworks += $registry.FrameworkDirectory
 $frameworks += Get-ChildItem "$env:LOCALAPPDATA\Microsoft\Dynamics365\XPPConfig\*.json" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | ForEach-Object { Get-ConfigFramework $_.FullName }
-$frameworks += 'K:\AosService\PackagesLocalDirectory', 'C:\AosService\PackagesLocalDirectory'
+$batch = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\DynamicsAxBatch' -ErrorAction SilentlyContinue).ImagePath
+if ($batch -match '-service\s+"?([^"]+?\.config)"?\s*$' -and [System.IO.File]::Exists($Matches[1])) {
+    $webConfig = [System.IO.File]::ReadAllText($Matches[1])
+    if ($webConfig -match '<add\s+key="Aos\.PackageDirectory"\s+value="([^"]*)"') { $frameworks += $Matches[1] }
+}
+$defaultConfig = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Dynamics\AX\Development' -ErrorAction SilentlyContinue).DefaultConfig
+if ($defaultConfig) { $frameworks += Split-Path (Split-Path $defaultConfig -Parent) -Parent }
 $candidates = @($env:XPP_BIN) + ($frameworks | Where-Object { $_ } | ForEach-Object { "$($_.TrimEnd('\'))\bin" })
 
 # Join-Path throws on a missing drive; File.Exists never throws.

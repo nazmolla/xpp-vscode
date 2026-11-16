@@ -3,11 +3,10 @@ import { existsSync, promises as fs } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { discoverLocalAos } from './localAos';
 
 const ConfigurationsKey = 'HKCU\\Software\\Microsoft\\Dynamics\\AX7\\Development\\Configurations';
 const WorkspaceEnvironmentKey = 'xpp.environmentUrl';
-/** Cloud-hosted and VHD environments keep every package here, next to a local AOS. */
-const LocalPackagesFolders = ['K:\\AosService\\PackagesLocalDirectory', 'C:\\AosService\\PackagesLocalDirectory'];
 
 export interface XppEnvironment {
     /** Org name of the environment (the configuration is <org>___<application version>.json). */
@@ -201,16 +200,16 @@ async function loadActiveEnvironment(dataverseUrl: string | undefined): Promise<
 
 /**
  * Cloud-hosted and VHD environments have no XPPConfig, so a configuration is made from PackagesLocalDirectory (both
- * the custom and the reference folder there) and the AOS web.config. Rewritten only when it changes, since the
- * metadata server reads it on every request.
+ * the custom and the reference folder there) and the AOS web.config, both found through the AOS's own configuration
+ * (discoverLocalAos). Rewritten only when it changes, since the metadata server reads it on every request.
  */
 async function writeLocalConfig(): Promise<string | undefined> {
-    const packages = LocalPackagesFolders.find(p => existsSync(path.join(p, 'bin', 'xppc.exe')));
-    if (!packages || !storageFolder) {
+    const aos = await discoverLocalAos();
+    if (!aos || !storageFolder) {
         return undefined;
     }
-    const webConfig = await fs.readFile(path.join(path.dirname(packages), 'webroot', 'web.config'), 'utf8').catch(() => '');
-    const setting = (key: string) => new RegExp(`key="${key.replace(/\./g, '\\.')}"\\s+value="([^"]*)"`, 'i').exec(webConfig)?.[1] || undefined;
+    const packages = aos.packagesFolder;
+    const setting = (key: string) => aos.settings.get(key.toLowerCase()) || undefined;
     const dbServer = setting('DataAccess.DbServer') ?? 'localhost';
     const content = JSON.stringify({
         FrameworkDirectory: packages,
