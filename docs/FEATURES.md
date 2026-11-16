@@ -10,6 +10,10 @@ Develop Dynamics 365 Finance & Operations X++ code in VS Code, without Visual St
 
 ## What's new in 0.15
 
+**0.15.5: Debugging shows your code view, and the debugger is configurable.**
+- When the debugger stops in an element, it shows the X++ code view you set the breakpoint in (for example `PurchTable.xpp`), not a separate debug copy of the file.
+- Configure the debugger in `.vscode/launch.json`: `justMyCode`, `additionalModules`, `symbolOptions` and `logging` (see Debugger options under Settings).
+
 **0.15.4: Debugging Microsoft's code uses Visual Studio's debugger settings.**
 - Breakpoints in standard code are set up the way Visual Studio sets them up: Just My Code stays on and only the module that holds the element loads symbols. Before, the environment could stop responding while the debugger was attached.
 - Tip: open the form or run the code once before you start the debugger, so the breakpoint binds right away.
