@@ -161,9 +161,21 @@ export async function restartLocalAos(aos: LocalAos, log: (line: string) => void
     }
     if (/STATE\s*:\s*4\s+RUNNING/i.test(await run('sc', ['query', BatchService]).catch(() => ''))) {
         await step(`Restarting the batch service (${BatchService})`, async () => {
-            // net stop waits until the service has stopped; the batch service finishes its running tasks first.
-            await run('net', ['stop', BatchService], 300_000);
-            await run('net', ['start', BatchService], 120_000);
+            // A graceful stop waits for running batch tasks (minutes): end the process, then start the service without
+            // waiting for it to run.
+            const pid = Number(/PID\s*:\s*(\d+)/i.exec(await run('sc', ['queryex', BatchService]))?.[1] ?? 0);
+            if (pid > 0) {
+                await run('taskkill', ['/F', '/PID', String(pid)]);
+            }
+            for (let i = 0; i < 20 && !/STATE\s*:\s*1\s+STOPPED/i.test(await run('sc', ['query', BatchService]).catch(() => '')); i++) {
+                await new Promise(resolve => setTimeout(resolve, 250));
+            }
+            // 1056: already running (the service's recovery options restarted it).
+            await run('sc', ['start', BatchService]).catch(error => {
+                if (!/1056/.test((error as Error).message)) {
+                    throw error;
+                }
+            });
         });
     }
     return !failed;

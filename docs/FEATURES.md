@@ -13,7 +13,7 @@ Develop Dynamics 365 Finance & Operations X++ code in VS Code, without Visual St
 **Next: Debugging on cloud-hosted and VHD environments, like Visual Studio's F5.**
 - Start debugging and F&O Studio attaches to the AOS of the runtime host type set in Visual Studio's Dynamics 365 options: the AOS site's application pool in IIS, or IIS Express. No process list to pick from. To debug the batch service, set `"processName": "Batch.exe"`.
 - Breakpoints in your own code bind and stop. The compiler writes Windows PDBs, which the VS Code debugger can't read, so a build converts them to portable PDBs with Microsoft's Pdb2Pdb (included). Visual Studio debugs the converted PDBs too.
-- After a successful build, the AOS hosts that are running (IIS Express or the IIS application pool, and the batch service) restart so they load the new build, as Visual Studio does. The debugger detaches first. Turn this off with `xpp.build.restartLocalAos`. Unified developer environments are not affected.
+- After a successful build, the AOS hosts that are running (IIS Express or the IIS application pool, and the batch service) restart so they load the new build, as Visual Studio does. The debugger detaches first. The batch service is ended and started again right away; batch tasks that were running are cut off. Turn this off with `xpp.build.restartLocalAos`. Unified developer environments are not affected.
 - Stopping the debugger only detaches; the AOS keeps running.
 - PackagesLocalDirectory and the AOS are found from Visual Studio's Dynamics 365 options, the batch service and the AOS web.config, on any drive.
 - Needs the C# extension (its .NET debugger); F&O Studio offers to install it and waits for its debugger download.
