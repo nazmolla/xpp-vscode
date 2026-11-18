@@ -2706,7 +2706,7 @@
     "build": "npm run build:server && npm run build:tools && npm run compile",
     "agents": "node scripts/build-agents.js",
     "package": "npm run build:tools && vsce package --readme-path docs/FEATURES.md --baseContentUrl https://github.com/nazmolla/xpp-vscode/blob/HEAD/docs --baseImagesUrl https://github.com/nazmolla/xpp-vscode/raw/HEAD/docs",
-    "publish": "npm run build:tools && vsce publish --readme-path docs/FEATURES.md --baseContentUrl https://github.com/nazmolla/xpp-vscode/blob/HEAD/docs --baseImagesUrl https://github.com/nazmolla/xpp-vscode/raw/HEAD/docs"
+    "publish": "node -e \"console.error('Releases are built, signed and published by .github/workflows/release.yml: set the version in package.json, update the What is new section of docs/FEATURES.md, then push a tag vX.Y.Z.'); process.exit(1)\""
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
