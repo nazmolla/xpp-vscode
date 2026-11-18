@@ -156,7 +156,7 @@ Features marked *preview* have not yet been verified on a live environment.
 - **0.12:** Browse Table Data and SQL queries (temporary UDE credentials, local AxDB), Analyze Performance with live database insights, Analyze Trace, Upgrade Readiness, wizards (batch job, report, approval workflow, custom service), best practice checks, Review My Changes, the Pre-Deploy Checklist, `@fno` in chat, Copilot Activity, team rules, Test Explorer, build tasks and an accessibility pass.
 - **0.11:** Go to referenced elements, F12 in code, element history, drag and drop from the Application Explorer, one workspace per project, server-side write checks.
 
-Full history: [github.com/nazmolla/xpp-vscode](https://github.com/nazmolla/xpp-vscode).
+Full history: the [changelog](https://github.com/nazmolla/xpp-vscode/blob/HEAD/CHANGELOG.md) (also the Changelog tab of the Marketplace page).
 
 ## Features
 

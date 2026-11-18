@@ -84,6 +84,8 @@ jobs:
           }
           node scripts/build-agents.js --check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/changelog.js --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload the unsigned server
         id: upload-unsigned

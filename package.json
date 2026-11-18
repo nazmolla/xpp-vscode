@@ -2702,10 +2702,11 @@
     "watch": "tsc -watch -p .",
     "build:server": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-server.ps1",
     "test:server": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-server.ps1 -Test && node scripts/check-bridge-actions.js",
+    "changelog": "node scripts/changelog.js",
     "build:tools": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-pdb2pdb.ps1",
     "build": "npm run build:server && npm run build:tools && npm run compile",
     "agents": "node scripts/build-agents.js",
-    "package": "npm run build:tools && vsce package --readme-path docs/FEATURES.md --baseContentUrl https://github.com/nazmolla/xpp-vscode/blob/HEAD/docs --baseImagesUrl https://github.com/nazmolla/xpp-vscode/raw/HEAD/docs",
+    "package": "npm run build:tools && node scripts/changelog.js && vsce package --readme-path docs/FEATURES.md --baseContentUrl https://github.com/nazmolla/xpp-vscode/blob/HEAD/docs --baseImagesUrl https://github.com/nazmolla/xpp-vscode/raw/HEAD/docs",
     "publish": "node -e \"console.error('Releases are built, signed and published by .github/workflows/release.yml: set the version in package.json, update the What is new section of docs/FEATURES.md, then push a tag vX.Y.Z.'); process.exit(1)\""
   },
   "devDependencies": {
