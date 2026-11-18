@@ -5,6 +5,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { elementContextValue, elementOpenCommand, iconFor as aotIcon, listModels, typeName } from './aot';
 import { objectUri } from './codeView';
+import { csharpProjectTree, FileNode, findSolution, projectReferences, ReferenceInfo, SolutionInfo } from './solution';
 
 export interface ProjectItem {
     objectType: string;
@@ -98,7 +99,8 @@ export class ProjectWorkspaces {
             return undefined;
         }
         const model = (await listModels()).find(m => m.name.toLowerCase() === (project.model ?? '').toLowerCase());
-        const workspaceFile = await this.writeWorkspace(project, model?.folder);
+        const csharp = (await solutionCsharpProjects(file).catch(() => ({ projects: [] as { file: string }[] }))).projects.map(p => path.dirname(p.file));
+        const workspaceFile = await this.writeWorkspace(project, model?.folder, csharp);
         await this.remember(file);
         return workspaceFile;
     }
@@ -175,8 +177,11 @@ export class ProjectWorkspaces {
         await this.context.globalState.update(RecentProjectsKey, [file, ...recent].slice(0, MaxRecentProjects));
     }
 
-    /** Writes the project's workspace file, keeping folders and settings the user added to it. */
-    private async writeWorkspace(project: XppProjectInfo, modelFolder: string | undefined): Promise<vscode.Uri> {
+    /**
+     * Writes the project's workspace file, keeping folders and settings the user added to it. The C# projects of the
+     * solution (or that the project references) are folders too, so the C# extension loads them.
+     */
+    private async writeWorkspace(project: XppProjectInfo, modelFolder: string | undefined, csharpFolders: string[] = []): Promise<vscode.Uri> {
         const folder = vscode.Uri.joinPath(this.context.globalStorageUri, 'workspaces');
         await fs.mkdir(folder.fsPath, { recursive: true });
         const id = createHash('sha256').update(project.file.toLowerCase()).digest('hex').slice(0, 8);
@@ -189,7 +194,12 @@ export class ProjectWorkspaces {
         if (modelFolder) {
             ours.push({ path: modelFolder, name: `${project.model} (model)` });
         }
-        const added = (existing.folders ?? []).filter(f => !f.name?.endsWith(' (project)') && !f.name?.endsWith(' (model)'));
+        for (const folder of csharpFolders) {
+            if (!ours.some(f => f.path.toLowerCase() === folder.toLowerCase())) {
+                ours.push({ path: folder, name: `${path.basename(folder)} (C#)` });
+            }
+        }
+        const added = (existing.folders ?? []).filter(f => !f.name?.endsWith(' (project)') && !f.name?.endsWith(' (model)') && !f.name?.endsWith(' (C#)'));
         const content = { ...existing, folders: [...ours, ...added], settings: { ...existing.settings, 'xpp.project': project.file } };
         await fs.writeFile(uri.fsPath, JSON.stringify(content, null, 2), 'utf8');
         return uri;
@@ -291,9 +301,37 @@ function projectXml(name: string, model: string, guid: string): string {
 `.replace(/\r?\n/g, '\r\n');
 }
 
-type ProjectNode = { kind: 'folder'; folder: string; items: ProjectItem[] } | { kind: 'item'; item: ProjectItem };
+type ProjectNode =
+    | { kind: 'xppProject'; file: string; name: string; model?: string; active: boolean }
+    | { kind: 'references'; project: string }
+    | { kind: 'reference'; ref: ReferenceInfo }
+    | { kind: 'folder'; folder: string; items: ProjectItem[]; active: boolean }
+    | { kind: 'item'; item: ProjectItem; active: boolean }
+    | { kind: 'hint'; label: string; command: string }
+    | { kind: 'csProject'; file: string; name: string; inSolution: boolean }
+    | { kind: 'file'; node: FileNode; project: string };
 
-/** Solution-explorer style view of the active project, grouped by folder. */
+/** The C# projects of a project's solution and those the project references, with the solution (if any). */
+export async function solutionCsharpProjects(projectFile: string): Promise<{ solution?: SolutionInfo; projects: { file: string; inSolution: boolean }[] }> {
+    const solution = await findSolution(projectFile);
+    const xml = await fs.readFile(projectFile, 'utf8').catch(() => '');
+    const projects = new Map<string, { file: string; inSolution: boolean }>();
+    for (const file of solution?.projects.filter(p => /\.csproj$/i.test(p)) ?? []) {
+        projects.set(file.toLowerCase(), { file, inSolution: true });
+    }
+    for (const ref of projectReferences(projectFile, xml).filter(r => r.kind === 'project' && r.path && r.exists)) {
+        if (!projects.has(ref.path!.toLowerCase())) {
+            projects.set(ref.path!.toLowerCase(), { file: ref.path!, inSolution: false });
+        }
+    }
+    return { solution, projects: [...projects.values()] };
+}
+
+/**
+ * Visual Studio's Solution Explorer for the open project: the X++ project (its references and elements by folder), the
+ * other X++ projects of its solution, and the C# projects of the solution or that the project references, with their
+ * files to edit.
+ */
 export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode>, vscode.Disposable {
     private readonly changed = new vscode.EventEmitter<void>();
     readonly onDidChangeTreeData = this.changed.event;
@@ -301,6 +339,7 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode>
     private watcher?: FSWatcher;
     private watchedFile?: string;
     private debounce?: NodeJS.Timeout;
+    private readonly folderWatchers = new Map<string, vscode.Disposable>();
 
     refresh(): void {
         this.changed.fire();
@@ -308,7 +347,13 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode>
 
     dispose(): void {
         this.watcher?.close();
+        this.folderWatchers.forEach(w => w.dispose());
         this.changed.dispose();
+    }
+
+    private refreshSoon(): void {
+        clearTimeout(this.debounce);
+        this.debounce = setTimeout(() => this.refresh(), 400);
     }
 
     /** Tools, the MCP server and other editors write the .rnrproj directly; follow the file itself. */
@@ -328,8 +373,7 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode>
                 if (name && name.toString().toLowerCase() !== path.basename(file).toLowerCase()) {
                     return;
                 }
-                clearTimeout(this.debounce);
-                this.debounce = setTimeout(() => this.refresh(), 400);
+                this.refreshSoon();
             });
             this.watcher.on('error', () => { this.watcher?.close(); this.watcher = undefined; this.watchedFile = undefined; });
         } catch {
@@ -337,52 +381,191 @@ export class ProjectTreeProvider implements vscode.TreeDataProvider<ProjectNode>
         }
     }
 
-    getTreeItem(node: ProjectNode): vscode.TreeItem {
-        if (node.kind === 'folder') {
-            const item = new vscode.TreeItem(node.folder, vscode.TreeItemCollapsibleState.Expanded);
-            item.iconPath = vscode.ThemeIcon.Folder;
-            item.description = String(node.items.length);
-            item.contextValue = 'xppProjectFolder';
-            return item;
+    /** Files added to or removed from the C# projects (and the solution file) show up without a refresh; build output doesn't count. */
+    private watchFolders(folders: { folder: string; pattern: string }[]): void {
+        const wanted = new Set(folders.map(f => `${f.folder.toLowerCase()}|${f.pattern}`));
+        for (const [key, watcher] of this.folderWatchers) {
+            if (!wanted.has(key)) {
+                watcher.dispose();
+                this.folderWatchers.delete(key);
+            }
         }
-        const { objectType, objectName } = node.item;
-        const item = new vscode.TreeItem(objectName, vscode.TreeItemCollapsibleState.None);
-        item.description = typeName(objectType);
-        // Project items always belong to the project's own (custom) model.
-        item.contextValue = elementContextValue(objectType, true);
-        item.iconPath = new vscode.ThemeIcon(iconFor(objectType));
-        item.command = elementOpenCommand(objectType, objectName);
-        // Lets Git change decorations (ChangeDecorations) mark the item.
-        item.resourceUri = objectUri(objectType, objectName);
-        return item;
+        for (const { folder, pattern } of folders) {
+            const key = `${folder.toLowerCase()}|${pattern}`;
+            if (this.folderWatchers.has(key)) {
+                continue;
+            }
+            const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(folder), pattern));
+            const changed = (uri: vscode.Uri) => {
+                if (!/[\\/](bin|obj|\.vs|\.git)[\\/]/i.test(uri.fsPath)) {
+                    this.refreshSoon();
+                }
+            };
+            watcher.onDidCreate(changed);
+            watcher.onDidDelete(changed);
+            if (pattern !== '**/*') {
+                watcher.onDidChange(changed);
+            } else {
+                watcher.onDidChange(uri => /\.csproj$/i.test(uri.fsPath) && changed(uri));
+            }
+            this.folderWatchers.set(key, watcher);
+        }
+    }
+
+    getTreeItem(node: ProjectNode): vscode.TreeItem {
+        switch (node.kind) {
+            case 'xppProject': {
+                const item = new vscode.TreeItem(node.name, node.active ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
+                item.iconPath = new vscode.ThemeIcon('project');
+                item.description = `${node.model ?? ''}${node.active ? '' : ' · not open'}`.trim();
+                item.tooltip = `${node.file}${node.active ? '' : '\nOpen This Project to work on it.'}`;
+                item.contextValue = node.active ? 'xppSolutionProject active' : 'xppSolutionProject other';
+                item.id = `xpp:${node.file.toLowerCase()}`;
+                return item;
+            }
+            case 'references': {
+                const item = new vscode.TreeItem('References', vscode.TreeItemCollapsibleState.Collapsed);
+                item.iconPath = new vscode.ThemeIcon('references');
+                item.tooltip = 'C# projects and assemblies this X++ project uses. The build copies them into the package.';
+                item.contextValue = 'xppReferences';
+                item.id = `refs:${node.project.toLowerCase()}`;
+                return item;
+            }
+            case 'reference': {
+                const { ref } = node;
+                const item = new vscode.TreeItem(ref.name, vscode.TreeItemCollapsibleState.None);
+                item.iconPath = new vscode.ThemeIcon(!ref.exists ? 'warning' : ref.kind === 'project' ? 'file-code' : 'library');
+                item.description = `${ref.kind === 'project' ? 'C# project' : 'assembly'}${ref.exists ? '' : ' · not found'}`;
+                item.tooltip = ref.path ?? ref.name;
+                item.contextValue = `xppReference ${ref.kind}`;
+                if (ref.kind === 'project' && ref.path && ref.exists) {
+                    item.command = { command: 'vscode.open', title: 'Open Project File', arguments: [vscode.Uri.file(ref.path)] };
+                }
+                return item;
+            }
+            case 'folder': {
+                const item = new vscode.TreeItem(node.folder, node.active ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
+                item.iconPath = vscode.ThemeIcon.Folder;
+                item.description = String(node.items.length);
+                item.contextValue = node.active ? 'xppProjectFolder' : 'xppOtherProjectFolder';
+                return item;
+            }
+            case 'item': {
+                const { objectType, objectName } = node.item;
+                const item = new vscode.TreeItem(objectName, vscode.TreeItemCollapsibleState.None);
+                item.description = typeName(objectType);
+                // Project items always belong to the project's own (custom) model; items of another project can't be excluded from this one.
+                item.contextValue = elementContextValue(objectType, true) + (node.active ? '' : ' otherProject');
+                item.iconPath = new vscode.ThemeIcon(iconFor(objectType));
+                item.command = elementOpenCommand(objectType, objectName);
+                // Lets Git change decorations (ChangeDecorations) mark the item.
+                item.resourceUri = objectUri(objectType, objectName);
+                return item;
+            }
+            case 'hint': {
+                const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.None);
+                item.iconPath = new vscode.ThemeIcon('add');
+                item.command = { command: node.command, title: node.label };
+                return item;
+            }
+            case 'csProject': {
+                const item = new vscode.TreeItem(node.name, vscode.TreeItemCollapsibleState.Collapsed);
+                item.resourceUri = vscode.Uri.file(node.file);
+                item.iconPath = vscode.ThemeIcon.File;
+                item.description = node.inSolution ? 'C#' : 'C# · not in the solution';
+                item.tooltip = node.file;
+                item.contextValue = 'xppCsProject';
+                item.id = `cs:${node.file.toLowerCase()}`;
+                return item;
+            }
+            case 'file': {
+                const folder = !!node.node.children;
+                const item = new vscode.TreeItem(node.node.name, folder ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
+                item.resourceUri = vscode.Uri.file(node.node.path);
+                item.iconPath = folder ? vscode.ThemeIcon.Folder : vscode.ThemeIcon.File;
+                item.contextValue = folder ? 'xppCsFolder' : 'xppCsFile';
+                // Two projects in one folder list the same files; ids stay unique per project.
+                item.id = `file:${node.project.toLowerCase()}|${node.node.path.toLowerCase()}`;
+                if (!folder) {
+                    item.command = { command: 'vscode.open', title: 'Open', arguments: [item.resourceUri] };
+                }
+                return item;
+            }
+        }
     }
 
     async getChildren(node?: ProjectNode): Promise<ProjectNode[]> {
-        if (node?.kind === 'folder') {
-            return node.items
-                .sort((a, b) => a.objectName.localeCompare(b.objectName))
-                .map(item => ({ kind: 'item', item }));
+        if (!node) {
+            return this.roots();
         }
-        if (node) {
-            return [];
+        switch (node.kind) {
+            case 'xppProject': {
+                const project = await readProject(node.file).catch(() => undefined);
+                if (!project) {
+                    return [];
+                }
+                const folders = new Map<string, ProjectItem[]>();
+                for (const item of project.items) {
+                    folders.set(item.folder, [...(folders.get(item.folder) ?? []), item]);
+                }
+                const children: ProjectNode[] = node.active ? [{ kind: 'references', project: node.file }] : [];
+                children.push(...[...folders.entries()]
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([folder, items]) => ({ kind: 'folder' as const, folder, items, active: node.active })));
+                if (node.active && project.items.length === 0) {
+                    children.push({ kind: 'hint', label: 'No elements yet: New Element…', command: 'xpp.newElement' });
+                }
+                return children;
+            }
+            case 'references': {
+                const xml = await fs.readFile(node.project, 'utf8').catch(() => '');
+                const refs = projectReferences(node.project, xml).sort((a, b) => a.name.localeCompare(b.name));
+                return refs.length
+                    ? refs.map(ref => ({ kind: 'reference' as const, ref }))
+                    : [{ kind: 'hint', label: 'Add Reference…', command: 'xpp.addReference' }];
+            }
+            case 'folder':
+                return node.items
+                    .sort((a, b) => a.objectName.localeCompare(b.objectName))
+                    .map(item => ({ kind: 'item', item, active: node.active }));
+            case 'csProject':
+                return (await csharpProjectTree(node.file)).map(file => ({ kind: 'file', node: file, project: node.file }));
+            case 'file':
+                return (node.node.children ?? []).map(file => ({ kind: 'file', node: file, project: node.project }));
+            default:
+                return [];
         }
+    }
+
+    private async roots(): Promise<ProjectNode[]> {
         const project = await readProject().catch(() => undefined);
         this.watch(project?.file);
-        // The welcome text depends on it: "no project selected" vs. "the project is empty".
+        // The welcome text depends on it: "no project selected".
         void vscode.commands.executeCommand('setContext', 'xpp.hasProject', !!project);
-        if (this.view) {
-            this.view.description = project ? `${project.name}${project.model ? ` (${project.model})` : ''}` : undefined;
-        }
         if (!project) {
+            if (this.view) {
+                this.view.description = undefined;
+            }
+            this.watchFolders([]);
             return [];
         }
-        const folders = new Map<string, ProjectItem[]>();
-        for (const item of project.items) {
-            folders.set(item.folder, [...(folders.get(item.folder) ?? []), item]);
+        const { solution, projects } = await solutionCsharpProjects(project.file);
+        if (this.view) {
+            this.view.description = solution ? `${solution.name} (solution)` : `${project.name}${project.model ? ` (${project.model})` : ''}`;
         }
-        return [...folders.entries()]
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([folder, items]) => ({ kind: 'folder', folder, items }));
+        const roots: ProjectNode[] = [{ kind: 'xppProject', file: project.file, name: project.name, model: project.model, active: true }];
+        for (const file of solution?.projects.filter(p => /\.rnrproj$/i.test(p) && p.toLowerCase() !== project.file.toLowerCase()) ?? []) {
+            const other = await readProject(file).catch(() => undefined);
+            if (other) {
+                roots.push({ kind: 'xppProject', file, name: other.name, model: other.model, active: false });
+            }
+        }
+        roots.push(...projects.map(p => ({ kind: 'csProject' as const, file: p.file, name: path.basename(p.file).replace(/\.csproj$/i, ''), inSolution: p.inSolution })));
+        this.watchFolders([
+            ...projects.map(p => ({ folder: path.dirname(p.file), pattern: '**/*' })),
+            ...(solution ? [{ folder: path.dirname(solution.file), pattern: path.basename(solution.file) }] : []),
+        ]);
+        return roots;
     }
 }
 

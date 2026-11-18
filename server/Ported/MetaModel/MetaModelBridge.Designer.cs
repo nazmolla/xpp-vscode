@@ -73,8 +73,8 @@ namespace XppVsCode.Server.MetaModel
                 groupFields = null;
             string shown = ResolveLabel(label);
             if (string.IsNullOrEmpty(shown))
-                shown = field != null ? FieldLabel(render, field) : groupLabel ?? MenuItemLabel(render, node.Control);
-            return new Dictionary<string, object>
+                shown = field != null ? FieldLabel(render, field) : groupLabel ?? MenuItemLabel(render, node.Control) ?? ControlTypeLabel(render, node.Control);
+            var result = new Dictionary<string, object>
             {
                 ["name"] = node.Name,
                 ["type"] = ctl?.Type.ToString() ?? "Design",
@@ -91,10 +91,17 @@ namespace XppVsCode.Server.MetaModel
                 ["showLabel"] = PropertyText(node.Control, "ShowLabel"),
                 ["visible"] = GetStringProperty(node.Control, "Visible") ?? node.Control?.GetType().GetProperty("Visible")?.GetValue(node.Control)?.ToString(),
                 ["pattern"] = GetStringProperty(node.Control, "Pattern"),
+                // Command buttons without a label show their command's (DeleteRecord: Delete) in the web client.
+                ["command"] = PropertyText(node.Control, "Command"),
+                // Fields whose values the web client shows in their fast tab's header.
+                ["fastTabSummary"] = PropertyText(node.Control, "FastTabSummary") == "Yes" ? true : (bool?)null,
+                ["configurationKey"] = ControlConfigurationKey(render, node.Control),
                 ["addedBy"] = node.AddedBy,
                 ["container"] = node.IsContainer,
                 ["children"] = children,
             };
+            AddLayoutProperties(result, node.Control);
+            return result;
         }
 
         /// <summary>Fields of a table including table extensions, for field pickers.</summary>

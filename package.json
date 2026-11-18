@@ -2,7 +2,7 @@
   "name": "xpp-vscode",
   "displayName": "F&O Studio for VS Code",
   "description": "Dynamics 365 Finance & Operations X++ development without Visual Studio: Application Explorer, designers, X++ code intelligence, build, deploy, debugging, data, performance and trace analysis, and Copilot agent tools on the real metadata API.",
-  "version": "0.15.6",
+  "version": "0.16.0",
   "publisher": "MNazmi",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -308,41 +308,6 @@
         }
       ]
     },
-    "chatParticipants": [
-      {
-        "id": "xpp.fno",
-        "name": "fno",
-        "fullName": "F&O Studio",
-        "description": "Ask about Dynamics 365 F&O code; I read the actual metadata",
-        "isSticky": true,
-        "commands": [
-          {
-            "name": "design",
-            "description": "Technical design document from a requirement"
-          },
-          {
-            "name": "extend",
-            "description": "How to extend standard behaviour (CoC, events, metadata extensions)"
-          },
-          {
-            "name": "explain",
-            "description": "Explain an element, method or process"
-          },
-          {
-            "name": "review",
-            "description": "Review my changes (best practice, performance, CoC, security)"
-          },
-          {
-            "name": "support",
-            "description": "Investigate an error message or call stack"
-          },
-          {
-            "name": "performance",
-            "description": "Find performance problems in an element or process"
-          }
-        ]
-      }
-    ],
     "chatAgents": [
       {
         "path": "./agents/developer.agent.md"
@@ -555,11 +520,6 @@
         "view": "xpp.project",
         "when": "!xpp.hasProject",
         "contents": "No D365FO project open. Opening a project opens its workspace: the project folder and its model folder. The Application Explorer and agent tools also work without one.\n[Open D365FO Project](command:xpp.selectProject)\n[Open Recent D365FO Project](command:xpp.openRecentProject)\n[Create D365FO Project](command:xpp.createProject)"
-      },
-      {
-        "view": "xpp.project",
-        "when": "xpp.hasProject",
-        "contents": "The project has no elements yet.\n[New Element](command:xpp.newElement)\nOr add existing elements with Add to Project in the Application Explorer, or ask Copilot to create them."
       },
       {
         "view": "xpp.results",
@@ -1304,6 +1264,11 @@
         "category": "F&O Studio"
       },
       {
+        "command": "xpp.checkVisualStudioTools",
+        "title": "Check Visual Studio's FinOps Tools Version",
+        "category": "F&O Studio"
+      },
+      {
         "command": "xpp.checkEnvironment",
         "title": "Check Environment Connection",
         "category": "F&O Studio"
@@ -1437,6 +1402,41 @@
         "title": "Edit Segregation of Duties Rules",
         "category": "F&O Studio",
         "icon": "$(edit)"
+      },
+      {
+        "command": "xpp.addReference",
+        "title": "Add Reference?",
+        "category": "F&O Studio",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xpp.removeReference",
+        "title": "Remove Reference",
+        "category": "F&O Studio",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "xpp.newCSharpProject",
+        "title": "New C# Project?",
+        "category": "F&O Studio",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "xpp.buildCSharpProject",
+        "title": "Build C# Project",
+        "category": "F&O Studio",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "xpp.openThisProject",
+        "title": "Open This Project",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.openProjectFile",
+        "title": "Open Project File",
+        "category": "F&O Studio",
+        "icon": "$(go-to-file)"
       }
     ],
     "submenus": [
@@ -1473,6 +1473,14 @@
         {
           "command": "xpp.closeProject",
           "group": "2_close@1"
+        },
+        {
+          "command": "xpp.addReference",
+          "group": "3_references@1"
+        },
+        {
+          "command": "xpp.newCSharpProject",
+          "group": "3_references@2"
         }
       ],
       "xpp.project.checkMenu": [
@@ -1759,7 +1767,7 @@
         },
         {
           "command": "xpp.excludeFromProject",
-          "when": "view == xpp.project && viewItem =~ /xppElement/",
+          "when": "view == xpp.project && viewItem =~ /xppElement/ && !(viewItem =~ /otherProject/)",
           "group": "9_delete@1"
         },
         {
@@ -1956,6 +1964,56 @@
           "command": "xpp.security.checkSod",
           "when": "(view == xpp.aot || view == xpp.project) && viewItem =~ /\\brole\\b/",
           "group": "4_refs@7"
+        },
+        {
+          "command": "xpp.addReference",
+          "when": "view == xpp.project && viewItem == xppReferences",
+          "group": "inline"
+        },
+        {
+          "command": "xpp.addReference",
+          "when": "view == xpp.project && viewItem == xppReferences",
+          "group": "navigation@1"
+        },
+        {
+          "command": "xpp.newCSharpProject",
+          "when": "view == xpp.project && viewItem == xppReferences",
+          "group": "navigation@2"
+        },
+        {
+          "command": "xpp.addReference",
+          "when": "view == xpp.project && viewItem =~ /xppSolutionProject active/",
+          "group": "2_references@1"
+        },
+        {
+          "command": "xpp.newCSharpProject",
+          "when": "view == xpp.project && viewItem =~ /xppSolutionProject active/",
+          "group": "2_references@2"
+        },
+        {
+          "command": "xpp.openThisProject",
+          "when": "view == xpp.project && viewItem =~ /xppSolutionProject other/",
+          "group": "navigation@1"
+        },
+        {
+          "command": "xpp.removeReference",
+          "when": "view == xpp.project && viewItem =~ /^xppReference /",
+          "group": "9_delete@1"
+        },
+        {
+          "command": "xpp.buildCSharpProject",
+          "when": "view == xpp.project && viewItem == xppCsProject",
+          "group": "navigation@1"
+        },
+        {
+          "command": "xpp.openProjectFile",
+          "when": "view == xpp.project && viewItem == xppCsProject",
+          "group": "navigation@2"
+        },
+        {
+          "command": "xpp.openProjectFile",
+          "when": "view == xpp.project && viewItem == xppCsProject",
+          "group": "inline"
         }
       ],
       "webview/context": [
@@ -2378,6 +2436,18 @@
         {
           "command": "xpp.runTests",
           "when": "!xpp.localEnvironment"
+        },
+        {
+          "command": "xpp.buildCSharpProject",
+          "when": "false"
+        },
+        {
+          "command": "xpp.openThisProject",
+          "when": "false"
+        },
+        {
+          "command": "xpp.openProjectFile",
+          "when": "false"
         }
       ],
       "editor/title": [
@@ -2484,6 +2554,12 @@
           "type": "boolean",
           "default": true,
           "description": "Cloud-hosted and VHD environments: after a successful build, restart the AOS hosts that are running (IIS Express or the AOS application pool in IIS, and the batch service) so they load the new build, as Visual Studio does. Not used on unified developer environments."
+        },
+        "xpp.build.msbuildPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "MSBuild.exe used to build the C# projects and assemblies your X++ project references (they are copied into the package before X++ is compiled and deployed, as Visual Studio does). Empty: Visual Studio's or the Build Tools' MSBuild, else the .NET SDK's (dotnet msbuild)."
         },
         "xpp.pacPath": {
           "type": "string",
@@ -2637,6 +2713,7 @@
     "@types/vscode": "^1.101.0",
     "@vscode/codicons": "^0.0.46-24",
     "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^4.1.1",
     "typescript": "^5.6.0"
   },
   "preview": true

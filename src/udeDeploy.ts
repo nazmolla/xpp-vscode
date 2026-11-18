@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { Dataverse } from './dataverse';
+import { packageFolders } from './packageStore';
 
 /**
  * Deploys locally built packages to a unified developer environment the way Visual Studio does: the package folder
@@ -182,10 +183,9 @@ async function ensureErpLinked(dv: Dataverse, token?: vscode.CancellationToken):
 
 /** Packages built in the custom metadata store; deploy them with deployPackages. */
 export async function builtPackages(store: string): Promise<DeployPackage[]> {
-    const entries = await fs.readdir(store, { withFileTypes: true }).catch(() => []);
-    return entries
-        .filter(e => e.isDirectory() && existsSync(path.join(store, e.name, 'bin', `Dynamics.AX.${e.name}.dll`)))
-        .map(e => ({ name: e.name, folder: path.join(store, e.name) }));
+    return (await packageFolders(store))
+        .filter(name => existsSync(path.join(store, name, 'bin', `Dynamics.AX.${name}.dll`)))
+        .map(name => ({ name, folder: path.join(store, name) }));
 }
 
 export async function deployPackages(packages: DeployPackage[], dbSync: DbSync, log: (line: string) => void, token?: vscode.CancellationToken): Promise<void> {

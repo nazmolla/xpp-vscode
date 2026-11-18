@@ -56,6 +56,10 @@ const steps = [
     b('read_label', { labelFileId: L, labelId: 'XvsDemoStatus' }), b('read_label', { labelFileId: 'SYS', search: 'customer group', maxResults: '3' }),
     b('label_file_entries', { labelFile: L, search: '', limit: '20' }), b('label_file_entries', { labelFile: 'NoSuchFileXvs', search: '' }),
     b('list_project_items', {}), b('select_project', { searchFolder: path.dirname(project) }),
+    // References to C# projects and assemblies: the list, and the refusal paths (no writes)
+    b('project_references', {}), b('add_reference', { modelName: 'Foundation', objectType: 'AxReference', objectName: 'XvsGm', assemblyPath: path.join(temp, 'missing.dll') }),
+    b('add_reference', { modelName: M, objectType: 'AxReference', objectName: 'XvsGm', assemblyPath: path.join(temp, 'missing.dll') }),
+    b('remove_reference', { modelName: M, objectType: 'AxReference', objectName: 'XvsGmNone', name: 'XvsGmNone' }),
     // Model management: failure paths only (models can't be deleted)
     b('create_model', { name: '1bad', displayName: 'x' }), b('create_model', { name: M }), b('update_model', { name: 'Foundation', displayName: 'x' }),
     b('update_model', { name: M, references: ['NoSuchPackageXvs'] }),
@@ -165,7 +169,8 @@ const rpc = (method, params) => new Promise(resolve => {
 });
 
 // Timings, temp paths and counters that change between runs.
-const volatileKeys = new Set(['ms', 'elapsedMs', 'cached', 'duration', 'timestamp']);
+// traceId: a new GUID for every opened trace.
+const volatileKeys = new Set(['ms', 'elapsedMs', 'cached', 'duration', 'timestamp', 'traceId']);
 function normalize(value) {
     if (Array.isArray(value)) return value.map(normalize);
     if (value && typeof value === 'object') {

@@ -134,7 +134,8 @@ namespace XppVsCode.Server
                         JsonHelpers.ExtractNestedObject(dataParams, "body") ?? "{}"));
                 case "xpp/trace":
                     string traceParams = JsonHelpers.ExtractNestedObject(json, "params") ?? "{}";
-                    return JsonHelpers.BuildResult(idToken, Host.TraceService.AnalyzeJson(JsonHelpers.ExtractNestedObject(traceParams, "body") ?? "{}"));
+                    return JsonHelpers.BuildResult(idToken, Host.TraceService.Handle(JsonHelpers.ExtractJsonString(traceParams, "action"),
+                        JsonHelpers.ExtractNestedObject(traceParams, "body") ?? "{}"));
                 default:
                     return JsonHelpers.BuildError(idToken, -32601, "Method not found: " + method);
             }

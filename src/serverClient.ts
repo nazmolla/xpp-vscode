@@ -63,7 +63,12 @@ export class XppServerClient implements vscode.Disposable {
         return (typeof raw === 'string' ? JSON.parse(raw) : raw) as T;
     }
 
-    /** Calls an MCP tool and returns its text output. */
+    /** The calls of a call tree node that the trace report left out (xpp/trace children), or closes the trace (close). */
+    async traceAction<T = BridgeResult>(action: 'children' | 'close', body: { traceId: string; node?: number; skip?: number }): Promise<T> {
+        await this.ensureStarted();
+        const raw = await this.request('xpp/trace', { action, body });
+        return (typeof raw === 'string' ? JSON.parse(raw) : raw) as T;
+    }
     async tool(name: string, args: object): Promise<{ text: string; isError: boolean }> {
         await this.ensureStarted();
         const result = await this.request('tools/call', { name, arguments: args }) as { content?: { text?: string }[]; isError?: boolean } | undefined;

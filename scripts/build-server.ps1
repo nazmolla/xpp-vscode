@@ -35,7 +35,9 @@ if (-not $bin) {
 Write-Host "Using $bin"
 
 $root = Split-Path $PSScriptRoot -Parent
-dotnet build (Join-Path $root 'server\XppVsCode.Server.csproj') -c $Configuration -o (Join-Path $root 'server\bin') "-p:D365BinPath=$bin" -nologo -v:minimal
+# The server carries the extension's version (file metadata; code signing checks it).
+$version = (Get-Content (Join-Path $root 'package.json') -Raw | ConvertFrom-Json).version
+dotnet build (Join-Path $root 'server\XppVsCode.Server.csproj') -c $Configuration -o (Join-Path $root 'server\bin') "-p:D365BinPath=$bin" "-p:Version=$version" -nologo -v:minimal
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 if ($Test) {

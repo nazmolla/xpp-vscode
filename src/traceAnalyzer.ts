@@ -6,16 +6,19 @@ import { XppServerClient } from './serverClient';
 import { registerPanelSerializer, stateAttribute } from './webviewState';
 import { showReportableError } from './reportProblem';
 
-interface TraceNode { m: string; n: number; incl: number; excl: number; sqlN?: number; sqlMs?: number; c?: TraceNode[]; hidden?: number }
+/** Call tree nodes come as a flat list (deep stacks would exceed JSON nesting limits); p is the parent's id, -1 for the root. */
+interface TraceNode { id: number; p: number; m: string; n: number; incl: number; excl: number; sqlN?: number; sqlMs?: number; hidden?: number }
 
 export interface TraceReport {
     success: boolean;
     message?: string;
+    /** The server keeps the trace open under this id, to load the calls the report left out. */
+    traceId: string;
     file: string;
     durationMs: number;
     events: number;
     xppCalls: number;
-    requests: { thread: number; startMs: number; ms: number; method: string; batch: boolean; unfinished: boolean; sqlN: number; sqlMs: number; tree: TraceNode; topExclusive?: { m: string; ms: number; wait: boolean }[] }[];
+    requests: { thread: number; startMs: number; ms: number; method: string; batch: boolean; unfinished: boolean; sqlN: number; sqlMs: number; nodes: TraceNode[]; topExclusive?: { m: string; ms: number; wait: boolean }[] }[];
     methods: { m: string; n: number; incl: number; excl: number; max: number; sqlN: number; sqlMs: number; wait: boolean }[];
     sql: { sql: string; n: number; ms: number; max: number; callers: { m: string; n: number }[] }[];
     sqlTotal: { n: number; ms: number };
@@ -49,9 +52,13 @@ export function registerTraceAnalyzer(context: vscode.ExtensionContext, command:
 }
 
 class TracePanel {
+    private report: TraceReport;
+
     private constructor(private readonly panel: vscode.WebviewPanel, private readonly context: vscode.ExtensionContext, private readonly server: XppServerClient, report: TraceReport) {
+        this.report = report;
         panel.webview.html = this.html(report.file);
-        panel.webview.onDidReceiveMessage(message => this.onMessage(message, report).catch(err => showReportableError('tracePanel', err)));
+        panel.webview.onDidReceiveMessage(message => this.onMessage(message).catch(err => showReportableError('tracePanel', err)));
+        panel.onDidDispose(() => void this.server.traceAction('close', { traceId: this.report.traceId }).catch(() => undefined));
     }
 
     static show(context: vscode.ExtensionContext, server: XppServerClient, report: TraceReport): void {
@@ -67,10 +74,13 @@ class TracePanel {
         new TracePanel(panel, context, server, report);
     }
 
-    private async onMessage(message: { type: string; method?: string; text?: string }, report: TraceReport): Promise<void> {
+    private async onMessage(message: { type: string; method?: string; text?: string; request?: number; node?: number; skip?: number }): Promise<void> {
         switch (message.type) {
             case 'ready':
-                await this.panel.webview.postMessage({ type: 'report', report });
+                await this.panel.webview.postMessage({ type: 'report', report: this.report });
+                break;
+            case 'children':
+                await this.children(message.request ?? -1, message.node ?? -1, message.skip ?? 0);
                 break;
             case 'open':
                 await this.open(message.method ?? '');
@@ -79,6 +89,30 @@ class TracePanel {
                 await vscode.env.clipboard.writeText(message.text ?? '');
                 vscode.window.setStatusBarMessage('Copied', 2000);
                 break;
+        }
+    }
+
+    /** Loads the calls of a node that the report left out; the server drops older traces, which are then read again. */
+    private async children(request: number, node: number, skip: number): Promise<void> {
+        const result = await this.server.traceAction<{ success: boolean; expired?: boolean; message?: string; nodes?: TraceNode[]; remaining?: number }>(
+            'children', { traceId: this.report.traceId, node, skip });
+        if (result.success) {
+            await this.panel.webview.postMessage({ type: 'children', request, node, nodes: result.nodes ?? [], remaining: result.remaining ?? 0 });
+            return;
+        }
+        await this.panel.webview.postMessage({ type: 'childrenFailed', request, node });
+        if (!result.expired) {
+            throw new Error(result.message ?? 'The calls could not be loaded.');
+        }
+        const reload = await vscode.window.showInformationMessage(`${path.basename(this.report.file)} is no longer loaded, so its other calls can't be shown. Read the trace again?`, 'Reload Trace');
+        if (reload) {
+            const report = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Reading ${path.basename(this.report.file)}…` },
+                () => this.server.trace<TraceReport>({ path: this.report.file }));
+            if (!report.success) {
+                throw new Error(report.message ?? 'The trace could not be read.');
+            }
+            this.report = report;
+            await this.panel.webview.postMessage({ type: 'report', report });
         }
     }
 

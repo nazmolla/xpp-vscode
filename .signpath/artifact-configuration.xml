@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration for the F&O Studio server (slug "server" in the SignPath project "xpp-vscode").
+  The release workflow (.github/workflows/release.yml) uploads server/bin/XppVsCode.Server.exe as a GitHub artifact
+  (a zip with the exe at its root) and passes the extension version from package.json as the "version" parameter.
+  Only our own exe is signed; Microsoft's Dynamics 365 assemblies are never part of the artifact.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file path="XppVsCode.Server.exe" product-name="F&amp;O Studio for VS Code" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

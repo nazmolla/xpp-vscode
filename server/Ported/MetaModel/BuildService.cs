@@ -177,6 +177,15 @@ namespace XppVsCode.Server.MetaModel
             var log = new StringBuilder();
             var timer = Stopwatch.StartNew();
 
+            // As Visual Studio: the C# projects and assemblies the X++ project references go into the package before X++ compiles.
+            if (project != null && string.Equals(project.GetProjectsModelInfo()?.Module, package, StringComparison.OrdinalIgnoreCase)
+                && !ProjectReferences.Prepare(project.FullName, packageFolder, bin, log))
+                return json.Serialize(new Dictionary<string, object>
+                {
+                    ["success"] = false,
+                    ["message"] = "BUILD FAILED: building or copying the projects and assemblies " + project.Caption + " references.\n" + Tail(log.ToString(), 3000),
+                });
+
             var labelIds = LabelFileIds(Path.Combine(packageFolder, model.Name, "AxLabelFile"));
             if (labelIds.Count > 0)
             {
@@ -324,7 +333,7 @@ namespace XppVsCode.Server.MetaModel
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         }
 
-        private static int RunTool(string exe, string[] args, StringBuilder log)
+        internal static int RunTool(string exe, string[] args, StringBuilder log)
         {
             if (!File.Exists(exe))
             {

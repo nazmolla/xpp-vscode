@@ -185,8 +185,9 @@ namespace XppVsCode.Server.MetaModel
 
         private EffectiveForm BuildEffectiveForm(string formName, AxFormExtension pending = null)
         {
-            WarmFormExtensionValidator();
             var baseForm = MetaService.GetForm(formName);
+            // After MetaService: the warm-up must not be the one loading the metadata.
+            WarmFormExtensionValidator();
             if (baseForm == null) return null;
 
             // Work on copies so merging extensions never mutates the instances VS has cached.

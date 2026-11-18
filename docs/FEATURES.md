@@ -8,6 +8,26 @@ Develop Dynamics 365 Finance & Operations X++ code in VS Code, without Visual St
 
 ![Application Explorer filtered on CustGroup](images/aot.png)
 
+## What's new in 0.16
+
+**0.16.0: C# projects in your solution, like Visual Studio's Solution Explorer.**
+- **The project view shows the solution:** your X++ project with its **References**, the other X++ projects of the solution (**Open This Project** switches to one), and the C# projects of the solution or that your project references, with their files. Click a `.cs` file to edit it; the C# projects are folders of the project's workspace, so the C# extension gives you IntelliSense.
+- **Add Reference…** to a C# project of the solution, any `.csproj`, or an assembly (`.dll`); **Remove Reference**. As in Visual Studio, this writes the reference into the `.rnrproj` and an `AxReference` into your model, through which X++ code uses the assembly's types.
+- **New C# Project…** creates a .NET Framework 4.8 class library next to your X++ project, adds it to the solution and references it. It compiles against Finance and Operations' assemblies (X++ types are in `Dynamics.AX.Application`) without copying them, and finds them through the active configuration, so it builds on every developer machine.
+- **Build** (and `xpp_build` for agents) builds the referenced C# projects first with MSBuild and copies what they need into your package's `bin` folder before X++ is compiled: the assemblies with their dependencies, PDB and XML files and satellite assemblies, and files marked *Copy to Output Directory*. Finance and Operations' own assemblies are never copied. **Deploy** refreshes them first, so the package carries them.
+- **Debugging** loads the symbols of the assemblies your projects reference, so breakpoints in their C# code bind next to your X++ breakpoints.
+- MSBuild comes from Visual Studio or the Build Tools, else from the .NET SDK; `xpp.build.msbuildPath` picks another one.
+- **Packages linked into your metadata folder** with a junction or symbolic link are offered for deploy and build ([#14](https://github.com/nazmolla/xpp-vscode/issues/14)).
+- **Analyze Trace** opens long traces: call trees no longer fail with "RecursionLimit exceeded", and the calls the report leaves out load when you expand a call or click **Show N more calls** ([#12](https://github.com/nazmolla/xpp-vscode/issues/12)).
+- The code view, formatter and syntax colouring handle `@'...'` verbatim strings and interfaces, so the trace viewer and Go to Definition open those classes ([#11](https://github.com/nazmolla/xpp-vscode/issues/11)).
+- **`@fno` is removed:** VS Code retires chat participants. Pick an F&O agent in the chat's agent picker instead (see Copilot below, [#13](https://github.com/nazmolla/xpp-vscode/issues/13)).
+- **Form preview, redrawn after the web client** ([#15](https://github.com/nazmolla/xpp-vscode/issues/15)): the action pane card with its toolbar (New, Delete and the other root buttons), tabs and button groups in columns of three; menu buttons open their list; details forms open on the list and the record link opens the details view; only the first fast tab is open and the others show their summary fields; table of contents, grids, filters and fields with the web client's sizes. Width, Height, DisplayLength, multi-line text, ArrangeMethod, Columns and VisibleRows change the drawing as you edit them. Hidden controls, what extensions added and controls behind a configuration key show on request.
+- **Go to Definition across X++ and C#:** from X++ to C# types and members of the referenced projects, from C# to X++ elements (`Dynamics.AX.Application`), with hover and completion of .NET types in X++.
+- **Code view of classes with tab-indented methods** no longer re-indents them on save (round trip of `PurchFormLetter`, `TaxCalculation` and others).
+- **Visual Studio side by side:** configurations F&O Studio writes now carry every member of Microsoft's template, so Visual Studio lists them in *Manage local XPP configurations* and loads metadata with them; existing ones are completed when the extension starts. **Check Visual Studio's FinOps Tools Version** (and a one-time prompt, only when a Visual Studio with the FinOps tools is installed) offers to install the tools that match the environment, because Visual Studio's Application Explorer does not open when they differ. F&O Studio itself never needs Visual Studio.
+- The first form opened after start no longer fails with "An item with the same key has already been added".
+- *Tested:* X++ calling C# and C# calling X++ (`CustTable`) build together on this machine's UDE configuration; the solution view in an extension host. *Not tested yet:* hitting a C# breakpoint on a UDE or VHD.
+
 ## What's new in 0.15
 
 **0.15.6: Deploy and debug your own code like Visual Studio, on unified, VHD and cloud-hosted environments.**
@@ -156,8 +176,9 @@ Full history: [github.com/nazmolla/xpp-vscode](https://github.com/nazmolla/xpp-v
   - On your own models: Upgrade Readiness and Standard Code Drift of Wrapped Methods…
 - **Projects** (optional):
   - **Open D365FO Project…**, **Open Recent D365FO Project…**, **Create D365FO Project…** (writes `.rnrproj` and `.slnx` like Visual Studio), **Export Project…** and **Import Project…** (`.axpp`, the same format as Visual Studio).
-  - Each project opens in its own workspace with its project and model folders.
-  - The project view follows the `.rnrproj`, so elements added by Copilot or Visual Studio show up on their own. It marks git changes.
+  - Each project opens in its own workspace with its project and model folders, and the folders of its C# projects.
+  - The project view shows the solution, as Solution Explorer does: the X++ project with its **References** and elements by folder, the other X++ projects of the solution, and the C# projects with their files. It follows the `.rnrproj`, so elements added by Copilot or Visual Studio show up on their own. It marks git changes.
+  - **Add Reference…**, **Remove Reference**, **New C# Project…** and **Build C# Project** work on references to C# projects and assemblies.
   - **Exclude from Project** keeps the element in the model. **Delete** removes it from the model (your own models only).
 - **Models:** **Create Model…**, **Update Model Parameters…**, **View Model Dependencies…**.
 
@@ -177,7 +198,7 @@ Full history: [github.com/nazmolla/xpp-vscode](https://github.com/nazmolla/xpp-v
 - **Properties grid:** filter, categories, changed values marked, label picker (find or create) and element pickers (`Alt+Down`). **Go to Referenced Element…** opens what a property points to.
 - **Editing:** New (any node type a folder accepts), New Method…, Override Method…, Rename…, Duplicate…, Move Up and Move Down, Delete, and **Add from Application Explorer…** (or drag and drop, with Visual Studio's drop rules). Undo with `Ctrl+Z` and redo with `Ctrl+Y`.
 - **Events:** **Copy Event Handler Method** (or double-click) puts Visual Studio's handler code on the clipboard. **Find Event Handlers** lists the existing ones.
-- **Forms:** a preview drawn like the web client, with Table of Contents and FastTab patterns, columns and field labels.
+- **Forms:** a preview drawn like the web client: the action pane with working tabs and menu buttons, list and details views of details forms, fast tabs that open and close with their summaries, table of contents, grids and fields. Size and arrangement properties (Width, Height, DisplayLength, ArrangeMethod, Columns, VisibleRows, multi-line) show as you change them. **Show hidden controls and markers** adds controls whose Visible is No and outlines what extensions added and what a configuration key controls.
 - **Extensions** show the base element's nodes; the extension's own nodes are in bold. Elements outside your models are read-only, and the editor title offers **Create Extension**.
 - **Entity relationship diagram:** choose the levels, the direction and the fields shown. Export it as SVG or Mermaid.
 - **Label editor:** search, other languages side by side, New, Edit and Delete in every language, and Copy @reference.
@@ -224,6 +245,7 @@ Turn each feature on or off with **Configure Code Intelligence…**, or with the
 - **Build:**
   - **Build Project** (`Ctrl+Shift+B` in an X++ editor, or the status bar) reports only the project's problems. **Build Model** covers the whole model.
   - Builds use xppc and LabelC, and errors go to Problems at the right line.
+  - The C# projects and assemblies the project references are built and copied into the package first, as Visual Studio does.
   - Unsaved code is saved first (`xpp.build.saveBeforeBuild`). A failed build offers **Show Problems**.
 - **Build tasks:** `{ "type": "xpp", "action": "buildProject" }` (or `buildModel`) in `tasks.json`.
 - **Run Tests:**
@@ -236,7 +258,7 @@ Turn each feature on or off with **Configure Code Intelligence…**, or with the
   - **Initialize Deployment Solution (pac)** and **Sign In to Environment (pac)** set up a Power Platform CLI solution if you deploy with `pac` yourself;
   - **Synchronize Tables** syncs only your project's tables on cloud-hosted and VHD environments.
 - **Debugging:**
-  - **Launch Debugger** attaches through the FinOps debugger proxy, as Visual Studio does, and you can set breakpoints in the code view.
+  - **Launch Debugger** attaches through the FinOps debugger proxy, as Visual Studio does, and you can set breakpoints in the code view and in the C# code your project references.
   - **Infolog** shows the debugged code's messages, each linked to Find Message Source.
 - **Status bar:** project and last build result, deployed state, X++ server state (click to restart) and database.
 
@@ -270,7 +292,7 @@ Turn each feature on or off with **Configure Code Intelligence…**, or with the
   - requests on a timeline, per AOS and thread, with UTC times to match integration logs;
   - every AOS and session in the trace with its user (other users, dual-write and OData integrations, batch), one click to filter on it;
   - errors and exceptions with the full X++ call stack (`Global::error`, `checkFailed`, `warning`, and frames unwound by an exception with the method that caught it);
-  - call trees, hot methods and SQL per method;
+  - call trees, hot methods and SQL per method; calls the report leaves out load when you expand them;
   - pauses;
   - each method one click from its code.
 - `xpp_analyze_trace` takes the same filters for agents: `aos`, `session`, `user`, `method` (requests that reach it, with the path) and `from`/`to` (UTC times).
@@ -316,6 +338,7 @@ Turn each feature on or off with **Configure Code Intelligence…**, or with the
 - **Version drift guard** (*preview*): you get a warning when the environment runs a newer application version. **Update Metadata** downloads it, and **Clean Up Old Application Versions…** removes old versions after a confirmation.
 - **Open Team Repository…** (*preview*): clone or pick a repository, link its packages into the metadata folder and build them in dependency order.
 - **Cloud-hosted and VHD environments** work without a connection step. F&O Studio uses the local PackagesLocalDirectory, AOS and AxDB. Deploy and Run Tests are UDE-only and are hidden there; the debugger attaches to the local AOS (*preview*, needs the C# extension).
+- **Using Visual Studio too:** the configuration F&O Studio writes is the one Visual Studio reads. **Check Visual Studio's FinOps Tools Version** installs the FinOps tools that match the environment's metadata into Visual Studio when they differ (Visual Studio's Application Explorer does not open otherwise).
 
 ### Copilot
 - **Agents** in the Copilot agent picker, each with its own instructions and next-step handoffs:
@@ -324,7 +347,7 @@ Turn each feature on or off with **Configure Code Intelligence…**, or with the
   - **Functional consultants:** Functional Explainer, Setup Advisor, Data Investigator, Functional Triage, Role Designer, Test Scenarios, Fit-Gap Analyst, Data Migration, Release Notes. They answer in business terms and use the live environment through the Dynamics 365 ERP MCP server or the browser (they suggest connecting it when it's missing).
   - When you haven't picked one, Copilot suggests the agent that fits, or runs it for a self-contained part of the task.
   - Agents change data, setup or metadata only after you allow it, and only in development, sandbox or build environments, never in production.
-- **@fno** in Copilot Chat: `/design`, `/extend`, `/explain`, `/review`, `/support`, `/performance`.
+  - Coming from `@fno` (removed: VS Code retires chat participants)? `/design` is the Solution Designer, `/extend` the F&O Developer, `/explain` the Code Archaeologist or Functional Explainer, `/review` the Code Reviewer, `/support` F&O Support, `/performance` F&O Performance.
 - **Copilot Activity** shows every tool call agents make, with arguments, duration and result. Changed elements link to their designer.
 - **Checkpoints and scope:**
   - **Start Copilot Checkpoint**, then **Revert Copilot Changes Since the Checkpoint…** or **End Copilot Checkpoint (Keep Changes)**;
@@ -355,6 +378,7 @@ The tools are registered automatically. Copilot can:
 | Visual Studio | F&O Studio | |
 | --- | --- | --- |
 | Application Explorer (classic and model view) | Application Explorer | Same |
+| Solution Explorer: X++ and C# projects, references | Project view with References, the solution's C# projects and their files; Add Reference…, New C# Project… | Same `.rnrproj` items and `AxReference` elements; C# editing through the C# extension |
 | Solution Explorer: Add > New Item | New Element… and the wizards | Same element types, plus batch job, report, workflow, service, business event, number sequence and feature wizards |
 | Element designers and the Properties window | Element designer with a filterable, categorized Properties grid and pickers | Same metadata classes |
 | Form designer | Form layout preview, form extensions, element designer for the nodes | Same: a preview where clicking a section selects its control |
@@ -384,7 +408,7 @@ The tools are registered automatically. Copilot can:
   - **Cloud-hosted or VHD environment:** run VS Code as administrator, as Visual Studio does, to build into PackagesLocalDirectory.
 - SQL Server LocalDB, for cross references.
 - Optional: [Power Platform CLI](https://learn.microsoft.com/power-platform/developer/cli/introduction) (`pac`), only for the `(pac)` commands. Deploy and database sync don't need it.
-- GitHub Copilot, for `@fno` and the agent tools. Verify Changes in the Running App also needs the Dynamics 365 ERP MCP server.
+- GitHub Copilot, for the agents and the agent tools. Verify Changes in the Running App also needs the Dynamics 365 ERP MCP server.
 
 ## Getting started
 
@@ -396,7 +420,7 @@ The tools are registered automatically. Copilot can:
    - **Team repository:** **Open Team Repository…** links its packages and builds them.
    - **Your own project:** **Open D365FO Project…** or **Create D365FO Project…**. A project is optional.
    - **Just browsing:** use the **Application Explorer**.
-4. Open elements (`Ctrl+Alt+O`), build (`Ctrl+Shift+B`), browse data, or ask Copilot in agent mode (or `@fno` in chat). Start a Copilot checkpoint first if you want to be able to revert.
+4. Open elements (`Ctrl+Alt+O`), build (`Ctrl+Shift+B`), browse data, or ask Copilot in agent mode (pick an F&O agent in the agent picker). Start a Copilot checkpoint first if you want to be able to revert.
 
 ## Settings
 
@@ -410,6 +434,7 @@ The tools are registered automatically. Copilot can:
 | `xpp.build.runAppCheckerRules` | Run AppChecker rules during the build |
 | `xpp.build.saveBeforeBuild` | Save unsaved X++ code views before a build |
 | `xpp.build.restartLocalAos` | Cloud-hosted and VHD: restart the running AOS hosts (IIS Express or IIS application pool, batch service) after a successful build |
+| `xpp.build.msbuildPath` | MSBuild.exe for the C# projects and assemblies your project references; empty: Visual Studio's or the Build Tools', else the .NET SDK's |
 | `xpp.pacPath` | Path to `pac`, for the `(pac)` commands |
 | `xpp.debuggerProxyPath` | Path to `Microsoft.Dynamics.AX.DebuggerProxy.exe`, if it isn't in the default location |
 | `xpp.erd.depth`, `xpp.erd.direction`, `xpp.erd.fields` | Defaults for the entity relationship diagram |
@@ -452,6 +477,10 @@ This extension is a preview. Some features have not been verified end to end on 
 - Verify Changes in the Running App.
 
 To report a problem, use **Report a Problem…** or open an issue on [GitHub](https://github.com/nazmolla/xpp-vscode/issues).
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org). The extension's server is built from the public source on GitHub Actions and signed after a manual approval. Team roles, what is signed and the privacy statement: [code signing policy](https://github.com/nazmolla/xpp-vscode#code-signing-policy). This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.
 
 Licensed under the [Apache License 2.0](https://github.com/nazmolla/xpp-vscode/blob/main/LICENSE).
 

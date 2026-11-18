@@ -126,6 +126,10 @@ const markup = '<?xml version="1.0"?>';
     verdict('D36', 'wrapper_drift reads only a PackagesLocalDirectory', !ok(r), msgOf(r));
     r = await bridge('extension_collisions', { modelName: 'ApplicationSuite' });
     verdict('D37', 'extension_collisions refuses a standard model', !ok(r), msgOf(r));
+    r = await bridge('add_reference', { modelName: 'ApplicationSuite', objectType: 'AxReference', objectName: 'XvsDast', assemblyPath: 'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\System.dll' });
+    verdict('D38', 'add_reference refuses a standard model', !ok(r), msgOf(r));
+    r = await bridge('remove_reference', { modelName: 'ApplicationSuite', objectType: 'AxReference', objectName: 'Microsoft.Dynamics.AX.Xpp.Support', name: 'Microsoft.Dynamics.AX.Xpp.Support' });
+    verdict('D39', 'remove_reference refuses a standard model', !ok(r), msgOf(r));
 
     // Agent tools: SQL injection, regex time-outs, URL allow-list.
     t = await tool('xpp_find_references', { objectType: 'AxTable', objectName: "CustTable' OR 1=1 --" });

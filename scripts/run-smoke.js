@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const all = ['workflowSmoke', 'databaseSmoke', 'securitySmoke', 'productivitySmoke', 'projectSmoke', 'goToSmoke', 'codeIntelSmoke', 'historySmoke', 'dragDropSmoke', 'debugAdapterSmoke'];
+const all = ['workflowSmoke', 'databaseSmoke', 'securitySmoke', 'productivitySmoke', 'projectSmoke', 'solutionSmoke', 'definitionSmoke', 'goToSmoke', 'codeIntelSmoke', 'historySmoke', 'dragDropSmoke', 'debugAdapterSmoke'];
 const names = process.argv.slice(2).length ? process.argv.slice(2) : all;
 let failed = 0;
 for (const name of names) {

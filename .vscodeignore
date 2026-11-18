@@ -8,6 +8,7 @@ tsconfig.json
 .gitignore
 scripts/**
 .github/**
+.signpath/**
 .vscode/**
 experimental/**
 test/**

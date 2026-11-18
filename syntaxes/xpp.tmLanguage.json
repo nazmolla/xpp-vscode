@@ -24,6 +24,7 @@
     "strings": {
       "patterns": [
         { "name": "string.quoted.verbatim.xpp", "begin": "@\"", "end": "\"(?!\")", "patterns": [ { "name": "constant.character.escape.xpp", "match": "\"\"" } ] },
+        { "name": "string.quoted.verbatim.xpp", "begin": "@'", "end": "'(?!')", "patterns": [ { "name": "constant.character.escape.xpp", "match": "''" } ] },
         { "name": "string.quoted.double.xpp", "begin": "\"", "end": "\"", "patterns": [ { "name": "constant.character.escape.xpp", "match": "\\\\." } ] },
         { "name": "string.quoted.single.xpp", "begin": "'", "end": "'", "patterns": [ { "name": "constant.character.escape.xpp", "match": "\\\\." } ] }
       ]
