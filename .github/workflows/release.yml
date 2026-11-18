@@ -130,6 +130,8 @@ jobs:
         shell: pwsh
         run: |
           npm run build:tools
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path tools/pdb2pdb/Pdb2Pdb.exe)) { throw 'Pdb2Pdb is missing; Deploy and debugging need it.' }
           npx vsce package --readme-path docs/FEATURES.md --baseContentUrl https://github.com/nazmolla/xpp-vscode/blob/HEAD/docs --baseImagesUrl https://github.com/nazmolla/xpp-vscode/raw/HEAD/docs -o "xpp-vscode-${{ steps.version.outputs.version }}.vsix"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -177,6 +179,9 @@ jobs:
             [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $exe, $true)
             $foreign = $zip.Entries | Where-Object Name -like 'Microsoft.Dynamics.*.dll'
             if ($foreign) { throw "$vsix contains Microsoft assemblies: $($foreign.Name -join ', ')" }
+            foreach ($required in 'extension/tools/pdb2pdb/Pdb2Pdb.exe', 'extension/changelog.md', 'extension/server/bin/XppVsCode.Server.exe.config') {
+              if (-not ($zip.Entries | Where-Object FullName -eq $required)) { throw "$vsix is missing $required." }
+            }
           } finally { $zip.Dispose() }
           $signature = Get-AuthenticodeSignature $exe
           $signer = $signature.SignerCertificate.Subject
