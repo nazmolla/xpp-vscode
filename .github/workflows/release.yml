@@ -1,4 +1,6 @@
 # Builds the extension from source, has the server signed by SignPath and packages the VSIX with the signed server.
+# On a release tag (vX.Y.Z) the publish job then puts that VSIX on the Visual Studio Marketplace and creates the
+# GitHub release; a manual run is a dry run of it (everything except publishing).
 # The server compiles against Microsoft's Dynamics 365 compiler package, restored from the repository owner's PRIVATE
 # GitHub Packages feed (it is never part of this repository, an artifact or the VSIX). The package grants this
 # repository's Actions read access, so GITHUB_TOKEN is enough.
@@ -21,6 +23,8 @@ env:
 jobs:
   build:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v5
 
@@ -132,3 +136,89 @@ jobs:
           name: vsix
           path: xpp-vscode-${{ steps.version.outputs.version }}.vsix
           if-no-files-found: error
+
+  # Publishes the VSIX the build job made (with the signed server) and creates the GitHub release with it.
+  # Needs the secret VSCE_PAT: an Azure DevOps personal access token with the Marketplace (Manage) scope for publisher
+  # MNazmi. Only a tag publishes; a manual run checks everything up to publishing.
+  publish:
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+      RELEASE: ${{ github.ref_type == 'tag' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: vsix
+
+      - name: The VSIX holds the signed server
+        shell: pwsh
+        run: |
+          $vsix = "xpp-vscode-$env:VERSION.vsix"
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $vsix))
+          try {
+            $entry = $zip.Entries | Where-Object FullName -eq 'extension/server/bin/XppVsCode.Server.exe'
+            if (-not $entry) { throw "$vsix has no server." }
+            $exe = Join-Path $env:RUNNER_TEMP 'XppVsCode.Server.exe'
+            [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $exe, $true)
+            $foreign = $zip.Entries | Where-Object Name -like 'Microsoft.Dynamics.*.dll'
+            if ($foreign) { throw "$vsix contains Microsoft assemblies: $($foreign.Name -join ', ')" }
+          } finally { $zip.Dispose() }
+          $signature = Get-AuthenticodeSignature $exe
+          $signer = $signature.SignerCertificate.Subject
+          "Server signature: $($signature.Status) $signer"
+          if ($env:RELEASE -eq 'true' -and ($signature.Status -ne 'Valid' -or $signer -notmatch 'SignPath Foundation')) {
+            throw 'The server must carry a valid SignPath Foundation signature before it is published.'
+          }
+
+      - name: Release notes (What's new in docs/FEATURES.md)
+        shell: pwsh
+        run: |
+          $minor = ($env:VERSION -split '\.')[0..1] -join '.'
+          $lines = Get-Content docs/FEATURES.md
+          $start = [Array]::FindIndex($lines, [Predicate[string]]{ param($l) $l -eq "## What's new in $minor" })
+          if ($start -lt 0) { throw "docs/FEATURES.md has no section ""## What's new in $minor""." }
+          $end = [Array]::FindIndex($lines, $start + 1, [Predicate[string]]{ param($l) $l -like '## *' })
+          if ($end -lt 0) { $end = $lines.Count }
+          $notes = ($lines[($start + 1)..($end - 1)] -join "`n").Trim()
+          $notes += "`n`nInstall from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=MNazmi.xpp-vscode) or with the attached VSIX."
+          Set-Content release-notes.md $notes -Encoding utf8
+          Get-Content release-notes.md | Select-Object -First 5
+
+      - name: Publish to the Visual Studio Marketplace
+        if: ${{ github.ref_type == 'tag' }}
+        shell: pwsh
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if (-not $env:VSCE_PAT) { throw 'The secret VSCE_PAT is not set.' }
+          npx vsce publish --packagePath "xpp-vscode-$env:VERSION.vsix"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: GitHub release
+        if: ${{ github.ref_type == 'tag' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME "xpp-vscode-$env:VERSION.vsix" --title "F&O Studio $env:VERSION" --notes-file release-notes.md --verify-tag
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Dry run
+        if: ${{ github.ref_type != 'tag' }}
+        shell: pwsh
+        run: |
+          "Dry run: xpp-vscode-$env:VERSION.vsix would be published to the Marketplace and released as v$env:VERSION on a tag."
+          "VSCE_PAT set: ${{ secrets.VSCE_PAT != '' }}"
