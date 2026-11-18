@@ -20,11 +20,15 @@ try {
     $package = Join-Path $work 'pdb2pdb.zip'
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     Invoke-WebRequest "$feed/$version/microsoft.diasymreader.pdb2pdb.$version.nupkg" -OutFile $package -UseBasicParsing
-    $actual = (Get-FileHash $package -Algorithm SHA256).Hash
+    # .NET directly: Windows PowerShell started from PowerShell 7 (the release workflow) cannot load Get-FileHash or Expand-Archive.
+    $stream = [IO.File]::OpenRead($package)
+    try { $actual = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($stream)).Replace('-', '') }
+    finally { $stream.Dispose() }
     if ($actual -ne $sha256) {
         throw "Pdb2Pdb $version has hash $actual, expected $sha256."
     }
-    Expand-Archive $package (Join-Path $work 'pkg') -Force
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [IO.Compression.ZipFile]::ExtractToDirectory($package, (Join-Path $work 'pkg'))
     if (Test-Path $target) { Remove-Item $target -Recurse -Force }
     New-Item -ItemType Directory -Force $target | Out-Null
     # The tool and its assemblies; the localized resource folders are not needed.
