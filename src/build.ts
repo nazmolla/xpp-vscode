@@ -4,8 +4,10 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { objectUri } from './codeView';
 import { CompilerDiagnostic, diagnosticTarget, parseDiagnostics } from './diagnostics';
+import { prepareProjectReferences } from './dotnetReferences';
 import { readActiveEnvironment, XppEnvironment } from './environment';
 import { discoverLocalAos, restartLocalAos } from './localAos';
+import { packageFolders } from './packageStore';
 import { convertPackagePdbs } from './portablePdb';
 import { readProject } from './project';
 import { compilerLineToDocumentLine } from './xppSource';
@@ -15,8 +17,7 @@ export async function packageOf(store: string, model: string): Promise<string> {
     if (existsSync(path.join(store, model, 'Descriptor'))) {
         return model;
     }
-    const entries = await fs.readdir(store, { withFileTypes: true }).catch(() => []);
-    return entries.find(e => e.isDirectory() && existsSync(path.join(store, e.name, 'Descriptor', `${model}.xml`)))?.name ?? model;
+    return (await packageFolders(store)).find(name => existsSync(path.join(store, name, 'Descriptor', `${model}.xml`))) ?? model;
 }
 
 /** Builds a model the way Visual Studio does: labels with LabelC, then X++ with xppc. */
@@ -101,6 +102,12 @@ export class XppBuilder {
         await fs.mkdir(logDir, { recursive: true });
         this.output.appendLine(`=== Build ${model} (${new Date().toLocaleTimeString()}) ===`);
 
+        if (!await this.projectReferences(env, pkg, packageFolder, token)) {
+            this.output.appendLine(`=== ${model}: BUILD FAILED (the projects and assemblies the X++ project references) ===`);
+            this.finished.fire({ model, ok: false, errors: 1, warnings: 0, projectOnly: !!projectItems, time: new Date() });
+            return false;
+        }
+
         const bin = env.binDirectory;
         const labelFiles = await this.labelFileNames(packageFolder);
         if (labelFiles.length > 0) {
@@ -163,6 +170,26 @@ export class XppBuilder {
     }
 
     /**
+     * As Visual Studio's build: the C# projects and assemblies the open X++ project references are built and copied into
+     * the package's bin folder before X++ is compiled, so xppc resolves their types and the package carries them.
+     */
+    private async projectReferences(env: XppEnvironment, pkg: string, packageFolder: string, token?: vscode.CancellationToken): Promise<boolean> {
+        const project = await readProject().catch(() => undefined);
+        if (!project?.model || (await packageOf(env.modelStoreFolder, project.model)).toLowerCase() !== pkg.toLowerCase()) {
+            return true;
+        }
+        return prepareProjectReferences({
+            projectFile: project.file,
+            packageFolder,
+            platformBin: env.binDirectory,
+            msbuildPath: vscode.workspace.getConfiguration('xpp').get<string>('build.msbuildPath') || undefined,
+            log: line => this.output.appendLine(line),
+            run: (exe, args) => this.run(exe, args, token),
+            token,
+        });
+    }
+
+    /**
      * Cloud-hosted and VHD environments: the AOS keeps running the old assemblies, so, as Visual Studio does after a
      * build, its running hosts (IIS Express or the IIS application pool, and the batch service) are restarted. Unified
      * developer environments deploy the package instead.
@@ -202,8 +229,7 @@ export class XppBuilder {
         if (project?.model) {
             return project.model;
         }
-        const entries = await fs.readdir(env.modelStoreFolder, { withFileTypes: true });
-        const models = entries.filter(e => e.isDirectory()).map(e => e.name);
+        const models = await packageFolders(env.modelStoreFolder);
         return vscode.window.showQuickPick(models, { title: 'Model to build' });
     }
 

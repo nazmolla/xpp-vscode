@@ -13,7 +13,8 @@ import { registerTools } from './d365Tools';
 import { detachLocalAos, releaseDebuggers, XppDebugger } from './debug';
 import { DesignerNodeContext, DesignerServices, ElementDesigner } from './elementDesigner';
 import { LabelEditor } from './labelEditor';
-import { initEnvironmentSelection, onDidChangeEnvironment, readActiveEnvironment } from './environment';
+import { dynamics365Folder, initEnvironmentSelection, onDidChangeEnvironment, readActiveEnvironment } from './environment';
+import { repairGeneratedConfigurations } from './xppConfig';
 import { EnvironmentStatus, selectEnvironment } from './environmentPicker';
 import { registerGoTo, registerOpenElementTool } from './goTo';
 import { registerHistory } from './history';
@@ -34,7 +35,6 @@ import { ActivityView, showChanges } from './activity';
 import { createTeamRules } from './teamRules';
 import { ChangeDecorations, changedElements } from './changes';
 import { reviewChanges } from './review';
-import { registerChatParticipant } from './chat';
 import { preDeployChecklist } from './checklist';
 import { newSysOperationJob } from './scaffolding/batch';
 import { newDataEntity, newReport, newService, newTableWithForm, newWorkflow } from './scaffolding/wizards';
@@ -43,9 +43,12 @@ import { addNumberSequence, newBusinessEvent, newFeature } from './scaffolding/l
 import { exportLabels, findUnusedLabels, importLabels, translateMissingLabels } from './labels';
 import { linkWorkItem, openPipelines, openWorkItem } from './devops';
 import { registerTraceAnalyzer } from './traceAnalyzer';
+import { registerReferenceCommands } from './references';
+import { clrDefinition, clrHover, clrIndex, CSharpToXppDefinitions } from './clrNavigation';
 import { XppRename } from './rename';
 import { elementOf as treeElementOf, pickElement } from './d365Tools';
 import { clearSetupStatus, connectEnvironment } from './setup';
+import { checkVisualStudioTools } from './visualStudioTools';
 import { cleanUpOldVersions, VersionGuard } from './versionGuard';
 import { openTeamRepository } from './teamRepository';
 import { verifyInRunningApp } from './verify';
@@ -65,6 +68,9 @@ export function activate(context: vscode.ExtensionContext): void {
     const log = vscode.window.createOutputChannel('X++');
     const buildOutput = vscode.window.createOutputChannel('X++ Build');
     initEnvironmentSelection(context);
+    // Configurations written by earlier versions lacked members Visual Studio requires; it then could not list or load them.
+    void repairGeneratedConfigurations(path.join(dynamics365Folder(), 'XPPConfig')).then(repaired => repaired.forEach((added, name) =>
+        log.appendLine(`Completed configuration ${name} for Visual Studio (added ${added.join(', ')}).`)), () => undefined);
     const server = new XppServerClient(context, log, findActiveProject);
     // Language features run in a server process of their own, so index builds never block the designers.
     const languageServer = new XppServerClient(context, log, findActiveProject);
@@ -74,8 +80,11 @@ export function activate(context: vscode.ExtensionContext): void {
     const projectTree = new ProjectTreeProvider();
     const aotTree = new AotTreeProvider();
     const codeFs = new XppCodeFileSystem(server);
-    const navigation = new XppNavigation(server);
-    const pac = new PacCommands();
+    const navigation = new XppNavigation(server, {
+        definition: (document, position) => clrDefinition(clrIndex, document, position),
+        hover: (document, position) => clrHover(clrIndex, document, position),
+    });
+    const pac = new PacCommands(pdb2pdbPath(context.extensionPath));
     const versionGuard = new VersionGuard();
     const environment = new EnvironmentStatus(versionGuard);
     const dragAndDrop = new ElementDragAndDrop(server, () => projectTree.refresh());
@@ -97,6 +106,8 @@ export function activate(context: vscode.ExtensionContext): void {
         aotTree.view = vscode.window.createTreeView<Parameters<typeof aotTree.getTreeItem>[0]>('xpp.aot', { treeDataProvider: aotTree, showCollapseAll: true, dragAndDropController: dragAndDrop, canSelectMany: true }),
         vscode.languages.registerDocumentDropEditProvider(XppDocumentSelector, new ElementDropIntoCode(), { dropMimeTypes: [ElementsMime, 'text/uri-list'] }),
         vscode.languages.registerDefinitionProvider(XppDocumentSelector, navigation),
+        // C# code of the solution that uses X++ types (Dynamics.AX.Application) goes to their X++ code.
+        vscode.languages.registerDefinitionProvider({ language: 'csharp' }, new CSharpToXppDefinitions(navigation)),
         vscode.languages.registerReferenceProvider(XppDocumentSelector, navigation),
         vscode.languages.registerHoverProvider(XppDocumentSelector, navigation),
         vscode.languages.registerRenameProvider(XppDocumentSelector, new XppRename(navigation, server)),
@@ -173,6 +184,10 @@ export function activate(context: vscode.ExtensionContext): void {
             vscode.window.showInformationMessage('Environment connected. The Application Explorer, designers and code views now use it.');
         }
     });
+    command('xpp.checkVisualStudioTools', () => checkVisualStudioTools(context, { interactive: true }));
+    // Only acts when a Visual Studio with the FinOps tools is installed and they no longer match the active metadata.
+    const vsCheck = setTimeout(() => void checkVisualStudioTools(context, { interactive: false }).catch(() => undefined), 15_000);
+    context.subscriptions.push({ dispose: () => clearTimeout(vsCheck) });
     command('xpp.openObject', () => openObject(server, context));
     command('xpp.openFormDesigner', async (arg?: string | ElementRef) => {
         // Tree context menus pass the clicked node; the layout view opens the base form of an extension.
@@ -269,7 +284,6 @@ export function activate(context: vscode.ExtensionContext): void {
     const changeDecorations = new ChangeDecorations();
     context.subscriptions.push(changeDecorations);
     command('xpp.reviewChanges', (base?: unknown) => reviewChanges(server, builder, results, typeof base === 'string' ? base : undefined));
-    registerChatParticipant(context);
     command('xpp.preDeployChecklist', () => preDeployChecklist(server, builder, results));
     command('xpp.newSysOperationJob', () => newSysOperationJob(server).then(() => projectTree.refresh()));
     command('xpp.newReport', () => newReport(server).then(() => projectTree.refresh()));
@@ -313,6 +327,7 @@ export function activate(context: vscode.ExtensionContext): void {
     command('xpp.devops.openWorkItem', (id?: number) => openWorkItem(typeof id === 'number' ? id : undefined));
     command('xpp.devops.openPipelines', () => openPipelines());
     registerTraceAnalyzer(context, command, server);
+    registerReferenceCommands(command, server, projects, buildOutput, () => projectTree.refresh());
     command('xpp.syncTables', async (arg?: ElementRef, selected?: ElementRef[]) => {
         const picked = (selected?.length ? selected : arg ? [arg] : []).map(a => treeElementOf(a)).filter(e => e?.objectType === 'AxTable');
         const tables = picked.length ? picked.map(e => e!.objectName) : [(await pickElement(server, 'Synchronize table', ['AxTable']))?.objectName].filter((t): t is string => !!t);

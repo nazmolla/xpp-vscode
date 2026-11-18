@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { CodeTypes } from '../aot';
+import { clrCompletions, clrIndex } from '../clrNavigation';
 import { methodUri, objectUri, parseObjectUri, XppScheme } from '../codeView';
 import { ToolNode, ToolsContribution } from '../d365Tools';
 import { isDebugSourceFile } from '../debug';
@@ -673,12 +674,21 @@ export class CodeIntelligence implements vscode.Disposable, ToolsContribution {
             }), true);
         }
 
+        // A dotted qualifier (Namespace.Type::, Namespace.) is .NET: the solution's C# projects.
+        const dotted = /([A-Za-z_][\w.]*)\s*(\.|::)\s*\w*$/.exec(before);
+        if (dotted && dotted[1].includes('.')) {
+            const items = await clrCompletions(clrIndex, document, position);
+            if (items) {
+                return items;
+            }
+        }
+
         const member = /([A-Za-z_]\w*)\s*(\(\s*\))?\s*(\.|::)\s*(\w*)$/.exec(before);
         if (member) {
             const isStatic = member[3] === '::';
             const owner = await this.ownerOf(document, position, member[1], !!member[2]);
             if (!owner) {
-                return undefined;
+                return clrCompletions(clrIndex, document, position);
             }
             const current = currentObject(document);
             const own = current && current.objectName.toLowerCase() === owner.objectName.toLowerCase();

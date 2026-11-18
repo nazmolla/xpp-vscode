@@ -156,6 +156,10 @@ namespace XppVsCode.Server.MetaModel
             a.Add("select_project", b => string.IsNullOrWhiteSpace(Str(b, "projectFile"))
                 ? _projects.ListProjectsJson(Str(b, "searchFolder"))
                 : _projects.SelectProjectJson(Str(b, "projectFile")));
+            // References to C# projects and assemblies: a .rnrproj item and an AxReference in the project's model (modelName).
+            a.Add("project_references", b => _projects.ProjectReferencesJson());
+            a.Add("add_reference", WriteKind.Create, b => _projects.AddReferenceJson(Str(b, "modelName"), Str(b, "assemblyPath"), Str(b, "projectPath")));
+            a.Add("remove_reference", WriteKind.Create, b => _projects.RemoveReferenceJson(Str(b, "modelName"), Str(b, "name"), Str(b, "assemblyName")));
 
             // Tables
             a.Add("table_erd", b => _relations.TableErdJson(XppVsCode.Server.Tools.JsonHelpers.ExtractJsonStringArray(b, "tables")));

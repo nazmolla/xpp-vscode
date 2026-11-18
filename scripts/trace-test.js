@@ -31,7 +31,17 @@ setTimeout(() => { console.log('TIMEOUT'); child.kill(); process.exit(1); }, 600
     check('xpp/trace succeeds', report.success, report.message ?? `${Date.now() - t0} ms, ${report.events} events, ${report.xppCalls} X++ calls`);
     if (report.success) {
         check('requests found', report.requests.length > 0, `${report.requests.length} requests`);
-        check('every request has a tree', report.requests.every(r => r.tree && r.tree.m === r.method));
+        check('every request has a tree', report.requests.every(r => r.nodes.length > 0 && r.nodes[0].m === r.method && r.nodes[0].p === -1));
+        check('tree nodes come after their parent', report.requests.every(r => r.nodes.every((n, k) => k === 0 || r.nodes.slice(0, k).some(p => p.id === n.p))));
+        const parent = report.requests.flatMap(r => r.nodes).find(n => n.hidden > 0);
+        if (parent) {
+            const have = report.requests.flatMap(r => r.nodes).filter(n => n.p === parent.id).length;
+            const more = (await call('xpp/trace', { action: 'children', body: { traceId: report.traceId, node: parent.id, skip: have } })).result;
+            const loaded = typeof more === 'string' ? JSON.parse(more) : more;
+            const known = new Set(report.requests.flatMap(r => r.nodes).map(n => n.id));
+            check('left-out calls load on demand', loaded.success && loaded.nodes.length + loaded.remaining === parent.hidden
+                && loaded.nodes.every(n => n.p === parent.id && !known.has(n.id)), `${loaded.nodes?.length} of ${parent.hidden}`);
+        }
         check('inclusive >= exclusive', report.methods.every(m => m.incl + 0.2 >= m.excl || m.n > 1));
         check('SQL attributed to X++ methods', report.sql.length > 0 && report.sql.some(s => s.callers.some(c => !c.m.startsWith('('))), `${report.sqlTotal.n} statements, ${report.sqlTotal.ms} ms`);
         check('JSON stays bounded', JSON.stringify(report).length < 20_000_000, `${JSON.stringify(report).length} chars`);
@@ -55,6 +65,10 @@ setTimeout(() => { console.log('TIMEOUT'); child.kill(); process.exit(1); }, 600
             const mr = typeof byMethod === 'string' ? JSON.parse(byMethod) : byMethod;
             check('method filter', mr.success && mr.requests.length > 0, `${mr.requests?.length} requests with ${m}`);
         }
+        await call('xpp/trace', { action: 'close', body: { traceId: report.traceId } });
+        const closed = (await call('xpp/trace', { action: 'children', body: { traceId: report.traceId, node: 0 } })).result;
+        const closedReport = typeof closed === 'string' ? JSON.parse(closed) : closed;
+        check('a closed trace asks to be read again', !closedReport.success && closedReport.expired === true);
     }
     t0 = Date.now();
     const tool = (await call('tools/call', { name: 'xpp_analyze_trace', arguments: { path: etl } })).result;

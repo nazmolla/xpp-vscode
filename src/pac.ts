@@ -3,6 +3,8 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { packageOf } from './build';
+import { prepareProjectReferences } from './dotnetReferences';
+import { convertPackagePdbs } from './portablePdb';
 import { orgName, readActiveEnvironment, selectedEnvironmentUrl, XppEnvironment } from './environment';
 import { readProject } from './project';
 import { builtPackages, DbSync, DeployPackage, deployPackages, syncUdeDatabase } from './udeDeploy';
@@ -14,6 +16,8 @@ import { builtPackages, DbSync, DeployPackage, deployPackages, syncUdeDatabase }
  * and database: no deploy, and the database is synchronized with SyncEngine.
  */
 export class PacCommands {
+    /** pdb2pdb: the shipped Pdb2Pdb.exe, to convert the PDBs of referenced assemblies refreshed before a deploy. */
+    constructor(private readonly pdb2pdb?: string) { }
     async initSolution(): Promise<void> {
         if (await this.local()) {
             return;
@@ -87,13 +91,32 @@ export class PacCommands {
         }
         const output = this.output();
         output.show(true);
+        const projectPackageFolder = project ? packages.find(p => p.name.toLowerCase() === projectPackage)?.folder : undefined;
         output.appendLine(`Deploying ${packages.map(p => p.name).join(', ')} to ${selectedEnvironmentUrl() ?? 'the selected environment'} (database sync: ${sync})…`);
         await vscode.window.withProgress(
             { location: vscode.ProgressLocation.Notification, title: `Deploying ${packages.map(p => p.name).join(', ')}`, cancellable: true },
-            (progress, token) => deployPackages(packages, sync, line => {
-                output.appendLine(line);
-                progress.report({ message: line.trim() });
-            }, token));
+            async (progress, token) => {
+                // The package carries the C# projects and assemblies the X++ project references, as built now (Visual Studio copies them at build).
+                if (project && projectPackageFolder && !await prepareProjectReferences({
+                    projectFile: project.file,
+                    packageFolder: projectPackageFolder,
+                    platformBin: env.binDirectory,
+                    msbuildPath: vscode.workspace.getConfiguration('xpp').get<string>('build.msbuildPath') || undefined,
+                    log: line => output.appendLine(line),
+                    token,
+                })) {
+                    throw new Error('Deploy stopped: building or copying the projects and assemblies the X++ project references failed. See the X++ deploy output.');
+                }
+                if (projectPackageFolder && this.pdb2pdb) {
+                    // The UDE debugger reads portable PDBs only, as after a build.
+                    const converted = await convertPackagePdbs(this.pdb2pdb, path.join(projectPackageFolder, 'bin'));
+                    converted.failed.forEach(f => output.appendLine(`Warning: ${path.basename(f.file)} was not converted to a portable PDB: ${f.error}`));
+                }
+                await deployPackages(packages, sync, line => {
+                    output.appendLine(line);
+                    progress.report({ message: line.trim() });
+                }, token);
+            });
         output.appendLine('Deployed.');
         vscode.window.showInformationMessage(`Deployed ${packages.map(p => p.name).join(', ')}.`);
         return modelsOf(packages);

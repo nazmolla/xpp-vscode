@@ -310,12 +310,82 @@ namespace XppVsCode.Server.Analysis
             return path;
         }
 
-        /// <summary>The node and its children down to <paramref name="minMs"/>, at most <paramref name="budget"/> nodes, for the report.</summary>
-        public static Dictionary<string, object> TreeJson(Node node, double minMs, ref int budget)
+        /// <summary>
+        /// The node and, heaviest first, its descendants of at least <paramref name="minMs"/> while the budget of
+        /// <paramref name="budget"/> nodes lasts, in depth-first order, as a flat list: nesting would make deep call stacks
+        /// exceed the JSON serializer's recursion limit. Each entry has its id and its parent's (p; parentId for the first);
+        /// hidden counts the children left out, which <see cref="ChildrenJson"/> loads later. idOf gives a node its id.
+        /// </summary>
+        public static List<Dictionary<string, object>> FlatTree(Node root, double minMs, int budget, Func<Node, int> idOf, int parentId = -1)
         {
+            var list = new List<Dictionary<string, object>>();
+            var stack = new Stack<TreeFrame>();
             budget--;
+            stack.Push(Visit(root, parentId, idOf, list));
+            while (stack.Count > 0)
+            {
+                var frame = stack.Peek();
+                if (frame.Children.MoveNext())
+                {
+                    var child = frame.Children.Current;
+                    if (child.Inclusive >= minMs && budget > 0)
+                    {
+                        budget--;
+                        stack.Push(Visit(child, frame.Id, idOf, list));
+                    }
+                    else
+                    {
+                        frame.Hidden++;
+                    }
+                }
+                else
+                {
+                    stack.Pop();
+                    if (frame.Hidden > 0) frame.Json["hidden"] = frame.Hidden;
+                }
+            }
+            return list;
+        }
+
+        /// <summary>
+        /// The children of a node after the first <paramref name="skip"/> (the client has those: the report holds the heaviest
+        /// children first, and pages continue in that order), heaviest first, at most max; their own children stay hidden.
+        /// No state about what was sent, so a reloaded panel can load the same calls again.
+        /// </summary>
+        public static List<Dictionary<string, object>> ChildrenJson(Node node, int nodeId, int skip, Func<Node, int> idOf, int max, out int remaining)
+        {
+            var pending = node.Children.Values.OrderByDescending(c => c.Inclusive).Skip(Math.Max(0, skip)).ToList();
+            remaining = Math.Max(0, pending.Count - max);
+            return pending.Take(max).Select(child =>
+            {
+                var json = NodeJson(child, idOf(child), nodeId);
+                if (child.Children.Count > 0) json["hidden"] = child.Children.Count;
+                return json;
+            }).ToList();
+        }
+
+        private sealed class TreeFrame
+        {
+            public int Id;
+            public Dictionary<string, object> Json;
+            public IEnumerator<Node> Children;
+            public int Hidden;
+        }
+
+        private static TreeFrame Visit(Node node, int parentId, Func<Node, int> idOf, List<Dictionary<string, object>> list)
+        {
+            int id = idOf(node);
+            var json = NodeJson(node, id, parentId);
+            list.Add(json);
+            return new TreeFrame { Id = id, Json = json, Children = node.Children.Values.OrderByDescending(c => c.Inclusive).GetEnumerator() };
+        }
+
+        private static Dictionary<string, object> NodeJson(Node node, int id, int parentId)
+        {
             var json = new Dictionary<string, object>
             {
+                ["id"] = id,
+                ["p"] = parentId,
                 ["m"] = node.Method,
                 ["n"] = node.Calls,
                 ["incl"] = Math.Round(node.Inclusive, 1),
@@ -326,15 +396,6 @@ namespace XppVsCode.Server.Analysis
                 json["sqlN"] = node.SqlCount;
                 json["sqlMs"] = Math.Round(node.SqlMs, 1);
             }
-            var children = new List<object>();
-            int hidden = 0;
-            foreach (var child in node.Children.Values.OrderByDescending(c => c.Inclusive))
-            {
-                if (child.Inclusive >= minMs && budget > 0) children.Add(TreeJson(child, minMs, ref budget));
-                else hidden++;
-            }
-            if (children.Count > 0) json["c"] = children;
-            if (hidden > 0) json["hidden"] = hidden;
             return json;
         }
     }

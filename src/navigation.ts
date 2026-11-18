@@ -32,24 +32,34 @@ const Keywords = new Set(('if else while for do switch case default break contin
 /** Most levels of base classes searched for a method. */
 const MaxBaseDepth = 6;
 
+/** Definitions and hovers for names X++ doesn't know (the .NET types of the solution's C# projects). */
+export interface ForeignSymbols {
+    definition(document: vscode.TextDocument, position: vscode.Position): Promise<vscode.Location | undefined>;
+    hover(document: vscode.TextDocument, position: vscode.Position): Promise<vscode.Hover | undefined>;
+}
+
 /**
  * Go to / Peek Definition, Find All References and hover for X++ code, resolved through the metadata and the
  * cross-reference database (no language server needed): types, Class::member, this./super./variable.member and calls.
+ * Names that are not X++ go to the C# source of the solution's projects (foreign).
  */
 export class XppNavigation implements vscode.DefinitionProvider, vscode.HoverProvider, vscode.ReferenceProvider {
     private readonly typeCache = new Map<string, Match | null>();
 
-    constructor(private readonly server: XppServerClient) { }
+    constructor(private readonly server: XppServerClient, private readonly foreign?: ForeignSymbols) { }
 
     async provideDefinition(document: vscode.TextDocument, position: vscode.Position): Promise<vscode.Location | undefined> {
         const symbol = await this.resolve(document, position);
-        return symbol ? (await this.definition(symbol)).location : undefined;
+        if (symbol) {
+            return (await this.definition(symbol)).location;
+        }
+        return this.foreign?.definition(document, position);
     }
 
     async provideHover(document: vscode.TextDocument, position: vscode.Position): Promise<vscode.Hover | undefined> {
         const symbol = await this.resolve(document, position);
         if (!symbol) {
-            return undefined;
+            return this.foreign?.hover(document, position);
         }
         const range = document.getWordRangeAtPosition(position);
         const type = symbol.objectType.replace(/^Ax/, '');
@@ -127,8 +137,11 @@ export class XppNavigation implements vscode.DefinitionProvider, vscode.HoverPro
         const current = currentObject(document);
 
         let m: RegExpExecArray | null;
-        if ((m = /(\w+)\s*::\s*$/.exec(before))) {
-            // Type::member - a static method, an enum value or a table's static find.
+        if ((m = /([A-Za-z_][\w.]*)\s*::\s*$/.exec(before))) {
+            // Type::member - a static method, an enum value or a table's static find. A dotted type is .NET (Namespace.Type::member).
+            if (m[1].includes('.')) {
+                return undefined;
+            }
             const owner = await this.findType(m[1]);
             return owner ? { ...owner, member: word } : undefined;
         }

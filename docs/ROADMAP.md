@@ -56,7 +56,7 @@ sandbox environments (UDE/USE) use Azure SQL with just-in-time credentials, the 
 | ID | Item | Status |
 |---|---|---|
 | F1 | Test Explorer integration (discover the project's SysTest classes, run on the environment, result per test method) | Done (runs on unified environments, like Run Tests) |
-| F2 | `@fno` chat participant: `/extend`, `/report`, `/batch`, `/security`, `/explain`, `/design` | Done: `/design`, `/extend`, `/explain`, `/review`, `/support`, `/performance` (reports, batch jobs and security go through `/design` and the agent tools) |
+| F2 | `@fno` chat participant: `/extend`, `/report`, `/batch`, `/security`, `/explain`, `/design` | Replaced in 0.16 by the agents (VS Code retires chat participants): `/design` = Solution Designer, `/extend` = F&O Developer, `/explain` = Code Archaeologist, `/review` = Code Reviewer, `/support` = F&O Support, `/performance` = F&O Performance |
 | F3 | Rename (methods, fields, elements) with cross-reference updates | Done: methods (F2), fields (designer Rename on a table field) and elements (Rename… on your elements): X++ code in the refactor preview, metadata of your other elements through `replace_references`, references from the cross-reference database. Not run end to end in VS Code yet |
 | F4 | New Object wizards: table + form + menu item + privilege; SysOperation batch; report; data entity; integration (entity, staging, service, security) | Done: batch job, report, approval workflow, custom service, table with form (key EDT, table, SimpleList form, menu item, View/Maintain privileges) and data entity (entity, staging table, privileges); `scripts/scaffold-test.js` builds all of them without errors or warnings |
 | F5 | On-demand best-practice check (`xppbp`) into Problems, with quick fixes | Done (quick fixes come from the existing code actions) |
@@ -69,6 +69,11 @@ sandbox environments (UDE/USE) use Azure SQL with just-in-time credentials, the 
 | F12 | Copilot tools: `xpp_check_best_practice`, `xpp_diff_changes`, `xpp_find_deprecations`, `xpp_package` (asks first) | Done |
 | F13 | Dependency diagram (Visual Studio's DGML): a model's package references, and an element's dependencies from the cross-reference database, exportable as SVG/Mermaid | Done: View Dependencies (`element_dependencies`), View Model Dependencies; every diagram exports Mermaid |
 | F14 | Debugger on cloud-hosted and VHD environments: attach vsdbg to the local AOS (w3wp, batch) with the PDBs in PackagesLocalDirectory, no DebuggerProxy | Done: Launch Debugger attaches the C# extension's clr debugger to w3wp.exe or Batch.exe; local PDBs use the same e:\source paths as the cloud. Not verified on a cloud-hosted or VHD environment yet |
+| F15 | C# projects with X++ (issue #14 follow-up): the solution in the project view, references (`.rnrproj` item + `AxReference`), referenced projects built and copied into the package by Build, Deploy and `xpp_build`, New C# Project, C# breakpoints | Done in 0.16 (`src/dotnetReferences.ts`, `server/Host/ProjectReferences.cs`, `src/solution.ts`, `src/references.ts`). `scripts/dotnet-xpp-test.js` builds X++ calling C# and C# calling X++. Go to Definition, hover and completion across X++ and C# (`src/clrSymbols.ts`, `src/clrNavigation.ts`, smoke suite `definitionSmoke`). Open: a C# breakpoint hit on a UDE and on a VHD |
+| F16 | Analyze Trace for long traces (issue #12): flat call trees, the trace kept open on the server, left-out calls loaded on demand (`xpp/trace` children/close) | Done in 0.16 |
+| F17 | Form preview like the web client (issue #15): action pane toolbar, tabs, button groups in columns of three, menu buttons with their lists, list and details views, fast tabs (first open, summaries), table of contents, grids, filters; size and arrangement properties; hidden controls, extension and configuration key markers on request | Done in 0.16 (`media/formPreview.*`, `MetaModelBridge.FormRender.cs`). `node scripts/form-preview-test.js` (headless Edge). Not possible from metadata: controls that form code shows or hides at run time, and whether a configuration key is enabled in the environment (marked only) |
+| F18 | Visual Studio side by side: configurations readable by Visual Studio (every member of `Template_xppconfig.json`), Visual Studio's FinOps tools matched to the environment | Done in 0.16 (`src/xppConfig.ts`, `src/vsFinOpsTools.ts`, `src/visualStudioTools.ts`). `node scripts/xpp-config-test.js`, `node scripts/vs-tools-test.js` |
+| F19 | Signed server: release build on GitHub Actions against Microsoft's compiler package (private feed), signed by SignPath Foundation | Workflow, artifact configuration and code signing policy done in 0.16. Open: SignPath Foundation's approval of the project, then the first signed release |
 
 ## 4. Workflows (W)
 
@@ -86,12 +91,12 @@ sandbox environments (UDE/USE) use Azure SQL with just-in-time credentials, the 
 
 | ID | Stage | Item | Status |
 |---|---|---|---|
-| L1 | Requirements / design | Technical design document from a requirement: elements to create or extend, extension points, security and license impact | Done: `@fno /design` |
+| L1 | Requirements / design | Technical design document from a requirement: elements to create or extend, extension points, security and license impact | Done: the Solution Designer agent |
 | L2 | Develop | Scaffolding for reports, workflows, batch jobs, integrations (see F4) | Done: New Report (RDP with TempDB table, contract, controller, report with auto design), New Approval Workflow, New Batch Job, New Custom Service; `scripts/scaffold-test.js` builds all of them without errors or warnings |
 | L3 | Code review | Branch review (F10) and best-practice tool (F5) | Done |
 | L4 | Deploy / ALM | Pre-deploy checklist (W1), packaging tool, pipeline and work item links | Done: checklist, `xpp_package`, Link Work Item… (#id or AB#id in the commit message), Open Work Item…, Open Pipelines (Azure Pipelines or GitHub Actions); Review My Changes lists the branch's work items |
 | L5 | Upgrade | Upgrade readiness report (W3) | Done (see W3) |
-| L6 | Support | Call stack and batch failure helper, built on Find Message Source and the Infolog | Done: `@fno /support`, batch job history in Database Performance Insights |
+| L6 | Support | Call stack and batch failure helper, built on Find Message Source and the Infolog | Done: the F&O Support agent, batch job history in Database Performance Insights |
 
 ## 6. Performance tools (P)
 
@@ -196,7 +201,8 @@ test, security probes, `npm run test:server`, `check-bridge-actions.js` and `run
 ## 9. Agents (A)
 
 Custom agents shipped with the extension (`contributes.chatAgents`, one `.agent.md` per persona, generated by
-`npm run agents` from `scripts/agent-definitions.js`), with handoffs between them. `@fno` stays. Rules for every agent:
+`npm run agents` from `scripts/agent-definitions.js`), with handoffs between them. They replace the `@fno` chat participant
+(removed in 0.16: VS Code retires chat participants and the Copilot harness doesn't run them; issue #13). Rules for every agent:
 
 - **Live environment:** agents that need the running client (setup, forms, data as the user sees it) suggest configuring the
   Dynamics 365 ERP MCP server, or use the web browser.
@@ -233,14 +239,12 @@ Custom agents shipped with the extension (`contributes.chatAgents`, one `.agent.
 Handoffs: A16 → A4 → A1 → A2 → A22; A13 → A3 → A1; A14 → A1 → A6.
 
 **A0 Agent routing** (before A1): when the user hasn't picked one of these agents, the chat suggests the right one, or uses it
-itself when that's clearly appropriate. Status: Done for suggestions and subagents (`agents/fno-agents.instructions.md`, the MCP server's instructions); `@fno` routing is not done.
+itself when that's clearly appropriate. Status: Done (`agents/fno-agents.instructions.md`, the MCP server's instructions).
 
 - **Instructions everywhere:** the extension's `chatInstructions` and the MCP server's `initialize` instructions (any agent using
   the `xpp_*` tools gets them) list the agents and when each fits. The default agent names the matching agent and offers to
   switch.
 - **Agents as subagents:** the agents allow model invocation, so the default agent can run one itself for a clearly matching
   task (for example the Code Reviewer after a change, Functional Triage for a pasted error) and report its result.
-- **`@fno` routing:** `disambiguation` on the `@fno` chat participant lets VS Code send D365FO questions to it when no participant
-  is chosen; `@fno` answers and offers the matching agent as a follow-up button.
 - **Permission still applies:** an agent started automatically follows the same rules: it changes data, setup or metadata only
   after the user allows it, and never in production.

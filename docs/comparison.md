@@ -160,7 +160,7 @@ So the code you build in one opens and builds in the other. The difference is wh
 | **AI** | | |
 | GitHub Copilot chat and completions | ✅ | ✅ |
 | X++ agent tools on the real metadata (33) | ✅ | ❌ |
-| `@fno` chat participant | ✅ | ❌ |
+| 23 Copilot agents (developers and functional consultants) | ✅ | ❌ |
 | Checkpoints to revert Copilot's changes | ✅ | ❌ |
 | Scope that limits what Copilot may change | ✅ | ❌ |
 | Activity log of every agent tool call | ✅ | ❌ |
@@ -185,7 +185,7 @@ F&O Studio doesn't reimplement Microsoft's toolchain. It loads it from your inst
   - an existing name is never overwritten;
   - best practice findings come back after every write.
 - **Checkpoints:** revert every element, label and project change Copilot made since the checkpoint. **Scope:** the server limits which elements Copilot may change.
-- `@fno` commands: `/design`, `/extend`, `/explain`, `/review`, `/support`, `/performance`. **Team rules** add your conventions to everyone's agent instructions.
+- 23 Copilot agents (developer, reviewer, support, solution designer, functional consultants...). **Team rules** add your conventions to everyone's agent instructions.
 - Agent tools that go beyond writing code:
   - find standard precedents;
   - find the code behind an error message;

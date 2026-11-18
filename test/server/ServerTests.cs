@@ -4,6 +4,7 @@ using System.Linq;
 using System.Runtime.Remoting.Messaging;
 using System.Runtime.Remoting.Proxies;
 using System.Web.Script.Serialization;
+using XppVsCode.Server.Analysis;
 using XppVsCode.Server.Host;
 using XppVsCode.Server.MetaModel;
 using XppVsCode.Server.Tools;
@@ -252,7 +253,7 @@ namespace XppVsCode.Server.Tests
             "update_object", "delete_object", "set_element_property", "add_element_node", "delete_element_node", "rename_element_node",
             "duplicate_element_node", "move_element_node", "drop_on_node", "drop_on_property", "set_element_method", "replace_references",
         };
-        internal static readonly string[] CreateActions = { "create_object", "duplicate_object" };
+        internal static readonly string[] CreateActions = { "create_object", "duplicate_object", "add_reference", "remove_reference" };
 
         private const string Body = "{\"objectType\":\"AxClass\",\"objectName\":\"Mine\",\"modelName\":\"testcust\",\"name\":\"testcust\",\"id\":\"1\"}";
 
@@ -309,7 +310,7 @@ namespace XppVsCode.Server.Tests
                 if (session.Calls.SequenceEqual(new[] { "scope", "checkpoint" })) scoped.Add(action);
                 else Assert.Empty(session.Calls);
             }
-            Assert.Equal(EditActions.Concat(new[] { "create_object" }).OrderBy(a => a), scoped.OrderBy(a => a));
+            Assert.Equal(EditActions.Concat(new[] { "create_object", "add_reference", "remove_reference" }).OrderBy(a => a), scoped.OrderBy(a => a));
         }
 
         [Fact]
@@ -386,7 +387,7 @@ namespace XppVsCode.Server.Tests
         {
             var all = CreateWithXRef().Actions.All;
             Assert.Equal(BridgeDispatchTests.EditActions.OrderBy(a => a), all.Where(a => a.Write == WriteKind.Edit).Select(a => a.Name).OrderBy(a => a));
-            Assert.Equal(new[] { "create_object" }, all.Where(a => a.Write == WriteKind.Create).Select(a => a.Name));
+            Assert.Equal(new[] { "add_reference", "create_object", "remove_reference" }, all.Where(a => a.Write == WriteKind.Create).Select(a => a.Name).OrderBy(a => a, StringComparer.Ordinal));
             Assert.Equal(new[] { "duplicate_object" }, all.Where(a => a.Write == WriteKind.Copy).Select(a => a.Name));
         }
 
@@ -667,6 +668,90 @@ namespace XppVsCode.Server.Tests
         [InlineData("")]
         [InlineData(null)]
         public void EverythingElseIsRefused(string sql) => Assert.NotNull(ReadOnlySql.Refusal(sql));
+    }
+
+    public class TraceTreeTests
+    {
+        private static TraceAnalyzer.Node Node(string method, double ms, params TraceAnalyzer.Node[] children)
+        {
+            var node = new TraceAnalyzer.Node { Method = method, Calls = 1, Inclusive = ms };
+            foreach (var child in children) node.Children[child.Method] = child;
+            return node;
+        }
+
+        [Fact]
+        public void DeepCallStacksSerializeFlat()
+        {
+            var root = Node("Root::run", 1000);
+            var node = root;
+            for (int i = 0; i < 3000; i++)
+            {
+                var child = Node("Class" + i + "::call", 1000);
+                node.Children[child.Method] = child;
+                node = child;
+            }
+            var session = new TraceSession();
+            var nodes = TraceAnalyzer.FlatTree(root, 5, 400, session.IdOf);
+
+            // The serializer's default recursion limit (100) is what failed on deep traces (issue #12).
+            string json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue }.Serialize(new Dictionary<string, object> { ["nodes"] = nodes });
+            var parsed = new JavaScriptSerializer { MaxJsonLength = int.MaxValue }.Deserialize<Dictionary<string, object>>(json);
+            Assert.Equal(400, ((System.Collections.ArrayList)parsed["nodes"]).Count);
+            Assert.Equal(-1, nodes[0]["p"]);
+            Assert.All(nodes.Skip(1), n => Assert.Equal((int)n["id"] - 1, n["p"]));
+            Assert.Equal(1, nodes[399]["hidden"]);
+        }
+
+        [Fact]
+        public void HiddenCallsLoadByPageHeaviestFirst()
+        {
+            var root = Node("Root::run", 100, Node("A::big", 60), Node("B::small", 3, Node("C::leaf", 1)), Node("D::tiny", 2));
+            var session = new TraceSession();
+            var nodes = TraceAnalyzer.FlatTree(root, 5, 400, session.IdOf);
+            Assert.Equal(new[] { "Root::run", "A::big" }, nodes.Select(n => (string)n["m"]));
+            Assert.Equal(2, nodes[0]["hidden"]);
+
+            // The report has the heaviest child; pages continue after what the panel has.
+            var more = TraceAnalyzer.ChildrenJson(root, 0, 1, session.IdOf, 1, out int remaining);
+            Assert.Equal("B::small", Assert.Single(more)["m"]);
+            Assert.Equal(1, more[0]["hidden"]);
+            Assert.Equal(1, remaining);
+            more = TraceAnalyzer.ChildrenJson(root, 0, 2, session.IdOf, 10, out remaining);
+            Assert.Equal("D::tiny", Assert.Single(more)["m"]);
+            Assert.Equal(0, remaining);
+
+            // A reloaded panel has only the report again: the same calls load again, with the same ids.
+            var again = TraceAnalyzer.ChildrenJson(root, 0, 1, session.IdOf, 10, out remaining);
+            Assert.Equal(new[] { "B::small", "D::tiny" }, again.Select(n => (string)n["m"]));
+            Assert.Equal(new[] { 2, 3 }, again.Select(n => (int)n["id"]));
+            Assert.Equal("C::leaf", Assert.Single(TraceAnalyzer.ChildrenJson(session.NodeAt(2), 2, 0, session.IdOf, 10, out _))["m"]);
+        }
+    }
+
+    public class ProjectReferenceItemTests
+    {
+        [Fact]
+        public void RemovingAReferenceKeepsAssembliesWithDottedNames()
+        {
+            string file = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "xpp-ref-test-" + Guid.NewGuid().ToString("N") + ".rnrproj");
+            System.IO.File.WriteAllText(file, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<Project xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\">\r\n  <ItemGroup>\r\n"
+                + "    <ProjectReference Include=\"..\\Contoso\\Contoso.csproj\" />\r\n"
+                + "    <Reference Include=\"Contoso.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null\" />\r\n"
+                + "  </ItemGroup>\r\n</Project>\r\n");
+            try
+            {
+                var project = XppProject.ForFile(file);
+                Assert.True(project.RemoveReference("Contoso"));
+                Assert.Equal(new[] { "Contoso.Tools" }, project.GetReferences().Select(r => r.Name));
+                Assert.True(project.RemoveReference("Contoso.Tools"));
+                Assert.Empty(project.GetReferences());
+                Assert.False(project.RemoveReference("Contoso.Tools"));
+            }
+            finally
+            {
+                System.IO.File.Delete(file);
+            }
+        }
     }
 
     public class ChangedElementsTests

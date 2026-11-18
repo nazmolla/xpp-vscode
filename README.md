@@ -12,7 +12,7 @@ It works against a unified developer environment (UDE), or on a cloud-hosted (CH
 - **Build, test, deploy and debug:** X++ compiler with errors in Problems, best-practice checks, SysTest classes in Test Explorer, deployment packages, database sync and the debugger.
 - **Data:** browse table rows, run SQL with an explain plan, and live performance insights; temporary database credentials on unified developer environments, the local AxDB on cloud-hosted and VHD.
 - **Analysis:** performance anti-patterns, performance traces (`.etl`) with call trees and SQL per method, upgrade readiness (obsolete APIs), security licenses, access, gaps and segregation of duties, a pre-deploy checklist and Review My Changes for pull requests.
-- **AI:** 30+ agent tools for Copilot (read, create and extend metadata through the metadata API, search standard code, analyze security and performance, build, test, query data), 23 Copilot agents for developers and functional consultants, the `@fno` chat participant, team rules and a Copilot Activity view.
+- **AI:** 30+ agent tools for Copilot (read, create and extend metadata through the metadata API, search standard code, analyze security and performance, build, test, query data), 23 Copilot agents for developers and functional consultants, team rules and a Copilot Activity view.
 
 The full list is in the [feature reference](https://github.com/nazmolla/xpp-vscode/blob/main/docs/FEATURES.md).
 
@@ -53,6 +53,15 @@ The full list is in the [feature reference](https://github.com/nazmolla/xpp-vsco
 | `xpp.codeIntelligence.<feature>` | Turn each code intelligence feature on or off (also in the Dynamics 365 view) |
 | `xpp.git.baseBranch` | Branch Review My Changes and Show Changed Elements compare with |
 | `xpp.usageStatistics` | Count command use locally (never sent anywhere); Show Usage Statistics lists them |
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+- **What is signed:** the F&O Studio server (`server/bin/XppVsCode.Server.exe`) in the published extension. The [release workflow](.github/workflows/release.yml) builds it from this repository's source on GitHub Actions and submits it to SignPath; the Visual Studio Marketplace signs the extension package itself.
+- **Microsoft's assemblies:** the server compiles against Microsoft's Dynamics 365 compiler package, restored from a private feed during the build. They are never part of this repository or the extension; at run time the server loads them from your own Finance and Operations installation.
+- **Team roles:** committers and reviewers: [Mohamed Nazmi (@nazmolla)](https://github.com/nazmolla); approvers: [Mohamed Nazmi (@nazmolla)](https://github.com/nazmolla). Contributions from others come as pull requests and are reviewed before they are merged; every signing request is approved by hand.
+- **Privacy:** this program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. It talks to the Finance and Operations and Dataverse environments you connect it to, Microsoft's download service for that environment's tools, and GitHub when you choose **Report Problem**. It collects no telemetry.
 
 ## Status
 

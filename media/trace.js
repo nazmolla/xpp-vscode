@@ -105,7 +105,7 @@
     const isWait = m => waits.has(m);
     const visibleRequests = () => S.report.requests.map((q, i) => ({ q, i })).filter(({ q }) => S.showBatch || !q.batch);
 
-    /** Flattened view of a request tree: parent and depth per node, computed once. */
+    /** Flattened view of a request tree: parent and depth per node, computed once (again after calls are loaded). */
     function flatten(q) {
         let f = flat.get(q);
         if (f) return f;
@@ -382,6 +382,7 @@
         grid.addEventListener('click', e => {
             if (e.target.closest('a.method')) return;
             const row = e.target.closest('.trow');
+            if (row && row.moreFor) { loadChildren(q, row.moreFor); return; }
             if (!row || !row.node) return;
             S.focusNode.set(q, row.node);
             if (e.target.closest('.twisty')) toggle(q, row.node);
@@ -401,6 +402,47 @@
     }
 
     // ---------- call tree ----------
+    /** The server sends each call tree as a flat list, parents first (p = parent id), so deep stacks don't hit JSON limits. */
+    function buildTree(q) {
+        const byId = new Map();
+        for (const n of q.nodes || []) {
+            byId.set(n.id, n);
+            const parent = byId.get(n.p);
+            if (parent) (parent.c || (parent.c = [])).push(n);
+        }
+        q.byId = byId;
+        q.tree = (q.nodes || [])[0] || { id: -1, m: q.method, n: 1, incl: q.ms, excl: q.ms };
+        delete q.nodes;
+    }
+    /** Nodes whose left-out calls are being loaded from the server. */
+    const loading = new Set();
+    const expandable = n => !!(n.c || n.hidden);
+    function loadChildren(q, node) {
+        if (loading.has(node) || !node.hidden) return;
+        loading.add(node);
+        // The server pages after the children the panel already has (the report holds the heaviest first).
+        vscode.postMessage({ type: 'children', request: S.report.requests.indexOf(q), node: node.id, skip: (node.c || []).length });
+        renderTree(q);
+    }
+    function childrenLoaded(msg) {
+        const q = S.report && S.report.requests[msg.request];
+        const node = q && q.byId.get(msg.node);
+        if (!node) return;
+        loading.delete(node);
+        if (msg.type === 'children') {
+            for (const n of msg.nodes) {
+                if (q.byId.has(n.id)) continue;
+                q.byId.set(n.id, n);
+                (node.c || (node.c = [])).push(n);
+            }
+            if (msg.remaining) node.hidden = msg.remaining; else delete node.hidden;
+            flat.delete(q);
+            searchText.delete(q);
+            const set = S.expanded.get(q);
+            if (set) set.add(node);
+        }
+        if (S.report.requests[S.sel] === q) renderTree(q, { focus: true });
+    }
     function heaviest(n) { return n.c ? n.c.reduce((a, b) => (b.incl > a.incl ? b : a)) : null; }
     function defaultExpand(q) {
         const set = new Set([q.tree]);
@@ -434,10 +476,15 @@
         }
     }
     function toggle(q, node) {
-        if (!node.c) return;
+        if (!expandable(node)) return;
         const set = S.expanded.get(q);
-        if (set.has(node)) set.delete(node); else set.add(node);
         S.focusNode.set(q, node);
+        if (!node.c) {
+            set.add(node);
+            loadChildren(q, node);
+            return;
+        }
+        if (set.has(node)) set.delete(node); else set.add(node);
         renderTree(q, { focus: true });
     }
     function indentWidth(depth) {
@@ -453,18 +500,18 @@
         const focusNode = S.focusNode.get(q) || q.tree;
         let focusRow = null;
         const walk = (n, depth, pos, size) => {
-            const open = set.has(n) && !!n.c;
+            const open = set.has(n) && expandable(n);
             const wait = isWait(n.m);
             const selfShare = n.excl / root;
             const row = h('div', {
                 role: 'row', class: `trow${wait ? ' wait' : ''}${S.filter && lower(n.m).includes(S.filter) ? ' match' : ''}`, tabindex: '-1',
-                'aria-level': depth + 1, 'aria-posinset': pos, 'aria-setsize': size, 'aria-expanded': n.c ? String(open) : null,
+                'aria-level': depth + 1, 'aria-posinset': pos, 'aria-setsize': size, 'aria-expanded': expandable(n) ? String(open) : null,
                 title: `${n.m}\nTotal ${dur(n.incl)} (${pct(n.incl, root)}) · self ${dur(n.excl)} (${pct(n.excl, root)}) · ${num(n.n)} calls`,
             });
             row.node = n;
             const indent = h('span', { class: 'indent' });
             indent.style.width = `${indentWidth(depth)}px`;
-            const twisty = n.c ? h('span', { class: `twisty codicon codicon-chevron-${open ? 'down' : 'right'}`, 'aria-hidden': 'true' }) : h('span', { class: 'twisty leaf', 'aria-hidden': 'true' });
+            const twisty = expandable(n) ? h('span', { class: `twisty codicon codicon-chevron-${open ? 'down' : 'right'}`, 'aria-hidden': 'true' }) : h('span', { class: 'twisty leaf', 'aria-hidden': 'true' });
             row.append(
                 h('div', { role: 'gridcell', class: 'c-name' }, indent, twisty, method(n.m, { tabindex: '-1' }), wait ? badge('waiting', 'muted') : null),
                 h('div', { role: 'gridcell', class: 'c-total' }, bar(n.incl / root, wait ? 'wait' : 'incl', wait ? 0 : selfShare), h('span', { class: 'num', text: dur(n.incl) })),
@@ -474,14 +521,20 @@
             if (n === focusNode) focusRow = row;
             frag.append(row);
             if (open) {
-                const size2 = n.c.length + (n.hidden ? 1 : 0);
-                n.c.forEach((c, k) => walk(c, depth + 1, k + 1, size2));
+                const children = n.c || [];
+                const size2 = children.length + (n.hidden ? 1 : 0);
+                children.forEach((c, k) => walk(c, depth + 1, k + 1, size2));
                 if (n.hidden) {
                     const moreIndent = h('span', { class: 'indent' });
                     moreIndent.style.width = `${indentWidth(depth + 1)}px`;
-                    frag.append(h('div', { role: 'row', class: 'trow more', 'aria-level': depth + 2, 'aria-posinset': size2, 'aria-setsize': size2, tabindex: '-1' },
+                    const calls = `${num(n.hidden)} ${children.length ? 'more ' : ''}${n.hidden === 1 ? 'call' : 'calls'}`;
+                    const more = h('div', { role: 'row', class: 'trow more', 'aria-level': depth + 2, 'aria-posinset': size2, 'aria-setsize': size2, tabindex: '-1' },
                         h('div', { role: 'gridcell', class: 'c-name' }, moreIndent, h('span', { class: 'twisty leaf' }),
-                            h('span', { class: 'dim', text: `${n.hidden} smaller ${n.hidden === 1 ? 'call' : 'calls'} not shown` }))));
+                            loading.has(n)
+                                ? h('span', { class: 'dim' }, icon('loading', 'codicon-modifier-spin'), ` Loading ${calls}…`)
+                                : h('button', { class: 'link', tabindex: '-1', title: 'Load them from the trace', text: `Show ${calls}` })));
+                    more.moreFor = n;
+                    frag.append(more);
                 }
             }
         };
@@ -522,21 +575,23 @@
             case 'PageDown': go(rows[Math.min(rows.length - 1, k + 15)]); break;
             case 'PageUp': go(rows[Math.max(0, k - 15)]); break;
             case 'ArrowRight':
-                if (!node || !node.c) return;
+                if (!node || !expandable(node)) return;
                 e.preventDefault();
-                if (!set.has(node)) toggle(q, node); else go(rows[k + 1]);
+                if (!set.has(node) || !node.c) toggle(q, node); else go(rows[k + 1]);
                 break;
             case 'ArrowLeft': {
                 e.preventDefault();
-                if (node && node.c && set.has(node)) { toggle(q, node); break; }
+                if (node && expandable(node) && set.has(node)) { set.delete(node); renderTree(q, { focus: true }); break; }
                 const level = Number(row.getAttribute('aria-level'));
                 for (let j = k - 1; j >= 0; j--) if (Number(rows[j].getAttribute('aria-level')) < level) { go(rows[j]); break; }
                 break;
             }
             case 'Enter':
+                if (row.moreFor) { e.preventDefault(); loadChildren(q, row.moreFor); break; }
                 if (node) { e.preventDefault(); open(node.m); }
                 break;
             case ' ':
+                if (row.moreFor) { e.preventDefault(); loadChildren(q, row.moreFor); break; }
                 if (node) { e.preventDefault(); toggle(q, node); }
                 break;
         }
@@ -818,8 +873,17 @@
     if (window.ResizeObserver) new ResizeObserver(() => { if (S.report) scheduleTimeline(); }).observe($('timeline'));
 
     window.addEventListener('message', e => {
-        if (!e.data || e.data.type !== 'report') return;
+        if (!e.data) return;
+        if (e.data.type === 'children' || e.data.type === 'childrenFailed') {
+            childrenLoaded(e.data);
+            return;
+        }
+        if (e.data.type !== 'report') return;
         S.report = e.data.report;
+        for (const q of S.report.requests) buildTree(q);
+        S.expanded.clear();
+        S.focusNode.clear();
+        loading.clear();
         waits.clear();
         for (const m of S.report.methods) if (m.wait) waits.add(m.m);
         for (const q of S.report.requests) for (const t of q.topExclusive || []) if (t.wait) waits.add(t.m);

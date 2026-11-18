@@ -10,6 +10,8 @@ const Indent = '    ';
 export interface ScanState {
     inBlockComment: boolean;
     inVerbatim: boolean;
+    /** The quote that ends the verbatim string (@"..." or @'...'). */
+    verbatimQuote?: string;
 }
 
 /** The code of a line with string contents blanked and comments removed; updates the multi-line state. */
@@ -24,13 +26,14 @@ export function codeOf(line: string, state: ScanState): { code: string; commentA
             continue;
         }
         if (state.inVerbatim) {
-            if (c === '"' && next === '"') { i++; continue; }
-            if (c === '"') { state.inVerbatim = false; code += '"'; }
+            const quote = state.verbatimQuote ?? '"';
+            if (c === quote && next === quote) { i++; continue; }
+            if (c === quote) { state.inVerbatim = false; code += quote; }
             continue;
         }
         if (c === '/' && next === '/') { commentAt = commentAt < 0 ? i : commentAt; break; }
         if (c === '/' && next === '*') { state.inBlockComment = true; commentAt = commentAt < 0 ? i : commentAt; i++; continue; }
-        if (c === '@' && next === '"') { state.inVerbatim = true; code += '@"'; i++; continue; }
+        if (c === '@' && (next === '"' || next === '\'')) { state.inVerbatim = true; state.verbatimQuote = next; code += '@' + next; i++; continue; }
         if (c === '"' || c === '\'') {
             const quote = c;
             code += quote;

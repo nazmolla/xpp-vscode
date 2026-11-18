@@ -80,18 +80,13 @@ const pkgPath = path.join(root, 'package.json');
 const pkgText = fs.readFileSync(pkgPath, 'utf8');
 const pkg = JSON.parse(pkgText);
 const contributes = {};
+const chatAgents = agents.map(a => ({ path: `./agents/${a.id}.agent.md` }));
+const chatInstructions = [{ path: './agents/fno-agents.instructions.md' }];
 for (const [key, value] of Object.entries(pkg.contributes)) {
-    if (key === 'chatAgents' || key === 'chatInstructions') continue;
-    contributes[key] = value;
-    if (key === 'chatParticipants') {
-        contributes.chatAgents = agents.map(a => ({ path: `./agents/${a.id}.agent.md` }));
-        contributes.chatInstructions = [{ path: './agents/fno-agents.instructions.md' }];
-    }
+    contributes[key] = key === 'chatAgents' ? chatAgents : key === 'chatInstructions' ? chatInstructions : value;
 }
-if (!contributes.chatAgents) {
-    contributes.chatAgents = agents.map(a => ({ path: `./agents/${a.id}.agent.md` }));
-    contributes.chatInstructions = [{ path: './agents/fno-agents.instructions.md' }];
-}
+contributes.chatAgents = chatAgents;
+contributes.chatInstructions = chatInstructions;
 pkg.contributes = contributes;
 outputs.set(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
 

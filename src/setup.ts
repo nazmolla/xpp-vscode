@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import { dynamics365Folder, notifyEnvironmentChanged, readActiveEnvironment, selectedEnvironmentUrl, useEnvironment } from './environment';
 import { ClientAssets, getAssetDownloadUrl, getDataverseToken, httpFetch, readUdeEnvironment, resolveDataverseUrl, UdeEnvironment, validateDataverseUrl } from './ude';
 import { recordError } from './reportProblem';
+import { templateConfiguration } from './xppConfig';
 
 const ConfigurationsKey = 'HKCU\\Software\\Microsoft\\Dynamics\\AX7\\Development\\Configurations';
 const RequiredFreeBytes = 16 * 1024 ** 3;
@@ -203,10 +204,9 @@ async function runSetup(context: vscode.ExtensionContext, dataverseUrl: string, 
         await fs.rm(zip, { force: true });
     }
     const vsix = path.join(versionPath, 'Microsoft.Dynamics.FinOps.ToolsVS2022.vsix');
-    if (existsSync(vsix)) {
+    if (existsSync(vsix) && !existsSync(path.join(versionPath, 'FinOpsTools', 'extension.vsixmanifest'))) {
         step('Extracting the FinOps tools (language server, debugger proxy)…');
         await extract(vsix, path.join(versionPath, 'FinOpsTools'), token);
-        await fs.rm(vsix, { force: true });
     }
 
     const customFolder = await customMetadataFolder();
@@ -239,7 +239,8 @@ async function runSetup(context: vscode.ExtensionContext, dataverseUrl: string, 
 
     step('Writing the development configuration…');
     const config = {
-        ...defaultConfiguration(),
+        // Every member of Microsoft's template: Visual Studio cannot read a configuration that lacks a required one.
+        ...await templateConfiguration(versionPath),
         ...existing,
         Description: `Unified development environment ${orgName}. FinOps application version ${env.applicationVersion}. Configuration generated on ${new Date().toLocaleDateString()} by X++ for VS Code.`,
         CloudInstanceURL: env.finOpsUrl ?? existing.CloudInstanceURL,
@@ -286,21 +287,6 @@ async function createRuntimeLinks(folder: string, referenceFolders: string[], cu
         await fs.symlink(source, path.join(target, name), 'junction');
     }
     return target;
-}
-
-function defaultConfiguration(): Record<string, unknown> {
-    return {
-        AdminIdentityProvider: 'https://sts.windows.net/',
-        AosWebsiteName: 'AOSService',
-        AudienceUri: 'spn:00000015-0000-0000-c000-000000000000',
-        BusinessDatabaseName: 'AxDbRain',
-        DatabaseServer: 'localhost',
-        DefaultCompany: '',
-        DefaultModelForNewProjects: 'FleetManagement',
-        EnableOfflineAuthentication: true,
-        PartitionKey: 'initial',
-        RuntimeHostType: 4,
-    };
 }
 
 async function download(url: string, target: string, label: string, step: Step, token: vscode.CancellationToken): Promise<void> {

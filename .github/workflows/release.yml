@@ -1,0 +1,134 @@
+# Builds the extension from source, has the server signed by SignPath and packages the VSIX with the signed server.
+# The server compiles against Microsoft's Dynamics 365 compiler package, restored from the repository owner's PRIVATE
+# GitHub Packages feed (it is never part of this repository, an artifact or the VSIX). The package grants this
+# repository's Actions read access, so GITHUB_TOKEN is enough.
+name: Release build
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+  actions: read
+
+env:
+  COMPILER_PACKAGE: Microsoft.Dynamics.AX.Platform.CompilerPackage
+  COMPILER_PACKAGE_VERSION: 7.0.7996.141
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Version
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Tag $env:GITHUB_REF_NAME does not match package.json version $version."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Restore the Dynamics 365 compiler package (private feed)
+        shell: pwsh
+        env:
+          FEED_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          nuget sources add -Name fno -Source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" -Username "${{ github.actor }}" -Password $env:FEED_TOKEN -StorePasswordInClearText
+          nuget install $env:COMPILER_PACKAGE -Version $env:COMPILER_PACKAGE_VERSION -Source fno -OutputDirectory "$env:RUNNER_TEMP\d365" -ExcludeVersion -NonInteractive
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "XPP_BIN=$env:RUNNER_TEMP\d365\$env:COMPILER_PACKAGE" >> $env:GITHUB_ENV
+
+      - run: npm ci
+
+      - name: Build and test the server
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-server.ps1 -Test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/check-bridge-actions.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Never ship Microsoft assemblies
+        shell: pwsh
+        run: |
+          $foreign = Get-ChildItem server/bin -Filter '*.dll'
+          if ($foreign) { throw "server/bin must hold only F&O Studio's own files: $($foreign.Name -join ', ')" }
+          $info = (Get-Item server/bin/XppVsCode.Server.exe).VersionInfo
+          if ($info.ProductVersion -ne '${{ steps.version.outputs.version }}' -or $info.ProductName -ne 'F&O Studio for VS Code') {
+            throw "Unexpected file metadata: $($info.ProductName) $($info.ProductVersion)"
+          }
+
+      - name: Build and test the extension
+        shell: pwsh
+        run: |
+          npm run compile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($test in 'scripts/source-test.js', 'scripts/form-preview-test.js', 'scripts/xpp-config-test.js', 'scripts/vs-tools-test.js') {
+            node $test
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          node scripts/build-agents.js --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload the unsigned server
+        id: upload-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-unsigned
+          path: server/bin/XppVsCode.Server.exe
+          if-no-files-found: error
+
+      # Signing needs the SignPath project: variable SIGNPATH_ORGANIZATION_ID and secret SIGNPATH_API_TOKEN.
+      # Every signing request waits for a manual approval in SignPath.
+      - name: Sign the server (SignPath)
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: xpp-vscode
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: server
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 7200
+          output-artifact-directory: signed
+          parameters: |
+            version: "${{ steps.version.outputs.version }}"
+
+      - name: Use the signed server
+        shell: pwsh
+        run: |
+          if (Test-Path signed/XppVsCode.Server.exe) {
+            Copy-Item signed/XppVsCode.Server.exe server/bin/XppVsCode.Server.exe -Force
+          }
+          $signature = Get-AuthenticodeSignature server/bin/XppVsCode.Server.exe
+          "Signature: $($signature.Status) $($signature.SignerCertificate.Subject)"
+          # A release (tag) never ships an unsigned server; manual runs may, for testing the build.
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $signature.Status -ne 'Valid') {
+            throw "The server is not signed ($($signature.Status)); a release must ship it signed."
+          }
+
+      - name: Package the VSIX
+        shell: pwsh
+        run: |
+          npm run build:tools
+          npx vsce package --readme-path docs/FEATURES.md --baseContentUrl https://github.com/nazmolla/xpp-vscode/blob/HEAD/docs --baseImagesUrl https://github.com/nazmolla/xpp-vscode/raw/HEAD/docs -o "xpp-vscode-${{ steps.version.outputs.version }}.vsix"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: xpp-vscode-${{ steps.version.outputs.version }}.vsix
+          if-no-files-found: error

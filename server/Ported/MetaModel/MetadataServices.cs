@@ -64,6 +64,10 @@ namespace XppVsCode.Server.MetaModel
         string RemoveFromProjectJson(string objectType, string objectName);
         string ListProjectsJson(string searchFolder);
         string SelectProjectJson(string projectFile);
+        /// <summary>The project's references to C# projects and assemblies, and the model's AxReference elements.</summary>
+        string ProjectReferencesJson();
+        string AddReferenceJson(string modelName, string assemblyPath, string projectPath);
+        string RemoveReferenceJson(string modelName, string name, string assemblyName);
     }
 
     /// <summary>Builds a model or the project's elements.</summary>

@@ -49,13 +49,28 @@ export function composeSource(declaration: string, methods: { name: string; sour
 /** Methods live one level inside the class; sources written at column 0 (older agent tools) are shifted for display. */
 function indentMethod(source: string): string {
     const lines = source.split('\n');
-    const indents = lines.filter(l => l.trim().length > 0).map(l => l.length - l.trimStart().length);
+    const indents = lines.filter(l => l.trim().length > 0).map(indentColumns);
     const min = indents.length ? Math.min(...indents) : 4;
     if (min >= 4) {
         return source;
     }
     const pad = ' '.repeat(4 - min);
     return lines.map(l => (l.trim().length === 0 ? '' : pad + l)).join('\n');
+}
+
+/** Width of a line's indentation, a tab reaching the next multiple of 4 as in Visual Studio (a tab-indented line is not at column 1). */
+function indentColumns(line: string): number {
+    let column = 0;
+    for (const c of line) {
+        if (c === ' ') {
+            column++;
+        } else if (c === '\t') {
+            column += 4 - (column % 4);
+        } else {
+            break;
+        }
+    }
+    return column;
 }
 
 function normalizeEol(text: string): string {
@@ -278,7 +293,7 @@ function findClassOpen(text: string): number {
             return -1;
         }
         if (text[i] === '{') {
-            return /\bclass\b/.test(stripComments(text.slice(0, i))) ? i : -1;
+            return /\b(class|interface)\b/.test(stripComments(text.slice(0, i))) ? i : -1;
         }
         i++;
     }
@@ -361,12 +376,8 @@ function skipNonCode(text: string, i: number): number {
         const end = text.indexOf('*/', i + 2);
         return end < 0 ? text.length : end + 2;
     }
-    if (c === '@' && next === '"') {
-        let j = i + 2;
-        while (j < text.length && !(text[j] === '"' && text[j + 1] !== '"')) {
-            j += text[j] === '"' ? 2 : 1;
-        }
-        return j + 1;
+    if (isVerbatimStart(text, i)) {
+        return skipVerbatim(text, i);
     }
     if (c === '"' || c === '\'') {
         let j = i + 1;
@@ -376,6 +387,27 @@ function skipNonCode(text: string, i: number): number {
         return j + 1;
     }
     return i;
+}
+
+/** A verbatim string (@"..." or @'...') starts at i. */
+function isVerbatimStart(text: string, i: number): boolean {
+    return text[i] === '@' && (text[i + 1] === '"' || text[i + 1] === '\'');
+}
+
+/** Index past the verbatim string at i: it may span lines, has no escapes, and a doubled quote is a quote. */
+function skipVerbatim(text: string, i: number): number {
+    const quote = text[i + 1];
+    let j = i + 2;
+    while (j < text.length) {
+        if (text[j] !== quote) {
+            j++;
+        } else if (text[j + 1] === quote) {
+            j += 2;
+        } else {
+            return j + 1;
+        }
+    }
+    return text.length;
 }
 
 /** The method name: the identifier before the first '(' after doc comments, [attributes] and #macro lines. */
@@ -422,7 +454,9 @@ function skipBracketed(text: string, start: number): number {
     let depth = 0;
     for (let i = start; i < text.length; i++) {
         const c = text[i];
-        if (c === '"' || c === '\'') {
+        if (isVerbatimStart(text, i)) {
+            i = skipVerbatim(text, i) - 1;
+        } else if (c === '"' || c === '\'') {
             i++;
             while (i < text.length && text[i] !== c) {
                 i += text[i] === '\\' ? 2 : 1;
@@ -474,13 +508,8 @@ function topLevelBlocks(text: string): string[] {
             i = end < 0 ? text.length : end + 2;
             continue;
         }
-        if (c === '@' && next === '"') {
-            // Verbatim string: "" is an escaped quote.
-            i += 2;
-            while (i < text.length && !(text[i] === '"' && text[i + 1] !== '"')) {
-                i += text[i] === '"' ? 2 : 1;
-            }
-            i++;
+        if (isVerbatimStart(text, i)) {
+            i = skipVerbatim(text, i);
             continue;
         }
         if (c === '"' || c === '\'') {

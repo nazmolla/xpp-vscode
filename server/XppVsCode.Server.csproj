@@ -9,6 +9,13 @@
     <AssemblyName>XppVsCode.Server</AssemblyName>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <!-- Product and version in the file's metadata; code signing requires them. Builds pass -p:Version from package.json. -->
+    <Product>F&amp;O Studio for VS Code</Product>
+    <Company>Mohamed Nazmi</Company>
+    <AssemblyTitle>F&amp;O Studio server</AssemblyTitle>
+    <Copyright>Copyright (c) Mohamed Nazmi. Apache-2.0.</Copyright>
+    <Version Condition="'$(Version)' == ''">0.0.0</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
   <!-- D365FO assemblies come from the user's PackagesLocalDirectory\bin at runtime; never redistributed. -->

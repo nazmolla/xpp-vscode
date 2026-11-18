@@ -11,6 +11,7 @@ import { aosHostProcesses, AosProcess, discoverLocalAos } from './localAos';
 import { convertPackagePdbs, pdb2pdbPath } from './portablePdb';
 import { XppServerClient } from './serverClient';
 import { DeployState } from './deployState';
+import { referencedModules } from './dotnetReferences';
 import { getDataverseToken, readUdeEnvironment, resolveDataverseUrl } from './ude';
 import { compilerView, documentLineToCompilerLine } from './xppSource';
 
@@ -162,6 +163,7 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
             progress.report({ message: 'writing debug sources' });
             const standard = await this.standardBreakpointElements();
             const packages = await this.writeDebugSources(standard);
+            const referenced = await XppDebugger.referencedAssemblies();
             this.sessionStandard = standard;
             await this.mirrorBreakpoints(standard);
             this.pending.documents = new Map([...this.ownDocuments, ...standard.filter(e => e.document)
@@ -186,10 +188,10 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
                 ...(config.justMyCode !== undefined ? { justMyCode: config.justMyCode } : {}),
                 sourceFileMap: { ...sourceFileMap, ...(config.sourceFileMap ?? {}) },
                 symbolOptions: config.symbolOptions ?? {
-                    // Your modules and the module holding each standard breakpoint.
+                    // Your modules, the assemblies your projects reference and the module holding each standard breakpoint.
                     moduleFilter: {
                         mode: 'loadOnlyIncluded',
-                        includedModules: [...XppDebugger.includedModules(packages, standard), ...additionalModules(config)],
+                        includedModules: [...XppDebugger.includedModules(packages, standard, referenced), ...additionalModules(config)],
                         includeSymbolsNextToModules: false,
                     },
                 },
@@ -236,6 +238,7 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
             return this.writeDebugSources(standard);
         });
         await this.mirrorBreakpoints(standard);
+        const referenced = await XppDebugger.referencedAssemblies();
         const sourceFileMap: Record<string, string> = { [XppSourceRoot]: debugSourceRoot() + path.sep };
         for (const root of PdbSourceRoots) {
             sourceFileMap[root] = debugSourceRoot() + path.sep;
@@ -261,7 +264,7 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
                     searchMicrosoftSymbolServer: false,
                     moduleFilter: {
                         mode: 'loadOnlyIncluded',
-                        includedModules: [...XppDebugger.includedModules(packages, standard), ...additionalModules(config)],
+                        includedModules: [...XppDebugger.includedModules(packages, standard, referenced), ...additionalModules(config)],
                         includeSymbolsNextToModules: true,
                         includeSymbolsOnDemand: true,
                     },
@@ -440,13 +443,23 @@ export class XppDebugger implements vscode.DebugConfigurationProvider, vscode.De
 
     /**
      * The modules whose symbols are loaded: as Visual Studio does, your packages' netmodules and modules
-     * (Dynamics.AX.<package>.*.netmodule / .*.dll), and for standard breakpoints only the module holding the element.
+     * (Dynamics.AX.<package>.*.netmodule / .*.dll), the assemblies your projects reference (copied into your packages
+     * by the build, with their PDBs, so their C# code can be debugged too), and for standard breakpoints only the module
+     * holding the element.
      */
-    private static includedModules(packages: string[], standard: StandardBreakpointElement[]): string[] {
+    private static includedModules(packages: string[], standard: StandardBreakpointElement[], referenced: string[] = []): string[] {
         return [...new Set([
             ...packages.flatMap(p => [`Dynamics.AX.${p}.*.netmodule`, `Dynamics.AX.${p}.*.dll`]),
+            ...referenced,
             ...standard.flatMap(e => e.module ? [`${e.module}.netmodule`] : [`Dynamics.AX.${e.packageName}.*.netmodule`]),
         ])];
+    }
+
+    /** The referenced assemblies with symbols in the bin folders of your packages. */
+    private static async referencedAssemblies(): Promise<string[]> {
+        const models = (await listModels()).filter(m => m.isCustom);
+        const bins = [...new Set(models.map(m => path.join(path.dirname(m.folder), 'bin')))];
+        return (await Promise.all(bins.map(referencedModules))).flat();
     }
 
     /** Standard (not your own) elements that have a breakpoint in the X++ code view. */
