@@ -83,7 +83,7 @@ jobs:
 
       - name: Upload the unsigned server
         id: upload-unsigned
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: server-unsigned
           path: server/bin/XppVsCode.Server.exe
@@ -127,7 +127,7 @@ jobs:
           npx vsce package --readme-path docs/FEATURES.md --baseContentUrl https://github.com/nazmolla/xpp-vscode/blob/HEAD/docs --baseImagesUrl https://github.com/nazmolla/xpp-vscode/raw/HEAD/docs -o "xpp-vscode-${{ steps.version.outputs.version }}.vsix"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: vsix
           path: xpp-vscode-${{ steps.version.outputs.version }}.vsix
