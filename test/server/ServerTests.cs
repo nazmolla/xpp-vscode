@@ -6,6 +6,7 @@ using System.Runtime.Remoting.Proxies;
 using System.Web.Script.Serialization;
 using XppVsCode.Server.Analysis;
 using XppVsCode.Server.Host;
+using XppVsCode.Server.Host.Reports;
 using XppVsCode.Server.MetaModel;
 using XppVsCode.Server.Tools;
 using Xunit;
@@ -123,6 +124,7 @@ namespace XppVsCode.Server.Tests
                 DataShape = FailingService.Of<ITableDataShape>(),
                 Performance = FailingService.Of<IPerformanceAnalysis>(),
                 Compatibility = FailingService.Of<IExtensionCompatibility>(),
+                Reports = FailingService.Of<IReportDesigns>(),
                 Policy = policy,
             };
             return (new MetaModelBridgeServer(services), policy);
@@ -229,6 +231,7 @@ namespace XppVsCode.Server.Tests
             DataShape = FailingService.Of<ITableDataShape>(),
             Performance = FailingService.Of<IPerformanceAnalysis>(),
             Compatibility = FailingService.Of<IExtensionCompatibility>(),
+                Reports = FailingService.Of<IReportDesigns>(),
             Policy = policy,
             AgentWrites = session,
             Checkpoints = session,
@@ -252,6 +255,7 @@ namespace XppVsCode.Server.Tests
         {
             "update_object", "delete_object", "set_element_property", "add_element_node", "delete_element_node", "rename_element_node",
             "duplicate_element_node", "move_element_node", "drop_on_node", "drop_on_property", "set_element_method", "replace_references",
+            "set_report_design", "create_precision_design", "add_report_data_region", "set_report_dataset_query",
         };
         internal static readonly string[] CreateActions = { "create_object", "duplicate_object", "add_reference", "remove_reference" };
 
@@ -476,6 +480,7 @@ namespace XppVsCode.Server.Tests
             "xpp_get_environment", "xpp_search_docs", "xpp_validate_object", "xpp_get_form_layout", "xpp_delete_object", "xpp_remove_from_project",
             "xpp_select_project", "xpp_build", "xpp_package", "xpp_diff_changes", "xpp_check_best_practice", "xpp_find_deprecations",
             "xpp_analyze_trace", "xpp_analyze_performance", "xpp_get_object_type_schema",
+            "xpp_get_report_design", "xpp_set_report_design", "xpp_render_report", "xpp_measure_image", "xpp_compare_layout",
         };
 
         private static Dictionary<string, object> ToolsList(ToolRouter router)
@@ -520,6 +525,7 @@ namespace XppVsCode.Server.Tests
                 "xpp_list_objects", "xpp_list_model_objects", "xpp_get_form_layout", "xpp_read_label", "xpp_get_model_info",
                 "xpp_list_models", "xpp_get_environment", "xpp_get_object_type_schema", "xpp_list_project_items", "xpp_validate_object", "xpp_analyze_security",
                 "xpp_find_message_source", "xpp_get_guide", "xpp_analyze_performance", "xpp_find_deprecations", "xpp_analyze_trace",
+                "xpp_get_report_design", "xpp_render_report", "xpp_measure_image", "xpp_compare_layout",
             };
             Assert.Equal(parallel.OrderBy(n => n), router.Tools.All.Where(t => t.Is(ToolTraits.ParallelRead)).Select(t => t.Name).OrderBy(n => n));
             Assert.All(parallel, n => Assert.True(router.IsParallelRead(n)));
@@ -1051,5 +1057,122 @@ namespace XppVsCode.Server.Tests
                 handle.Free();
             }
         }
+    }
+
+    public class ReportPreviewTests
+    {
+        private const string Ns = "http://schemas.microsoft.com/sqlserver/reporting/2016/01/reportdefinition";
+
+        private static string Report(string items, string extra = "", string bodyWidth = "190mm") =>
+            "<Report xmlns=\"" + Ns + "\"><ReportSections><ReportSection><Body><ReportItems>" + items + "</ReportItems><Height>100mm</Height></Body>"
+            + "<Width>" + bodyWidth + "</Width><Page><PageHeader><Height>15mm</Height></PageHeader><PageHeight>279.4mm</PageHeight><PageWidth>215.9mm</PageWidth>"
+            + "<LeftMargin>12mm</LeftMargin><RightMargin>12mm</RightMargin><TopMargin>10mm</TopMargin><BottomMargin>10mm</BottomMargin></Page></ReportSection></ReportSections>"
+            + extra + "</Report>";
+
+        [Theory]
+        [InlineData("1in", 25.4)]
+        [InlineData("72pt", 25.4)]
+        [InlineData("2.5cm", 25)]
+        [InlineData("6pc", 25.4)]
+        [InlineData("12.7mm", 12.7)]
+        [InlineData("bad", 0)]
+        public void SizesConvertToMillimetres(string size, double mm) => Assert.Equal(mm, RdlPreview.ToMm(size), 3);
+
+        [Fact]
+        public void SizesKeepTheirUnit() => Assert.Equal("1.0625in", RdlPreview.FromMm(26.9875, "in"));
+
+        [Fact]
+        public void LabelsAndHelpersAreRewrittenForThePreview()
+        {
+            var unsupported = new HashSet<string>();
+            Func<string, string> label = id => id == "@SYS1" ? "Say \"hi\"" : null;
+            Assert.Equal("=\"Say \"\"hi\"\"\" & \"x\"", RdlPreview.RewriteExpression("=Labels!@SYS1 & \"x\"", label, unsupported));
+            Assert.Equal("=\"Say \"\"hi\"\"\"", RdlPreview.RewriteExpression("=\"Labels!@SYS1\"", label, unsupported));
+            Assert.Equal("=Code.FOS_ToDisplayStringAmount(\"en-US\", 1, true)",
+                RdlPreview.RewriteExpression("=Microsoft.Dynamics.Framework.Reports.BuiltInMethods.ToDisplayStringAmount(\"en-US\", 1, true)", label, unsupported));
+            Assert.Equal("=Code.FOS_SplitReportItem(Fields!A.Value, 1)", RdlPreview.RewriteExpression("=ConversionUtilities.SplitReportItem(Fields!A.Value, 1)", label, unsupported));
+            Assert.Equal("=Code.FOS_Unsupported(\"DrillThroughProvider.DrillItem\")", RdlPreview.RewriteExpression("=DrillThroughProvider.DrillItem()", label, unsupported));
+            Assert.Equal("=Code.FOS_Unsupported(\"DrillThroughProvider.DrillVoucher\", Fields!V.Value)", RdlPreview.RewriteExpression("=DrillThroughProvider.DrillVoucher(Fields!V.Value)", label, unsupported));
+            Assert.Equal(new[] { "DrillThroughProvider.DrillItem", "DrillThroughProvider.DrillVoucher" }, unsupported.OrderBy(u => u));
+            Assert.Equal("Literal @SYS1", RdlPreview.RewriteExpression("Literal @SYS1", label, unsupported));
+        }
+
+        [Fact]
+        public void OnlyReportDefinitionsWithoutDtdsAreRead()
+        {
+            Assert.NotNull(RdlPreview.Parse(Report(""), out _));
+            Assert.Null(RdlPreview.Parse("<Report xmlns=\"urn:other\"/>", out string other));
+            Assert.Contains("report definition", other);
+            Assert.Null(RdlPreview.Parse("<?xml version=\"1.0\"?><!DOCTYPE r [<!ENTITY x SYSTEM \"file:///C:/Windows/win.ini\">]><Report xmlns=\"" + Ns + "\">&x;</Report>", out string dtd));
+            Assert.Contains("not valid XML", dtd);
+        }
+
+        [Fact]
+        public void ItemsArePlacedOnThePageInMillimetres()
+        {
+            var doc = RdlPreview.Parse(Report(
+                "<Rectangle Name=\"R\"><ReportItems><Textbox Name=\"T\"><CanGrow>true</CanGrow><Top>2mm</Top><Left>3mm</Left><Height>5mm</Height><Width>20mm</Width></Textbox></ReportItems>"
+                + "<Top>1in</Top><Left>10mm</Left><Height>20mm</Height><Width>50mm</Width></Rectangle>"), out _);
+            var items = RdlPreview.ItemMap(doc);
+            var t = items.Single(i => i.Name == "T");
+            // Left margin 12 + rectangle 10 + 3; top margin 10 + header 15 + rectangle 25.4 + 2.
+            Assert.Equal(25, t.X, 3);
+            Assert.Equal(52.4, t.Y, 3);
+            Assert.Equal("R", t.Container);
+            Assert.True(t.CanGrow);
+        }
+
+        [Fact]
+        public void ABodyWiderThanThePageIsWarnedAbout()
+        {
+            Assert.DoesNotContain(RdlPreview.Check(RdlPreview.Parse(Report(""), out _)), w => w.Contains("wider than the page"));
+            Assert.Contains(RdlPreview.Check(RdlPreview.Parse(Report("", bodyWidth: "200mm"), out _)), w => w.Contains("wider than the page"));
+        }
+
+        [Fact]
+        public void PreparationRebuildsDataAndParametersFromMetadata()
+        {
+            var doc = RdlPreview.Parse(Report(
+                "<Textbox Name=\"T\"><Paragraphs><Paragraph><TextRuns><TextRun><Value>=Fields!Amount.Value &amp; Parameters!Extra.Value &amp; Fields!Unknown.Value</Value></TextRun></TextRuns></Paragraph></Paragraphs><Top>0mm</Top><Left>0mm</Left><Height>5mm</Height><Width>20mm</Width></Textbox>",
+                "<CodeModules><CodeModule>Microsoft.Dynamics.Framework.Reports, Version=7.0.0.0</CodeModule></CodeModules>"), out _);
+            var sets = new List<ReportDataSetInfo> { new ReportDataSetInfo { Name = "DS", Fields = { new KeyValuePair<string, string>("Amount", "System.Double") } } };
+            var prepared = RdlPreview.Prepare(doc, sets, new List<ReportParameterInfo>(), id => null, null, 2, null, "en-US", "USMF", null);
+            Assert.DoesNotContain("CodeModule", prepared.Rdl);
+            Assert.Contains("FOS_PostDataMethodEvaluation", prepared.Rdl);
+            Assert.Equal(2, prepared.Data["DS"].Rows.Count);
+            Assert.True(prepared.Data["DS"].Columns.Contains("Unknown"));
+            Assert.Equal(typeof(double), prepared.Data["DS"].Columns["Amount"].DataType);
+            Assert.Equal("USMF", prepared.Parameters["AX_CompanyName"]);
+            Assert.True(prepared.Parameters.ContainsKey("Extra"));
+        }
+
+        [Fact]
+        public void StaticTextComesFromLiteralsLabelsAndTheFirstRow()
+        {
+            var table = new System.Data.DataTable();
+            table.Columns.Add("Name");
+            table.Rows.Add("Contoso");
+            var data = new Dictionary<string, System.Data.DataTable> { ["DS"] = table };
+            Assert.Equal("Contoso", RdlPreview.StaticText("=First(Fields!Name.Value, \"DS\")", data));
+            Assert.Equal("PAY TO", RdlPreview.StaticText("=UCase(\"Pay to\")", data));
+            Assert.Equal("Total", RdlPreview.StaticText("Total", data));
+            Assert.Null(RdlPreview.StaticText("=Sum(Fields!Amount.Value)", data));
+        }
+
+        [Fact]
+        public void PaperSizesAndCustomSizesParse()
+        {
+            Assert.Equal(new[] { 279.4, 215.9 }, ImageMeasure.PaperSize("Letter", landscape: true));
+            Assert.Equal(new[] { 215.9, 88.9 }, ImageMeasure.PaperSize("8.5x3.5in", landscape: false).Select(v => Math.Round(v, 3)));
+            Assert.Throws<ArgumentException>(() => ImageMeasure.PaperSize("huge", landscape: false));
+        }
+
+        [Theory]
+        // Rendered sample cheque: CompanyName 12pt bold (capitals, no descenders), BankName 12.5pt (descender g).
+        [InlineData("Contoso Entertainment", 3.18, 12.7)]
+        [InlineData("Woodgrove Bank", 4.19, 12.8)]
+        [InlineData("acme", 1.8, 9.8)]
+        public void FontSizeIsEstimatedFromInkHeight(string text, double heightMm, double points) =>
+            Assert.Equal(points, ReportTools.EstimatedPoints(text, heightMm), 1);
     }
 }

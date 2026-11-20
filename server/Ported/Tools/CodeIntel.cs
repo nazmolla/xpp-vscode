@@ -65,6 +65,7 @@ namespace XppVsCode.Server.Tools
                     case "extension_info": return ExtensionInfo(body);
                     case "calls": return Calls(body);
                     case "subtypes": return Subtypes(body);
+                    case "report_providers": return ReportProviders();
                     case "code_lens": return CodeLens(body);
                     case "symbols": return Symbols(body);
                     case "members": return Members(body);
@@ -306,6 +307,30 @@ namespace XppVsCode.Server.Tools
                         }
                 }
                 return Ok(new Dictionary<string, object> { ["calls"] = calls });
+            }
+        }
+
+        /// <summary>
+        /// Report data provider classes for a report dataset (Visual Studio's "Select a Report Data Provider"): every class
+        /// that extends SrsReportDataProviderBase, directly or not, from the cross-reference database.
+        /// </summary>
+        private string ReportProviders()
+        {
+            using (var conn = _xref.TryOpen(out string problem))
+            {
+                if (conn == null) return Fail(problem);
+                string folder = "/" + XRefQuery.FolderOf("AxClass") + "/";
+                var names = Column(conn,
+                    "WITH d AS (SELECT s.Id, s.Path FROM Names t JOIN [References] r ON r.TargetId = t.Id AND r.Kind = " + KindClassExtended
+                    + " JOIN Names s ON s.Id = r.SourceId WHERE t.Path = @p"
+                    + " UNION ALL SELECT s.Id, s.Path FROM d JOIN [References] r ON r.TargetId = d.Id AND r.Kind = " + KindClassExtended
+                    + " JOIN Names s ON s.Id = r.SourceId) SELECT DISTINCT TOP 20000 Path FROM d ORDER BY Path OPTION (MAXRECURSION 30)",
+                    ("@p", folder + "SrsReportDataProviderBase"));
+                return Ok(new Dictionary<string, object>
+                {
+                    ["classes"] = names.Where(n => n.StartsWith(folder, StringComparison.OrdinalIgnoreCase) && n.IndexOf('/', folder.Length) < 0)
+                        .Select(n => n.Substring(folder.Length)).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                });
             }
         }
 

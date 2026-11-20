@@ -20,6 +20,8 @@ namespace XppVsCode.Server.Host
             _config = config;
         }
 
+        public DynamicsMetadataConfig Config => _config;
+
         public IMetadataProvider Provider
         {
             get { EnsureLoaded(); return _provider; }

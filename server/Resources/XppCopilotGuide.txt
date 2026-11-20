@@ -618,9 +618,10 @@ When the user asks to modify, fix, or enhance an existing custom object:
 
   Every method must have its FULL implementation — no placeholders, no TODOs.
 
-For SSRS report designs (.rdl files), the tool cannot create these. After creating
-the DP class, contract, and controller via the tool, describe the report design
-(datasets, parameters, layout) that the user needs to add in the VS report designer.
+For SSRS report designs: read a design with xpp_get_report_design, write the precision
+design (RDL) with xpp_set_report_design, and check it with xpp_render_report (Microsoft's
+report engine, as PDF and print render it). xpp_build compiles the report (reportsc). See
+the topic "SSRS report patterns".
 
 Before you finish, close everything the tools can close:
   - Security: every new duty is in a role. Requirements name roles by job title, which often has no
@@ -1623,6 +1624,41 @@ Run the tests with xpp_run_tests after deploying.
 
 == SSRS REPORT PATTERNS ==
 
+DATASET DATA SOURCE TYPES (the D365FO tools support three; BusinessLogic and
+DatabaseStoredProcedure are rejected — never generate them):
+  - Query: an AOT query (dataset Query = "SELECT Table.1.Field,... FROM <AOT query>",
+    DynamicFilters = the user's range dialog). Use when no X++ calculation is needed:
+    "A query should be considered before you use a Report Data Provider class."
+  - Report data provider (RDP): dataset Query = "SELECT * FROM <DPClass>.<TmpTable>".
+    Use for calculations, aggregation, business classes, logic that depends on a dialog
+    parameter, rows combined from several sources. One RDP can return several datasets
+    (one [SRSReportDataSetAttribute] getter each; SalesInvoiceDP returns 7).
+  - EnumProvider: dataset Query = the enum name; fields Name, Value, Label. For an enum
+    parameter shown as a drop-down.
+
+RDP BASE CLASS (verified in ApplicationFoundation; standard counts in brackets):
+  - SrsReportDataProviderBase [367]: ordinary reports, TempDB table (InMemory only for
+    about 1,000 rows). Data is produced while SSRS waits: interactive runs time out after
+    10 minutes.
+  - SrsReportDataProviderPreProcessTempDB [331]: "the preferred approach to enable
+    pre-processing" (Microsoft's comment). Data is produced before SSRS is called. TempDB
+    table with CreatedTransactionId = Yes; setConnection(this.parmUserConnection()) on every
+    table instance (or takeOwnershipOfTempTable); a controller is required and the output
+    menu item must point at the controller, not the report. Large volumes: override
+    parmSkipReportTransaction to return true and run your own transactions on the user
+    connection (this.parmUserConnection().ttsBegin()). Examples: ChequeDP,
+    CustAccountStatementExtDP.
+  - SrsReportDataProviderPreProcess [38]: regular (database) tables named *Tmp with
+    CreatedTransactionId = Yes; inserts must use parmUserConnection(). Used by the main
+    business documents (SalesInvoiceDPBase, PurchPurchaseOrderDP, SalesConfirmDP); changing
+    their tables needs a database sync. Prefer the TempDB variant for new reports.
+  Pre-processing does not make a report faster; it avoids the time-out. Fill tables
+  set-based where possible (insert_recordset); a data event handler on the table silently
+  turns set-based inserts into row-by-row ones.
+  Controller: prePromptModifyContract runs before the dialog and NOT in batch;
+  preRunModifyContract runs before every run (query ranges and hidden contract values that
+  batch also needs belong there).
+
 D365FO reports use the RDP (Report Data Provider) pattern. There are TWO approaches
 depending on whether the user needs a dynamic query dialog or fixed parameters.
 
@@ -1720,11 +1756,16 @@ Objects to create:
       }
   }
 
---- 5. SSRS Design (describe declaratively — VS designer creates the .rdl) ---
+--- 5. SSRS Design ---
   Report name: PrefixReportName
   Dataset: PrefixReportNameDP (type: Report Data Provider)
   Parameters: auto-mapped from the data contract
-  Design: Precision Design or Auto Design
+  Design: Auto Design (generated from the dataset; the New Report wizard makes one) or a
+  Precision Design: write its RDL with xpp_set_report_design, check it with
+  xpp_render_report (see PRECISION DESIGNS below). Quick start for a precision design:
+  build the auto design first (a table or list per dataset), then xpp_set_report_design
+  with fromAutoDesign generates the precision design from it (Visual Studio's Create
+  Precision Design); read it with xpp_get_report_design and adjust positions from there.
 
 --- 6. Menu Item ---
   Type: Output, Object: PrefixReportNameController, ObjectType: Class
@@ -1883,8 +1924,110 @@ a dynamic query, combine both attributes on the DP class:
    SysOperationContractProcessingAttribute(classStr(PrefixReportNameUIBuilder))]
   class PrefixReportNameContract { ... }
 
+════════════════════════════════════════════════════════
+EXTENDING A STANDARD REPORT (no overlayering; no report extension element exists)
+════════════════════════════════════════════════════════
+
+A standard report's design and datasets can't be changed in place. Keep Microsoft's data
+provider, contract and controller (they keep receiving fixes), extend what is extensible,
+and copy only the report: xpp_set_report_design with duplicateOf (the standard report),
+reportName (your copy) and modelName.
+
+Create only what the change needs: the copy and the one hook that routes to it, plus the
+temp table extension and DP hook only for fields the standard DP doesn't fill. No setup
+fields or switches, label files, menu items, privileges or extra classes unless the user
+asks for them or the report can't work without them; list the planned elements first.
+
+  - Other layout of a business document (invoice, PO, confirmation, packing slip):
+    copy the report, change the design, register it for print management (below); the
+    user selects it in <module> > Setup > Forms > Form setup > Print management (per
+    legal entity).
+  - Other cheque layout: cheques don't use print management. ChequeController picks the
+    report from the bank account's cheque layout (Check form type). Copy the matching
+    standard cheque (Cheque_US, Cheque_CA, Cheque_UK, ...) and add one Chain of Command of
+    ChequeController.determineReportMenuOutput(ChequeFormType, BankChequeLayout) that
+    returns ssrsReportStr(MyCheque, Report) for that form type: two elements in total.
+  - Other layout of a non-document report: copy it; redirect with a post-handler on the
+    controller's construct that calls parmReportName(ssrsReportStr(MyCopy, Report)), or
+    extend the output menu item and point it at your controller.
+  - Extra fields: table extension on the temporary table; fill the fields with one of:
+      * Chain of Command on the data provider (preferred when a method is wrappable):
+        business-document DPs expose protected populate.../insertInto.../init... methods
+        (SalesInvoiceDP.populateSalesInvoiceTmp, insertIntoSalesInvoiceTmp, ...); or wrap
+        processReport and update the rows after next. [Hookable(false)]/[Wrappable(false)]
+        methods can't be wrapped.
+      * [PostHandlerFor(classStr(XxxDP), methodStr(XxxDP, processReport))]: runs once after
+        all data is produced; update the rows (while select forUpdate ... update()).
+      * [DataEventHandler(tableStr(XxxTmp), DataEventType::Inserting)]: per row, cheap
+        calculations only, and ONLY when the DP inserts row by row (.insert()); with
+        insert_recordset the event never fires.
+    Then restore the copied report's dataset so the new fields appear, and route the copy.
+    Regular *Tmp tables (PreProcess reports) need a database sync.
+  - Extra dialog parameters: an extension of the contract with new [DataMemberAttribute]
+    parm methods (defaults through a field initializer); read them in your DP hook. Test
+    that the dialog shows them.
+  - Business users own the layout in Word/Excel without deployment: Electronic Reporting
+    business document management, for the documents Microsoft lists. Pixel-exact preprinted
+    layouts (cheques) stay SSRS.
+
+Print management registration (Microsoft's own: QMSPrintMgmtDelegatesHandler,
+RentalPrintMgmtDelegatesHandler, PrintMgmtReportFormatPopulator_Kitting_Extension):
+  [SubscribesTo(classStr(PrintMgmtDocType), delegateStr(PrintMgmtDocType, getDefaultReportFormatDelegate))]
+  public static void getDefaultReportFormatDelegate(PrintMgmtDocumentType _docType, EventHandlerResult _result)
+  {
+      if (_docType == PrintMgmtDocumentType::SalesOrderInvoice && !_result.hasResult())
+          _result.result(ssrsReportStr(MySalesInvoice, Report));
+  }
+
+  [ExtensionOf(classStr(PrintMgmtReportFormatPopulator))]
+  final class PrintMgmtReportFormatPopulator_MyModel_Extension
+  {
+      protected void addDocuments()
+      {
+          #ISOCountryRegionCodes
+          #PrintMgmtSetup
+          next addDocuments();
+          this.addOther(PrintMgmtDocumentType::SalesOrderInvoice, ssrsReportStr(MySalesInvoice, Report),
+              ssrsReportStr(MySalesInvoice, Report), #NoCountryRegionId);
+      }
+  }
+
+Pitfalls: new temp table fields missing in the design (the copy's dataset was not
+restored); report missing from print management (populator extension not built or the
+format not selected); a pre-processed report run straight from a menu item (it must point at
+the controller); a copied design no longer gets Microsoft's design fixes (compare after
+updates).
+
+════════════════════════════════════════════════════════
+PRECISION DESIGNS (preprinted stationery, cheques, invoices)
+════════════════════════════════════════════════════════
+
+  - RDL 2016 namespace for new designs; keep the namespace of a design you change. Sizes
+    take units (mm, cm, in, pt); keep each value's unit.
+  - Page size and margins explicit. Body width + left + right margin <= page width, or
+    every page gets a blank page. Body height <= page height - margins - header - footer.
+  - Fixed fields: free textboxes (not in a tablix) at the measured position, CanGrow and
+    CanShrink false, padding 0pt (Visual Studio writes 2pt; text starts that far inside).
+  - CanGrow items push every item below them in the same container down (Cheque_US uses
+    this on purpose: blank lines in ChequeTopDrop move the cheque to the top, middle or
+    bottom). Rectangles keep their items together and move as one.
+  - Overlapping items are supported in PDF and print (hard page breaks), not in the
+    interactive viewer.
+  - Page header/footer have a fixed height, never grow (content is clipped) and their height
+    is reserved even when hidden.
+  - Line items: a tablix with fixed row heights; rows per page from the line area's height;
+    totals in the footer or a fixed area of the last page.
+  - Fonts: only Microsoft's list of fonts available to D365FO reports (custom fonts can't
+    be installed in the cloud). MICR: "MICR E13B 2.1" or "IDAutomationMICR"; OCR: OCRB,
+    "OCR A Extended"; barcodes: the BC fonts; fixed-width text: Courier New, Consolas.
+  - Captions as labels (=Labels!@File:Id). Report functions: write the D365FO helpers
+    as stored designs do (Microsoft.Dynamics.Framework.Reports.BuiltInMethods.ToDisplayStringAmount(...),
+    ConversionUtilities.SplitReportItem(...)); the build qualifies them.
+  - Measure scanned samples with xpp_measure_image (mm grid, boxes, rules, OCR text with
+    positions and sizes), render with xpp_render_report, and compare with
+    xpp_compare_layout until every item is within tolerance.
+
 --- After all report objects are created ---
-  Describe the SSRS report design (datasets, parameters, tablix layout) that the
-  user needs to add in the VS report designer — the tool cannot create .rdl files.
-  Summarize what was built and note remaining steps (build model, deploy report,
-  assign security, add to menu).
+  Build with xpp_build (it compiles the report with reportsc), check the layout with
+  xpp_render_report, then summarize what was built and the remaining steps (deploy the
+  package, assign security, add to menu, print management setup).

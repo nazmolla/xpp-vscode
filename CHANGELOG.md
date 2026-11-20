@@ -2,6 +2,31 @@
 
 Release notes of F&O Studio for VS Code. They are generated from the "What's new" sections of [docs/FEATURES.md](https://github.com/nazmolla/xpp-vscode/blob/HEAD/docs/FEATURES.md); edit them there.
 
+## 0.17
+
+### 0.17.0
+
+**SSRS reports without Visual Studio: design them yourself, or let Copilot build them from a scanned form.** Reports were the last part of F&O development that needed Visual Studio. Cheques, purchase orders, invoices and other preprinted forms can now be laid out to the millimetre, previewed, built and deployed from VS Code.
+
+*Design it yourself, as in Visual Studio:*
+- **New Element… → Report** creates an empty report and opens it; build it from scratch. **Report (wizard)** still creates the whole chain (data provider, contract, controller, menu item, privilege) when you want it.
+- **The report in the element designer looks like Visual Studio's:** Datasets, Designs, Images and Parameters, with Visual Studio's property names, categories and hidden properties. Page size, margins and the other sizes are expandable rows in the Properties pane.
+- **Datasets:** New → Data Set, then the **Query** property's `…` picks the source for the Data Source Type: a report data provider class and its table, a query or an enum, then the fields. The dataset's fields and parameters and the report's parameters (the hidden `AX_*` ones, the contract's, the dynamic filter) are filled in by Microsoft's own schema code, as in Visual Studio.
+- **Auto designs:** New → Auto Design, **Add Data Region from Data Set…** for a table or list, then **Create Precision Design…** turns it into a precision design with Microsoft's report generator, as Visual Studio does.
+- **Report Designer** for precision designs (right-click a precision design → **Open Report Designer**, or double-click it):
+  - a page with rulers in mm or inches, grid, snap and zoom; move and resize with the mouse, or by 0.1 mm with `Ctrl`+arrows; align, same size, distribute;
+  - textboxes, rectangles, lines, images and tablixes; fields, parameters and labels dragged from the report data;
+  - warnings while you design: a body wider than the page (blank pages), items outside the body, growing textboxes that push others down, fonts D365FO doesn't render;
+  - **Scan overlay** and **measure** tool: lay a scanned form under the page to place each field on preprinted stationery;
+  - **Preview** with Microsoft's report engine (downloaded from nuget.org on first use, after you accept Microsoft's licence), with sample data or your own rows.
+- **Build** compiles the reports (`reportsc`) into the package, as Visual Studio does, so **Deploy** puts them on the environment.
+
+*Let Copilot build it from a scanned form:*
+- **F&O Report Builder** agent: give it a scan or sample of the form (cheque, PO, invoice, preprinted stationery). It measures the scan, decides between a new report and a copy of the standard one, lists the elements it will create (only the ones needed: for a cheque, the copy of the standard cheque and one controller extension), writes the precision design to the measured positions, renders it and compares it with the scan until every field lines up, then builds.
+- **New agent tools:** `xpp_get_report_design`, `xpp_set_report_design` (save a design, copy a standard report, or generate a precision design from an auto design), `xpp_render_report` (pages as images, PDF), `xpp_measure_image` (scale, deskew, boxes, rules and text positions in mm, with Windows' local OCR) and `xpp_compare_layout` (overlay of the render on the scan, offset of each field in mm).
+- The F&O Report Developer agent and the development guide now cover the report data sources, extending standard reports and print management, and create only the elements a report needs.
+- *Tested:* a Canadian cheque built by the agent from a scan, deployed to a UDE and printed there with **Print test**: the fields land within half a millimetre of the scan. *Not tested yet:* MICR lines on a real printer.
+
 ## 0.16
 
 ### 0.16.0

@@ -1,0 +1,260 @@
+﻿# Visual Studio report designer: per domain class (AxReport* without "Ax") and property, the Properties window's
+# display name, category and whether it is shown. Read from the FinOps tools' report domain model; properties not
+# listed (other than Name and Tags) are not shown by Visual Studio.
+Report	Title	Title	Data	shown
+Report	DataMethodsProject	Data Methods Project	Data	hidden
+Report	TitleOverridden	Title Overridden	Data	hidden
+ReportAggregation	RenderGrandTotal	Render Grand Total	Layout	shown
+ReportAggregation	AggregationFunction	Aggregation Function	Data	shown
+ReportAggregation	AggregationFunctionOverridden	Aggregation Function Overridden	Data	hidden
+ReportAggregation	GrandTotalStyleOverridden	Grand Total Style Overridden	Data	hidden
+ReportAggregation	GroupTotalsCaption	Group Totals Caption	Data	shown
+ReportAggregation	GrandTotalCaption	Grand Total Caption	Data	shown
+ReportAutoDesign	RenderParameters	Render Parameters	Layout	shown
+ReportAutoDesign	Title	Title	Data	shown
+ReportAutoDesign	TitleOverridden	Title Overridden	Data	hidden
+ReportAutoDesign	DisableRuntimeTransformation	Disable Runtime Transformation	Configuration	hidden
+ReportAutoDesign	LayoutTemplate	Layout Template	Data	shown
+ReportAvailableValue	Label	Label	Data	shown
+ReportAvailableValue	Value	Value	Data	shown
+ReportAxisStyle	ShowMajorGridLines	Show Major Grid Lines	Layout	shown
+ReportAxisStyle	MajorGridLinesInterval	Major Grid Lines Interval	Data	shown
+ReportAxisStyle	MajorTickMark	Major Tick Mark	Layout	shown
+ReportAxisStyle	ShowMinorGridLines	Show Minor Grid Lines	Layout	shown
+ReportAxisStyle	MinorGridLinesInterval	Minor Grid Lines Interval	Data	shown
+ReportAxisStyle	MinorTickMark	Minor Tick Mark	Layout	shown
+ReportAxisStyle	SideMargins	Side Margins	Layout	shown
+ReportBorderColor	Default	Default	Appearance	shown
+ReportBorderColor	Left	Left	Appearance	shown
+ReportBorderColor	Right	Right	Appearance	shown
+ReportBorderColor	Top	Top	Appearance	shown
+ReportBorderColor	Bottom	Bottom	Appearance	shown
+ReportBorderStyle	Default	Default	Appearance	shown
+ReportBorderStyle	Left	Left	Appearance	shown
+ReportBorderStyle	Right	Right	Appearance	shown
+ReportBorderStyle	Top	Top	Appearance	shown
+ReportBorderStyle	Bottom	Bottom	Appearance	shown
+ReportBorderWidth	Default	Default	Layout	shown
+ReportBorderWidth	Left	Left	Layout	shown
+ReportBorderWidth	Right	Right	Layout	shown
+ReportBorderWidth	Top	Top	Layout	shown
+ReportBorderWidth	Bottom	Bottom	Layout	shown
+ReportCellStyle	BackgroundColor	Background Color	Appearance	shown
+ReportChart	DisplayLegend	Display Legend	Layout	shown
+ReportChart	RenderIn3D	Render In3 D	Appearance	shown
+ReportChart	LegendStyleOverridden	Legend Style Overridden	Appearance	hidden
+ReportChart	ThreeDStyleOverridden	Three DStyle Overridden	Appearance	hidden
+ReportChart	Footer	Footer	Data	shown
+ReportChartAreaStyle	BackgroundGradientType	Background Gradient Type	Appearance	shown
+ReportChartAreaStyle	Color	Color	Appearance	shown
+ReportChartAreaStyle	BackgroundColor	Background Color	Appearance	shown
+ReportChartAreaStyle	BackgroundGradientColor	Background Gradient Color	Appearance	shown
+ReportChartData	DisplayPointLabel	Display Point Label	Layout	shown
+ReportChartData	DisplayMarker	Display Marker	Layout	shown
+ReportChartData	AggregationFunction	Aggregation Function	Data	shown
+ReportChartData	AggregationFunctionOverridden	Aggregation Function Overridden	Data	hidden
+ReportChartData	DataSeriesStyleOverridden	Data Series Style Overridden	Data	hidden
+ReportChartData	PointLabelStyleOverridden	Point Label Style Overridden	Data	hidden
+ReportChartData	Label	Label	Data	hidden
+ReportChartData	PointLabel	Point Label	Data	shown
+ReportChartData	Expression	Expression	Data	shown
+ReportChartData	FormatString	Format String	Appearance	shown
+ReportChartData	FormatStringOverridden	Format String Overridden	Appearance	hidden
+ReportChartData	Visible	Visible	Appearance	shown
+ReportChartGrouping	Visible	Visible	Appearance	shown
+ReportChartGrouping	FormatString	Format String	Appearance	shown
+ReportChartGrouping	Caption	Caption	Data	shown
+ReportChartStyleTemplate	Palette	Palette	Appearance	shown
+ReportCompanyName	Company	Company	Data	hidden
+ReportData	Label	Label	Data	shown
+ReportDataItem	StyleOverridden	Style Overridden	Appearance	hidden
+ReportDataItem	TextAlign	Text Align	Appearance	shown
+ReportDataItem	Expression	Expression	Data	shown
+ReportDataItem	Visible	Visible	Appearance	shown
+ReportDataItem	FormatString	Format String	Appearance	shown
+ReportDataItem	FormatStringOverridden	Format String Overridden	Data	hidden
+ReportDataItem	DisableAutoDrillThrough	Disable Auto Drill Through	Appearance	shown
+ReportDataMethod	ReturnType	Return Type	Data	shown
+ReportDataMethodParameter	Type	Type	Data	shown
+ReportDataRegion	PageBreakAtStart	Page Break At Start	Layout	shown
+ReportDataRegion	PageBreakAtEnd	Page Break At End	Layout	shown
+ReportDataRegion	DataNavigation	Data Navigation	Behaviour	shown
+ReportDataRegion	NoRows	No Rows Message	Data	shown
+ReportDataRegion	Visible	Visible	Appearance	shown
+ReportDataRegion	Title	Title	Data	shown
+ReportDataRegion	TitleOverridden	Title Overridden	Data	hidden
+ReportDataRegion	DataSet	Data Set	Data	shown
+ReportDataSeriesStyling	MarkerType	Marker Type	Appearance	shown
+ReportDataSeriesStyling	MarkerSize	Marker Size	Layout	shown
+ReportDataSet	Query	Query	Data	shown
+ReportDataSet	DataSourceType	Data Source Type	Data	shown
+ReportDataSet	DefaultLayout	Default Layout	Behavior	shown
+ReportDataSet	DynamicFilters	Dynamic Filters	Behavior	shown
+ReportDataSet	DataSource	Data Source	Data	hidden
+ReportDataSetField	DataType	Data Type	Data	shown
+ReportDataSetField	Caption	Caption	Data	shown
+ReportDataSetField	FormatString	Format String	Appearance	shown
+ReportDataSetField	Alias	Alias	Data	shown
+ReportDataSetField	FieldType	Field Type	Data	shown
+ReportDataSetField	AggregationFunction	Aggregation Function	Data	shown
+ReportDataSetField	GroupingType	Grouping Type	Data	shown
+ReportDataSetField	UserDefined	User Defined	Data	hidden
+ReportDataSetField	DisableAutoCreateInDataRegion	Disable Auto Create In Data Region	Behavior	hidden
+ReportDataSetField	DisplayWidth	Display Width	Layout	shown
+ReportDataSetField	ParentGrouping	Parent Grouping	Data	shown
+ReportDataSetFieldGroupBase	Caption	Caption	Data	shown
+ReportDataSetFieldGroupBase	Alias	Alias	Data	shown
+ReportDataSetParameter	Alias	Alias	Data	shown
+ReportDataSetParameter	DataType	Data Type	Data	shown
+ReportDataSetParameter	MultiValue	Multi Value	Behaviour	hidden
+ReportDataSetParameter	Parameter	Parameter	Data	shown
+ReportDataboundDefault	DefaultValue	Default Value	Data	shown
+ReportDataboundDefault	DataSet	Data Set	Data	shown
+ReportDataboundValue	LabelField	Label Field	Data	shown
+ReportDataboundValue	ValueField	Value Field	Data	shown
+ReportDataboundValue	DataSet	DataSet	Data	shown
+ReportDisableIndividualTransformation	Groups	Groups	Configuration	hidden
+ReportDrillthroughAction	ReportDesign	Report Design	Data	shown
+ReportDrillthroughActionBase	StyleOverridden	Style Overridden	Appearance	hidden
+ReportDrillthroughParameter	Value	Value	Data	shown
+ReportDrillthroughParameter	Parameter	Parameter	Data	shown
+ReportEmbeddedImage	Base64Data	Image Source	Data	shown
+ReportExternalDataSource	ConnectionString	Connection String	Data	shown
+ReportExternalDataSource	Provider	Provider	Data	shown
+ReportFieldGroup	AutoFieldGroupOrder	Auto Field Group Order	Data	shown
+ReportFieldGroup	DataSetFieldGroupBase	Data Set Field Group Base	Data	shown
+ReportFilter	Operator	Operator	Data	shown
+ReportFilter	Expression	Expression	Data	shown
+ReportFilter	Value	Value	Data	shown
+ReportFont	FontStyle	Font Style	Appearance	shown
+ReportFont	FontFamily	Font Family	Appearance	shown
+ReportFont	FontSize	Font Size	Appearance	shown
+ReportFont	FontWeight	Font Weight	Appearance	shown
+ReportFont	Color	Color	Appearance	shown
+ReportFont	Decoration	Decoration	Appearance	shown
+ReportGroupOn	Expression	Expression	Data	shown
+ReportGrouping	Label	Label	Data	shown
+ReportImageItem	ImageSizing	Image Sizing	Layout	shown
+ReportImageItem	BorderWidthOverridden	Border Width Overridden	Layout	hidden
+ReportImageItem	BorderColorOverridden	Border Color Overridden	Appearance	hidden
+ReportImageItem	BorderStyleOverridden	Border Style Overridden	Appearance	hidden
+ReportImageItem	Expression	Expression	Data	shown
+ReportImageItem	Visible	Visible	Appearance	shown
+ReportImageItem	Height	Height	Layout	shown
+ReportImageItem	Width	Width	Layout	shown
+ReportImageItem	Source	Source	Data	shown
+ReportImageItem	MimeType	Mime Type	Data	shown
+ReportItem	Caption	Caption	Data	shown
+ReportItem	CaptionOverridden	Caption Overridden	Data	hidden
+ReportLegendStyleTemplate	Position	Position	Layout	shown
+ReportLegendStyleTemplate	Layout	Layout	Layout	shown
+ReportLegendStyleTemplate	FillColor	Fill Color	Appearance	shown
+ReportLineStyle	Style	Style	Appearance	shown
+ReportLineStyle	Color	Color	Appearance	shown
+ReportLineStyle	Width	Width	Layout	shown
+ReportList	FieldLayout	Field Layout	Layout	shown
+ReportList	FieldCaptionPlacement	Field Caption Placement	Layout	shown
+ReportList	Height	Height	Layout	shown
+ReportList	StyleTemplate	Style Template	Data	shown
+ReportListDataSectionStyleTemplate	BackgroundColor	Background Color	Appearance	shown
+ReportListDetailAggregates	RenderLocation	Render Location	Layout	shown
+ReportListDetailAggregates	FooterAggregatesLineLabel	Footer Aggregates Line Label	Data	shown
+ReportListFieldData	DisplayWidth	Display Width	Layout	shown
+ReportListFieldData	DisplayWidthOverridden	Display Width Overridden	Layout	hidden
+ReportListGrouping	PageBreakAtStart	Page Break At Start	Layout	shown
+ReportListGrouping	PageBreakAtEnd	Page Break At End	Layout	shown
+ReportListGrouping	RepeatHeader	Repeat Header	Layout	shown
+ReportMargin	Left	Left	Layout	shown
+ReportMargin	Right	Right	Layout	shown
+ReportMargin	Top	Top	Layout	shown
+ReportMargin	Bottom	Bottom	Layout	shown
+ReportMatrix	DrillDownNavigation	Drill Down Navigation	Behavior	shown
+ReportMatrix	StyleTemplate	Style Template	Data	shown
+ReportMatrixColumnGrouping	DisplaySubTotals	Display Sub Totals	Layout	shown
+ReportMatrixColumnGrouping	Caption	Caption	Data	shown
+ReportMatrixColumnGrouping	TextAlign	Text Align	Appearance	shown
+ReportMatrixColumnGrouping	DisplayWidth	Display Width	Layout	shown
+ReportMatrixData	AggregationFunction	Aggregation Function	Data	shown
+ReportMatrixData	AggregationFunctionOverridden	Aggregation Function Overridden	Data	hidden
+ReportMatrixData	DisplayWidth	Display Width	Layout	shown
+ReportMatrixData	DisplayWidthOverridden	Display Width Overridden	Layout	hidden
+ReportMatrixRowGrouping	DisplaySubTotals	Display Sub Totals	Layout	shown
+ReportMatrixRowGrouping	PageBreakAtStart	Page Break At Start	Layout	shown
+ReportMatrixRowGrouping	PageBreakAtEnd	Page Break At End	Layout	shown
+ReportMatrixRowGrouping	Caption	Caption	Data	shown
+ReportMatrixRowGrouping	TextAlign	Text Align	Appearance	shown
+ReportMatrixRowGrouping	DisplayWidth	Display Width	Layout	shown
+ReportPadding	Left	Left	Layout	shown
+ReportPadding	Right	Right	Layout	shown
+ReportPadding	Top	Top	Layout	shown
+ReportPadding	Bottom	Bottom	Layout	shown
+ReportParameter	DataType	Data Type	Data	shown
+ReportParameter	AllowBlank	Allow Blank	Behavior	shown
+ReportParameter	Nullable	Nullable	Behavior	shown
+ReportParameter	PromptString	Prompt String	Data	shown
+ReportParameter	MultiValue	Multi Value	Behavior	shown
+ReportParameter	UserVisibility	Visibility	Behavior	shown
+ReportParameter	AOTQuery	AOTQuery	Data	shown
+ReportParameterGroup	Caption	Caption	Appearance	shown
+ReportParameterGroup	LayoutDirection	Layout Direction	Appearance	shown
+ReportPieDoughnutChart	ChartType	Chart Type	Appearance	shown
+ReportPieDoughnutChart	SubType	Sub Type	Appearance	shown
+ReportPieDoughnutChart	StyleTemplate	Style Template	Data	shown
+ReportPointLabelStyling	Position	Position	Layout	shown
+ReportPointLabelStyling	Angle	Angle	Appearance	shown
+ReportPointLabelStyling	FormatString	Format String	Appearance	shown
+ReportPrecisionDesign	Text	Text	Data	hidden
+ReportPrecisionDesign	DataNavigation	Data Navigation	Behaviour	shown
+ReportPrecisionDesign	DisableRuntimeTransformation	Disable Runtime Transformation	Configuration	hidden
+ReportPrecisionDesign	EnableAutoDrillThroughStyling	Enable Auto Drill Through Styling	Auto Drill Through	shown
+ReportPrecisionDesign	StyleTemplate	Style Template	Data	shown
+ReportSectionStyle	BackgroundColor	Background Color	Appearance	shown
+ReportSeparatorLine	Visible	Visible	Appearance	shown
+ReportSize	Width	Width	Data	shown
+ReportSize	Height	Height	Data	shown
+ReportSizeToFit	AvoidIndentation	Avoid Indentation	Layout	shown
+ReportSizeToFit	FlowLayout	Flow Layout	Layout	shown
+ReportSizeToFit	AdjustFontSize	Adjust Font Size	Layout	hidden
+ReportSizeToFit	ResizePage	Resize Page	Layout	hidden
+ReportSort	SortOrder	Sort Order	Data	shown
+ReportSort	Expression	Sort By	Data	shown
+ReportSpacing	TitleSpacing	Title Spacing	Layout	shown
+ReportTable	FieldCaptionRendering	Field Caption Rendering	Layout	shown
+ReportTable	FixedHeader	Fixed Header	Layout	shown
+ReportTable	RepeatHeaderOnEachPage	Repeat Header On Each Page	Layout	shown
+ReportTable	RepeatFooterOnEachPage	Repeat Footer On Each Page	Layout	shown
+ReportTable	StyleTemplate	Style Template	Data	shown
+ReportTableData	RowHeight	Row Height	Layout	shown
+ReportTableDetailAggregates	RenderLocation	Render Location	Layout	shown
+ReportTableDetailAggregates	FooterAggregatesLineLabel	Footer Aggregates Line Label	Data	shown
+ReportTableDetailData	DisplayWidth	Display Width	Layout	shown
+ReportTableDetailData	DisplayWidthOverridden	Display Width Overridden	Layout	hidden
+ReportTableDetailData	InteractiveSort	Interactive Sort	Layout	shown
+ReportTableGrouping	PageBreakAtStart	Page Break At Start	Layout	shown
+ReportTableGrouping	PageBreakAtEnd	Page Break At End	Layout	shown
+ReportTableGrouping	RepeatHeader	Repeat Header	Layout	shown
+ReportTableGrouping	InteractiveSort	Interactive Sort	Layout	shown
+ReportTableGroupingInstanceData	DisplayWidth	Display Width	Data	shown
+ReportTableListSpacing	OuterGroupingInstanceSpacing	Outer Grouping Instance Spacing	Layout	shown
+ReportTableListSpacing	InnerGroupingInstanceSpacing	Inner Grouping Instance Spacing	Layout	shown
+ReportTableListSpacing	DataSectionSpacing	Data Section Spacing	Layout	shown
+ReportTableRow	RowHeight	Row Height	Layout	shown
+ReportTemplateItem	Visible	Visible	Appearance	shown
+ReportThreeDStyling	VerticalRotation	Vertical Rotation	Appearance	shown
+ReportThreeDStyling	HorizontalRotation	Horizontal Rotation	Appearance	shown
+ReportThreeDStyling	WallThickness	Wall Thickness	Appearance	shown
+ReportThreeDStyling	Perspective	Perspective	Appearance	shown
+ReportThreeDStyling	Cylinder	Cylinder	Appearance	shown
+ReportURLDrillthroughAction	Expression	Expression	Data	shown
+ReportUnboundDefault	Value	Value	Data	shown
+ReportXYChart	CategoryAxisDataScaleMinValue	Category Axis Data Scale Min Value	Layout	shown
+ReportXYChart	CategoryAxisDataScaleMaxValue	Category Axis Data Scale Max Value	Layout	shown
+ReportXYChart	ValueAxisDataScaleMinValue	Value Axis Data Scale Min Value	Layout	shown
+ReportXYChart	ValueAxisDataScaleMaxValue	Value Axis Data Scale Max Value	Layout	shown
+ReportXYChart	ChartType	Chart Type	Appearance	shown
+ReportXYChart	SubType	Sub Type	Appearance	shown
+ReportXYChart	CategoryAxisTitle	Category Axis Title	Data	shown
+ReportXYChart	ValueAxisTitle	Value Axis Title	Data	shown
+ReportXYChart	CategoryAxisInterval	Category Axis Interval	Data	shown
+ReportXYChart	ValueAxisInterval	Value Axis Interval	Data	shown
+ReportXYChart	StyleTemplate	Style Template	Data	shown

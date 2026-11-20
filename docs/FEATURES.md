@@ -2,11 +2,34 @@
 
 Develop Dynamics 365 Finance & Operations X++ code in VS Code, without Visual Studio. F&O Studio is for X++ developers on Windows who work on unified developer environments (UDE), cloud-hosted environments or VHD environments.
 
-- **No Visual Studio needed.** You get the Application Explorer, element and form designers, X++ code navigation (including Chain of Command implementations), build, best practice checks, deployment packages, deploy, database sync and the debugger. They use the same metadata API, compiler and scripts as Visual Studio, and projects (`.rnrproj`, `.axpp`) open in both.
+- **No Visual Studio needed.** You get the Application Explorer, element and form designers, the SSRS report designer, X++ code navigation (including Chain of Command implementations), build, best practice checks, deployment packages, deploy, database sync and the debugger. They use the same metadata API, compiler and scripts as Visual Studio, and projects (`.rnrproj`, `.axpp`) open in both.
 - **Copilot works on the real metadata.** The agent tools read, create, extend and build elements through the metadata API. They change only your own models, every write is all or nothing, and you can revert a whole Copilot session.
-- **Tools Visual Studio doesn't have:** table data and SQL with query plans, static and live performance analysis, a built-in trace (`.etl`) analyzer, license and segregation-of-duties analysis, upgrade readiness and a pre-deploy checklist.
+- **Tools Visual Studio doesn't have:** a report preview with Microsoft's report engine and a scanned-form overlay, an agent that builds reports from a scanned form, table data and SQL with query plans, static and live performance analysis, a built-in trace (`.etl`) analyzer, license and segregation-of-duties analysis, upgrade readiness and a pre-deploy checklist.
 
 ![Application Explorer filtered on CustGroup](images/aot.png)
+
+## What's new in 0.17
+
+**0.17.0: SSRS reports without Visual Studio: design them yourself, or let Copilot build them from a scanned form.** Reports were the last part of F&O development that needed Visual Studio. Cheques, purchase orders, invoices and other preprinted forms can now be laid out to the millimetre, previewed, built and deployed from VS Code.
+
+*Design it yourself, as in Visual Studio:*
+- **New Element… → Report** creates an empty report and opens it; build it from scratch. **Report (wizard)** still creates the whole chain (data provider, contract, controller, menu item, privilege) when you want it.
+- **The report in the element designer looks like Visual Studio's:** Datasets, Designs, Images and Parameters, with Visual Studio's property names, categories and hidden properties. Page size, margins and the other sizes are expandable rows in the Properties pane.
+- **Datasets:** New → Data Set, then the **Query** property's `…` picks the source for the Data Source Type: a report data provider class and its table, a query or an enum, then the fields. The dataset's fields and parameters and the report's parameters (the hidden `AX_*` ones, the contract's, the dynamic filter) are filled in by Microsoft's own schema code, as in Visual Studio.
+- **Auto designs:** New → Auto Design, **Add Data Region from Data Set…** for a table or list, then **Create Precision Design…** turns it into a precision design with Microsoft's report generator, as Visual Studio does.
+- **Report Designer** for precision designs (right-click a precision design → **Open Report Designer**, or double-click it):
+  - a page with rulers in mm or inches, grid, snap and zoom; move and resize with the mouse, or by 0.1 mm with `Ctrl`+arrows; align, same size, distribute;
+  - textboxes, rectangles, lines, images and tablixes; fields, parameters and labels dragged from the report data;
+  - warnings while you design: a body wider than the page (blank pages), items outside the body, growing textboxes that push others down, fonts D365FO doesn't render;
+  - **Scan overlay** and **measure** tool: lay a scanned form under the page to place each field on preprinted stationery;
+  - **Preview** with Microsoft's report engine (downloaded from nuget.org on first use, after you accept Microsoft's licence), with sample data or your own rows.
+- **Build** compiles the reports (`reportsc`) into the package, as Visual Studio does, so **Deploy** puts them on the environment.
+
+*Let Copilot build it from a scanned form:*
+- **F&O Report Builder** agent: give it a scan or sample of the form (cheque, PO, invoice, preprinted stationery). It measures the scan, decides between a new report and a copy of the standard one, lists the elements it will create (only the ones needed: for a cheque, the copy of the standard cheque and one controller extension), writes the precision design to the measured positions, renders it and compares it with the scan until every field lines up, then builds.
+- **New agent tools:** `xpp_get_report_design`, `xpp_set_report_design` (save a design, copy a standard report, or generate a precision design from an auto design), `xpp_render_report` (pages as images, PDF), `xpp_measure_image` (scale, deskew, boxes, rules and text positions in mm, with Windows' local OCR) and `xpp_compare_layout` (overlay of the render on the scan, offset of each field in mm).
+- The F&O Report Developer agent and the development guide now cover the report data sources, extending standard reports and print management, and create only the elements a report needs.
+- *Tested:* a Canadian cheque built by the agent from a scan, deployed to a UDE and printed there with **Print test**: the fields land within half a millimetre of the scan. *Not tested yet:* MICR lines on a real printer.
 
 ## What's new in 0.16
 
@@ -193,6 +216,28 @@ Full history: the [changelog](https://github.com/nazmolla/xpp-vscode/blob/HEAD/C
   - **Add Number Sequence…:** the module's number sequence reference, the parameters method and the number fetched on insert.
   - **New Feature (Feature Management)…:** the feature class and its labels.
 
+### Reports
+- **New Element… → Report** creates an empty report, as Visual Studio's Add New Item does; **Report (wizard)** still builds the whole chain (data provider, contract, controller, menu item, privilege).
+- **The report in the element designer, as in Visual Studio:** Datasets, Designs, Images and Parameters, with Visual Studio's property names, categories and hidden properties. Sub-objects (Page Size, Margin, Interactive Size, Size To Fit, padding and styles) are expandable rows in the Properties pane, not nodes.
+  - **Datasets:** New → Data Set, then the **Query** property's `…` picks the source by Data Source Type, as Visual Studio does: a report data provider class (and its data table), a query or an enum, then its fields. The dataset's fields and parameters and the report's parameters (the hidden `AX_*` ones, the contract's, the dynamic filter) are created from it with Microsoft's own schema analyzers.
+  - **Designs:** New → Auto Design or Precision Design. A new precision design is an empty page the Report Designer opens.
+  - right-click a precision design for **Open Report Designer** (or double-click it); a report with several designs asks which one to open;
+  - auto designs list their data regions (table, list, matrix, chart) with Groupings, Sortings, Filters and Data, and the fields under Data;
+  - **Add Data Region from Data Set…** on Designs or on an auto design adds a table or list with the dataset's fields (it creates the auto design when needed);
+  - **Create Precision Design…** on an auto design generates a precision design from it with Microsoft's report generator, as Visual Studio does, and opens it in the Report Designer. The auto design stays.
+- **Report Designer** (**Open Report Designer** on a report, in the Application Explorer, the project or the element designer) lays out precision designs (SSRS RDL):
+  - a page view with margins, page header, body and page footer; rulers in mm or inches, grid and snap; zoom;
+  - select, move and resize with the mouse; arrow keys move by the grid, `Ctrl`+arrows by 0.1 mm, `Shift`+arrows resize; align, make same size, distribute, bring to front and send to back; copy, paste, duplicate, delete, undo and redo;
+  - textboxes, rectangles, lines and embedded images; fields, parameters, built-in fields and labels dragged from the report data onto the page or into a tablix cell;
+  - tablix cells, column widths and row heights; insert and delete columns, and fixed rows next to header and footer rows;
+  - properties for text (value or expression, font, size, alignment, padding, format, can grow), borders and fill, visibility, images and the page (paper presets, margins, body, header and footer);
+  - warnings while you design: body wider than the page (blank pages), items outside the body, growing textboxes that push others down, and fonts that D365FO doesn't offer or that aren't installed here;
+  - **Scan overlay:** lay a scanned form under the page at its paper size, with opacity and offset (never saved), and a **measure** tool, to place fields on preprinted stationery;
+  - **Preview** renders the design with Microsoft's own report engine, as PDF and print render it, with sample data or your own rows, labels in the chosen language, and the scan under the page to compare.
+  - The designer keeps the RDL's schema version, units and everything it doesn't edit; standard reports open read-only with **Duplicate into my model…**.
+- **Build** compiles your reports (Microsoft's `reportsc`) into the package, as Visual Studio does, so deployed reports run.
+- The preview downloads Microsoft's Report Viewer runtime from nuget.org the first time, after you accept Microsoft's licence (**Install Report Preview Runtime**). F&O Studio doesn't ship it.
+
 ### Element designer
 - **Node tree and Properties grid** for every element type. They are built from the same metadata classes as Visual Studio's designer, with the same node order and icons.
 - **Properties grid:** filter, categories, changed values marked, label picker (find or create) and element pickers (`Alt+Down`). **Go to Referenced Element…** opens what a property points to.
@@ -342,9 +387,10 @@ Turn each feature on or off with **Configure Code Intelligence…**, or with the
 
 ### Copilot
 - **Agents** in the Copilot agent picker, each with its own instructions and next-step handoffs:
-  - **Developers:** F&O Developer, Code Reviewer, Support, Performance, Upgrade Reviewer, Test Engineer, Report Developer, Workflow & Events, Release Manager, Code Archaeologist.
+  - **Developers:** F&O Developer, Code Reviewer, Support, Performance, Upgrade Reviewer, Test Engineer, Report Developer, Report Builder, Workflow & Events, Release Manager, Code Archaeologist.
   - **Developers and consultants:** Solution Designer, Architect, Security & License, Integration.
   - **Functional consultants:** Functional Explainer, Setup Advisor, Data Investigator, Functional Triage, Role Designer, Test Scenarios, Fit-Gap Analyst, Data Migration, Release Notes. They answer in business terms and use the live environment through the Dynamics 365 ERP MCP server or the browser (they suggest connecting it when it's missing).
+  - **Report Builder** turns a scanned or sample document (cheque, purchase order, invoice, preprinted form) into a report: it measures the scan, picks the data source and decides between a new report and extending the standard one, writes the precision design to the measured positions, then renders and compares it with the scan until every field is in place.
   - When you haven't picked one, Copilot suggests the agent that fits, or runs it for a self-contained part of the task.
   - Agents change data, setup or metadata only after you allow it, and only in development, sandbox or build environments, never in production.
   - Coming from `@fno` (removed: VS Code retires chat participants)? `/design` is the Solution Designer, `/extend` the F&O Developer, `/explain` the Code Archaeologist or Functional Explainer, `/review` the Code Reviewer, `/support` F&O Support, `/performance` F&O Performance.
@@ -367,6 +413,7 @@ The tools are registered automatically. Copilot can:
   - The agent's plan names a standard precedent for each object and includes a class design.
   - `xpp_build`, `xpp_check_best_practice` and `xpp_analyze_performance` check the result.
 - **Analyze:** security and licenses (`xpp_analyze_security`), messages (`xpp_find_message_source`), traces (`xpp_analyze_trace`), and upgrades and collisions (`xpp_find_deprecations`).
+- **Design reports:** read a report's designs, datasets and item positions in mm (`xpp_get_report_design`), save a precision design, generate one from an auto design or copy a standard report into your model (`xpp_set_report_design`), render it with Microsoft's report engine and see the pages (`xpp_render_report`), measure a scanned form (`xpp_measure_image`: scale, deskew, boxes, rules, text positions with Windows' local OCR, a mm grid picture) and compare a rendered page with the scan (`xpp_compare_layout`: overlay and offset per field).
 - **Test and release:** run tests on the environment (`xpp_run_tests`), list branch changes (`xpp_diff_changes`) and create a deployment package (`xpp_package`).
 - **Read data:** `xpp_query_data` runs one read-only, row-limited SELECT after your confirmation. The agent never sees credentials.
 - **Read documentation:** search Microsoft Learn, and load the full development guide on demand (`xpp_get_guide`), including Acceptance Test Library tests.
@@ -397,7 +444,7 @@ The tools are registered automatically. Copilot can:
 | DGML diagrams | Hierarchy, references, dependencies and entity relationship diagrams, exportable as Mermaid | Different |
 | Trace Parser | Analyze Trace… (own `.etl` reader, no import database) | Different |
 | Open in browser, table browser | Open in Browser, Open Table Browser, Browse Table Data, SQL queries | More |
-| Report designer (.rdl) | New Report wizard with an automatic design | Not available: design layouts in Visual Studio |
+| Report designer (.rdl) | Report Designer for precision designs, with a preview by Microsoft's report engine and a scan overlay; New Report wizard | Same RDL; Visual Studio has no local preview. Charts, gauges, maps and subreports are kept but edited in the RDL |
 | Data entity wizard | New Data Entity… (entity, staging table, privileges) and New Table with Form… | Same result, more elements |
 
 ## Requirements
@@ -409,6 +456,7 @@ The tools are registered automatically. Copilot can:
 - SQL Server LocalDB, for cross references.
 - Optional: [Power Platform CLI](https://learn.microsoft.com/power-platform/developer/cli/introduction) (`pac`), only for the `(pac)` commands. Deploy and database sync don't need it.
 - GitHub Copilot, for the agents and the agent tools. Verify Changes in the Running App also needs the Dynamics 365 ERP MCP server.
+- Optional: the report preview downloads Microsoft's Report Viewer runtime (about 15 MB) from nuget.org once, after you accept Microsoft's licence.
 
 ## Getting started
 

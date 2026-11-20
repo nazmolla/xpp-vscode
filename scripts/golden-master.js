@@ -144,6 +144,36 @@ const steps = [
     t('xpp_find_deprecations', { modelName: M }), t('xpp_analyze_trace', { path: path.join(repo, 'test trace.etl') }),
     t('xpp_analyze_trace', { path: path.join(temp, 'missing.etl') }), t('xpp_analyze_performance', { objectType: 'AxClass', objectName: 'CustVendSettle' }),
     t('xpp_no_such_tool', {}),
+    // Reports (after the older steps so their positions stay comparable)
+    b('report_info', { reportName: 'Cheque_US' }), b('report_info', { reportName: 'NoSuchReportXvs' }),
+    b('get_report_design', { reportName: 'Cheque_US', designName: 'Report' }),
+    b('set_report_design', { objectType: 'AxReport', objectName: 'Cheque_US', designName: 'Report', rdl: '<NotAReport/>' }),
+    b('render_report', { reportName: 'Cheque_US', maxPages: 1, dpi: 48 }, loose),
+    b('duplicate_object', { objectType: 'AxReport', objectName: 'Cheque_US', newName: 'XvsGmReport', modelName: M }),
+    b('set_report_design', { objectType: 'AxReport', objectName: 'XvsGmReport', designName: 'Blank', rdl: '<?xml version="1.0" encoding="utf-8"?><Report xmlns="http://schemas.microsoft.com/sqlserver/reporting/2016/01/reportdefinition"><ReportSections><ReportSection><Body><Height>2in</Height></Body><Width>7.5in</Width><Page><PageHeight>11in</PageHeight><PageWidth>8.5in</PageWidth><LeftMargin>0.5in</LeftMargin><RightMargin>0.5in</RightMargin></Page></ReportSection></ReportSections></Report>' }),
+    b('get_report_design', { reportName: 'XvsGmReport', designName: 'Blank' }), b('delete_object', { objectType: 'AxReport', objectName: 'XvsGmReport' }),
+    t('xpp_get_report_design', { reportName: 'Cheque_US', includeRdl: false }),
+    t('xpp_set_report_design', { reportName: 'Cheque_US', designName: 'Report', rdl: '<NotAReport/>' }),
+    t('xpp_render_report', { reportName: 'Cheque_US', includeItems: false, dpi: 48 }, loose),
+    t('xpp_measure_image', { imagePath: path.join(temp, 'missing.png') }),
+    t('xpp_compare_layout', { imagePath: path.join(temp, 'missing.png'), reportName: 'Cheque_US' }),
+    // Auto designs: data region from a dataset, Create Precision Design
+    b('duplicate_object', { objectType: 'AxReport', objectName: 'InventPriceOverview', newName: 'XvsGmAuto', modelName: M }),
+    b('add_report_data_region', { objectType: 'AxReport', objectName: 'XvsGmAuto', designName: 'ListDesign', dataSet: 'InventPriceOverviewDS', layout: 'List' }),
+    b('get_element_tree', { objectType: 'AxReport', objectName: 'XvsGmAuto' }),
+    b('get_element_properties', { objectType: 'AxReport', objectName: 'XvsGmAuto', path: ['Designs', 'ListDesign'] }),
+    b('create_precision_design', { objectType: 'AxReport', objectName: 'XvsGmAuto', designName: 'Report', newDesignName: 'ReportPrecision' }),
+    b('get_element_properties', { objectType: 'AxReport', objectName: 'XvsGmAuto', path: ['Designs', 'ReportPrecision'] }),
+    b('create_precision_design', { objectType: 'AxReport', objectName: 'InventPriceOverview', designName: 'Report' }),
+    b('delete_object', { objectType: 'AxReport', objectName: 'XvsGmAuto' }),
+    // Dataset Query, as Visual Studio's report designer sets it
+    b('report_datasource_schema', { dataSourceType: 'ReportDataProvider', source: 'AssetBalancesDP' }),
+    b('report_datasource_schema', { dataSourceType: 'Query', source: 'CustTableSRS' }),
+    b('create_object', { objectType: 'AxReport', objectName: 'XvsGmBlank', modelName: M }),
+    b('add_element_node', { objectType: 'AxReport', objectName: 'XvsGmBlank', path: ['DataSets'], typeName: 'AxReportDataSet', name: 'DataSet1' }),
+    b('set_report_dataset_query', { objectType: 'AxReport', objectName: 'XvsGmBlank', dataSet: 'DataSet1', dataSourceType: 'EnumProvider', source: 'NoYes' }),
+    b('get_element_tree', { objectType: 'AxReport', objectName: 'XvsGmBlank' }),
+    b('delete_object', { objectType: 'AxReport', objectName: 'XvsGmBlank' }),
 ];
 
 const args = ['--config', config, '--project', project];

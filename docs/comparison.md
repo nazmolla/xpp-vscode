@@ -6,7 +6,7 @@ F&O Studio runs on the same engine as Microsoft's Visual Studio extension:
 - the same cross-reference database, debugger proxy and deployment scripts;
 - the same project and package formats (`.rnrproj`, `.axpp`).
 
-So the code you build in one opens and builds in the other. The difference is what's built on top. F&O Studio adds AI agent tools that work on real metadata, data and SQL inside the editor, trace and performance analysis, security and license analysis, and upgrade and release checks. Visual Studio is still ahead on the SSRS report designer and on running tests on cloud-hosted and VHD environments.
+So the code you build in one opens and builds in the other. The difference is what's built on top. F&O Studio adds AI agent tools that work on real metadata, data and SQL inside the editor, trace and performance analysis, security and license analysis, upgrade and release checks, and a report designer with a local preview and an agent that builds reports from scanned forms. Visual Studio is still ahead on charts and maps in report designs and on running tests on cloud-hosted and VHD environments.
 
 ## At a glance
 
@@ -54,7 +54,7 @@ So the code you build in one opens and builds in the other. The difference is wh
 | Find event handlers | ✅ | ✅ |
 | Form preview like the web client | ✅ | ✅ |
 | Click a section or control in the preview to select it in the designer | ✅ | ✅ |
-| SSRS report designer | ❌ | ✅ |
+| SSRS report designer | ✅ precision designs, preview with Microsoft's report engine, scan overlay | ✅ (no local preview) |
 | Label editor | ✅ | ✅ |
 | Entity relationship diagram (SVG and Mermaid export) | ✅ | ❌ |
 | Class and table hierarchy diagram | ✅ | 🟡 DGML |
@@ -233,7 +233,7 @@ F&O Studio doesn't reimplement Microsoft's toolchain. It loads it from your inst
 - **Open Team Repository:** clone, link packages, build in dependency order.
 
 ## Where Visual Studio is still ahead
-- The **SSRS report designer**. Report layouts are still designed in Visual Studio.
+- **Charts, gauges, maps and subreports** in report designs: F&O Studio's report designer keeps them as they are; you change them in the RDL.
 - **Running tests on cloud-hosted and VHD environments.** In F&O Studio tests run on UDEs only.
 - **Official Microsoft support.** F&O Studio is an independent, community project and still a preview.
 

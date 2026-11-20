@@ -338,8 +338,10 @@ EDITING EXISTING OBJECTS (custom objects):
      user needs a project targeting that model in the solution before it appears in Application Explorer.
   FULL implementations only.
 
-SSRS designs (.rdl) cannot be created by the tools: after creating DP, contract and controller, describe
-the design (datasets, parameters, layout) the user adds in the VS report designer.
+SSRS designs: xpp_get_report_design reads a design (items with positions in mm, RDL), xpp_set_report_design
+writes a precision design (RDL; duplicateOf copies a standard report into your model), xpp_render_report
+renders it with Microsoft's report engine, xpp_measure_image / xpp_compare_layout measure scanned forms and
+compare them with the rendered page. xpp_build compiles reports (reportsc).
 
 FINISH - close everything the tools can close:
   - Every new duty is in a role. Map job-title role names with xpp_analyze_security op=placement and
@@ -594,8 +596,16 @@ RDP (Report Data Provider) pattern. Choose:
      prePromptModifyContract.
   Combined: both attributes on the DP; optional UI builder (extends SrsReportDataContractUIBuilder, linked
   by SysOperationContractProcessingAttribute on the contract) when a parameter depends on another.
-  After creating: describe the .rdl design (datasets, parameters, tablix) for the VS report designer, and
-  list remaining steps (build, deploy report, security, menu).
+  Data source types: Query (no X++ needed), RDP, EnumProvider (enum drop-downs); never BusinessLogic or
+  stored procedures. Base class: SrsReportDataProviderBase; SrsReportDataProviderPreProcessTempDB when the
+  report can run long (setConnection(this.parmUserConnection()) on every table, CreatedTransactionId = Yes,
+  menu item -> controller).
+  Standard reports can't be changed in place: copy the report (xpp_set_report_design duplicateOf), extend the
+  temp table, fill fields by CoC on the DP (or a processReport post-handler; Inserting events only fire for
+  row-by-row inserts), restore the copy's dataset, and route it (PrintMgmtDocType.getDefaultReportFormatDelegate
+  + PrintMgmtReportFormatPopulator.addDocuments, or the controller). Details: xpp_get_guide("ssrs").
+  After creating: write the precision design with xpp_set_report_design and check it with xpp_render_report,
+  then list remaining steps (build, deploy, security, menu, print management setup).
 
 == FULL GUIDE (ON DEMAND) ==
 

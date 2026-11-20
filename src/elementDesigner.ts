@@ -13,6 +13,7 @@ import { renameFieldEverywhere } from './refactor';
 import { XppServerClient } from './serverClient';
 import { methodSpans } from './xppSource';
 import { showReportableError } from './reportProblem';
+import { pickDataSetQuery } from './reports/reportDesigner';
 
 /** Context passed by the designer tree's right-click menu (data-vscode-context). */
 export interface DesignerNodeContext {
@@ -108,6 +109,12 @@ export class ElementDesigner {
         for (const designer of ElementDesigner.panels.values()) {
             void designer.loadTree().catch(err => designer.post({ type: 'error', message: (err as Error).message }));
         }
+    }
+
+    /** Reloads the open designer of one element (after a command outside the designer changed it). */
+    static refreshElement(objectType: string, objectName: string): void {
+        const designer = ElementDesigner.panels.get(`${objectType}/${objectName}`.toLowerCase());
+        void designer?.loadTree().catch(err => designer.post({ type: 'error', message: (err as Error).message }));
     }
 
     /** Runs a right-click action on the designer the menu was opened in. */
@@ -213,11 +220,22 @@ export class ElementDesigner {
                 const label = await pickLabel(this.server, `${message.property}: find or create a label`, message.value ?? '');
                 return label === undefined ? undefined : this.setProperty(message.path, message.property, label);
             }
+            case 'pickReportQuery': {
+                // Visual Studio's Query editor on a report dataset: the source, then its fields; fields and parameters follow.
+                if (await pickDataSetQuery(this.server, this.objectName, message.path[message.path.length - 1], message.dataSourceType)) {
+                    await this.loadTree();
+                    await this.loadProperties(message.path);
+                }
+                return;
+            }
             case 'undo':
             case 'redo':
                 return this.undoRedo(message.command);
             case 'openMethod':
                 return this.openMethod(message.path);
+            case 'openReportDesign':
+                await vscode.commands.executeCommand('xpp.reports.openDesigner', this.objectName, message.design);
+                return;
             case 'copyEventHandler':
                 return copyEventHandler(message.spec);
             case 'goTo':

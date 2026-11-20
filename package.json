@@ -2,7 +2,7 @@
   "name": "xpp-vscode",
   "displayName": "F&O Studio for VS Code",
   "description": "Dynamics 365 Finance & Operations X++ development without Visual Studio: Application Explorer, designers, X++ code intelligence, build, deploy, debugging, data, performance and trace analysis, and Copilot agent tools on the real metadata API.",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "publisher": "MNazmi",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -343,6 +343,9 @@
         "path": "./agents/report-developer.agent.md"
       },
       {
+        "path": "./agents/report-builder.agent.md"
+      },
+      {
         "path": "./agents/workflow.agent.md"
       },
       {
@@ -614,6 +617,12 @@
         "icon": "$(layout)"
       },
       {
+        "command": "xpp.reports.openDesigner",
+        "title": "Open Report Designer",
+        "category": "F&O Studio",
+        "icon": "$(graph)"
+      },
+      {
         "command": "xpp.aot.filter",
         "title": "Filter Application Explorer…",
         "category": "F&O Studio",
@@ -811,6 +820,21 @@
       {
         "command": "xpp.analyzeTrace",
         "title": "Analyze Trace…",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.reports.installRuntime",
+        "title": "Install Report Preview Runtime",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.reports.createPrecisionDesign",
+        "title": "Create Precision Design…",
+        "category": "F&O Studio"
+      },
+      {
+        "command": "xpp.reports.addDataRegion",
+        "title": "Add Data Region from Data Set…",
         "category": "F&O Studio"
       },
       {
@@ -1701,6 +1725,11 @@
           "group": "navigation@3"
         },
         {
+          "command": "xpp.reports.openDesigner",
+          "when": "(view == xpp.project || view == xpp.aot) && viewItem =~ /\\breport\\b/",
+          "group": "navigation@3"
+        },
+        {
           "command": "xpp.viewCode",
           "when": "(view == xpp.project || view == xpp.aot) && viewItem =~ /\\bcode\\b/",
           "group": "inline"
@@ -2118,6 +2147,26 @@
           "group": "0_navigation@3"
         },
         {
+          "command": "xpp.reports.openDesigner",
+          "when": "webviewId == 'xppElementDesigner' && xppRoot =~ /\\breport\\b/",
+          "group": "0_navigation@3"
+        },
+        {
+          "command": "xpp.reports.openDesigner",
+          "when": "webviewId == 'xppElementDesigner' && xppType == 'ReportPrecisionDesign'",
+          "group": "0_navigation@1"
+        },
+        {
+          "command": "xpp.reports.createPrecisionDesign",
+          "when": "webviewId == 'xppElementDesigner' && xppType == 'ReportAutoDesign' && xppEditable",
+          "group": "0_navigation@1"
+        },
+        {
+          "command": "xpp.reports.addDataRegion",
+          "when": "webviewId == 'xppElementDesigner' && xppEditable && (xppType == 'ReportAutoDesign' || (xppType == 'Designs' && xppKind == 'folder' && xppReportName))",
+          "group": "2_new@0"
+        },
+        {
           "command": "xpp.addToProject",
           "when": "webviewId == 'xppElementDesigner' && xppRoot",
           "group": "0_2_project@1"
@@ -2236,6 +2285,14 @@
       "commandPalette": [
         {
           "command": "xpp.activity.showChanges",
+          "when": "false"
+        },
+        {
+          "command": "xpp.reports.createPrecisionDesign",
+          "when": "false"
+        },
+        {
+          "command": "xpp.reports.addDataRegion",
           "when": "false"
         },
         {

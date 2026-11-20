@@ -136,6 +136,24 @@ namespace XppVsCode.Server.MetaModel
         string ExtensionCollisionsJson(string modelName);
     }
 
+    /// <summary>SSRS reports: designs, datasets and parameters, precision design text (RDL), and the local preview.</summary>
+    public interface IReportDesigns
+    {
+        string ReportInfoJson(string reportName);
+        string GetReportDesignJson(string reportName, string designName);
+        string SetReportDesignJson(string reportName, string designName, string rdl);
+        /// <summary>body: reportName, designName, rdl (unsaved text, optional), data, sampleRows, parameters, language, company, firstPage, maxPages, dpi, pdfPath.</summary>
+        string RenderReportJson(string body);
+        /// <summary>Visual Studio's Create Precision Design: the auto design's generated RDL becomes a new precision design.</summary>
+        string CreatePrecisionDesignJson(string reportName, string autoDesignName, string newDesignName);
+        /// <summary>Visual Studio's drop of a dataset on an auto design: a Table or List data region with the dataset's fields (creates the auto design when missing).</summary>
+        string AddReportDataRegionJson(string reportName, string designName, string dataSetName, string layout);
+        /// <summary>The fields and parameters of a report data provider ("Class.Table"; a class alone lists its tables) or a query.</summary>
+        string ReportDataSourceSchemaJson(string dataSourceType, string source);
+        /// <summary>Visual Studio's Query property: sets the dataset's source and refreshes its fields and parameters and the report's parameters.</summary>
+        string SetReportDataSetQueryJson(string reportName, string dataSetName, string dataSourceType, string source, IList<string> fields);
+    }
+
     /// <summary>Copilot's writes under the user's control: scope lock and checkpoints (see MetaModelBridge.AgentSession).</summary>
     public interface IAgentSession
     {
@@ -160,6 +178,7 @@ namespace XppVsCode.Server.MetaModel
         public ITableDataShape DataShape { get; set; }
         public IPerformanceAnalysis Performance { get; set; }
         public IExtensionCompatibility Compatibility { get; set; }
+        public IReportDesigns Reports { get; set; }
         public IWritePolicy Policy { get; set; }
         /// <summary>Set only in the agent's (MCP) server process: its writes follow the user's scope and checkpoint.</summary>
         public IAgentSession AgentWrites { get; set; }

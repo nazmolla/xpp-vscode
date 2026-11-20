@@ -136,6 +136,14 @@ namespace XppVsCode.Server.Tools
             t.Add("xpp_analyze_performance", Read, HandleAnalyzePerformance);
             t.Add("xpp_find_deprecations", Read, HandleFindDeprecations);
             t.Add("xpp_analyze_trace", Read, HandleAnalyzeTrace);
+            // Reports: precision designs, preview, and measuring scanned forms
+            var reports = new ReportTools(_bridge);
+            t.Add("xpp_get_report_design", Read, reports.HandleGetDesign);
+            // The bridge's set_report_design is an Edit action: custom models only, agent scope and checkpoint.
+            t.Add("xpp_set_report_design", None, reports.HandleSetDesign);
+            t.Add("xpp_render_report", Read, reports.HandleRender);
+            t.Add("xpp_measure_image", Read, reports.HandleMeasure);
+            t.Add("xpp_compare_layout", Read, reports.HandleCompare);
         }
 
         /// <summary>tools/list: the registered tools with their definitions (Resources/Tools.json).</summary>

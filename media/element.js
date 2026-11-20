@@ -219,6 +219,9 @@
             ...(node.memberRefs ? { xppMemberRefs: true, item: { objectType: node.memberRefs.objectType, objectName: node.memberRefs.objectName }, memberName: node.memberRefs.memberName } : {}),
             ...refContext(node.refs),
             ...(node.accepts && editable ? { xppAccepts: JSON.stringify(node.accepts), xppOnBaseNode: !!node.inherited } : {}),
+            // Reports: the design nodes' Report Designer commands (open, create a precision design, add data regions).
+            ...(element && element.objectType === 'AxReport' ? { xppReportName: element.objectName } : {}),
+            ...(element && element.objectType === 'AxReport' && /^Report(Precision|Auto)Design$/.test(node.type) && node.kind === 'item' ? { xppReportDesign: node.name } : {}),
             // The element itself: the Application Explorer's element actions (references, extensions, compare...).
             ...(node.path.length === 0 && element ? { xppRoot: element.context, item: { objectType: element.objectType, objectName: element.objectName }, objectType: element.objectType, objectName: element.objectName } : {}),
             preventDefaultContextMenuItems: true,
@@ -231,6 +234,11 @@
         const first = refs && Object.values(refs)[0];
         if (first) send('goTo', { reference: first });
         return !!first;
+    }
+
+    // A report's precision design opens in the Report Designer (Visual Studio's Edit Using Designer).
+    function isPrecisionDesign(node) {
+        return !!node && node.kind === 'item' && node.type === 'ReportPrecisionDesign' && !!element && element.objectType === 'AxReport';
     }
 
     function renderNode(node, depth, parent) {
@@ -305,6 +313,8 @@
                 send('openMethod', { path: node.path });
             } else if (node.kind === 'event') {
                 send('copyEventHandler', { spec: node.eventSpec });
+            } else if (isPrecisionDesign(node)) {
+                send('openReportDesign', { design: node.name });
             } else if (hasChildren) {
                 toggleNode(row, li.querySelector('ul'), toggle, node.path);
             }
@@ -456,6 +466,8 @@
             e.preventDefault();
         } else if (e.key === 'Enter' && selectedRow && selectedRow._node.kind === 'method') {
             send('openMethod', { path: selectedRow._node.path });
+        } else if (e.key === 'Enter' && selectedRow && isPrecisionDesign(selectedRow._node)) {
+            send('openReportDesign', { design: selectedRow._node.name });
         } else if (e.key === 'F12' && selectedRow) {
             if (goToFirst(selectedRow._node)) e.preventDefault();
         }
@@ -533,7 +545,7 @@
     function describe(footer, p) {
         footer.textContent = '';
         const name = document.createElement('strong');
-        name.textContent = p.name;
+        name.textContent = p.label || p.name;
         footer.appendChild(name);
         const text = p.description || (p.modified ? 'Changed from the default.' : '');
         if (text) {
@@ -541,11 +553,17 @@
         }
     }
 
+    // Expandable property rows (report sub-objects such as Page Size), kept open while other nodes are selected.
+    const expandedProps = new Set();
+
     function renderRows(table, footer, data) {
         table.textContent = '';
         const needle = propFilter.trim().toLowerCase();
-        const shown = data.properties.filter(p => (!modifiedOnly || p.modified)
-            && (!needle || p.name.toLowerCase().includes(needle) || String(p.value).toLowerCase().includes(needle)));
+        const label = p => p.label || p.name;
+        const matches = p => (!modifiedOnly || p.modified)
+            && (!needle || label(p).toLowerCase().includes(needle) || p.name.toLowerCase().includes(needle) || String(p.value).toLowerCase().includes(needle));
+        const childrenOf = parent => data.properties.filter(p => p.parent === parent.name && matches(p));
+        const shown = data.properties.filter(p => !p.parent && (p.kind === 'object' ? childrenOf(p).length > 0 || matches(p) : matches(p)));
         if (!shown.length) {
             const tr = document.createElement('tr');
             const td = document.createElement('td');
@@ -562,7 +580,9 @@
             if (!groups.has(key)) groups.set(key, []);
             groups.get(key).push(p);
         }
-        const order = ['Identification', 'Data', 'Appearance', 'Behavior', 'Configuration and security', 'Misc'];
+        // Report designer categories are alphabetical, as in Visual Studio.
+        const alphabetical = /^AxReport/.test(data.type);
+        const order = alphabetical ? [] : ['Identification', 'Data', 'Appearance', 'Behavior', 'Configuration and security', 'Misc'];
         const keys = [...groups.keys()].sort((a, b) => {
             const ia = order.indexOf(a), ib = order.indexOf(b);
             return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
@@ -578,10 +598,44 @@
                 tr.appendChild(th);
                 table.appendChild(tr);
             }
-            for (const p of groups.get(key)) {
-                table.appendChild(propertyRow(p, data, footer));
+            const rows = alphabetical ? groups.get(key).slice().sort((a, b) => label(a).localeCompare(label(b))) : groups.get(key);
+            for (const p of rows) {
+                if (p.kind === 'object') {
+                    const open = expandedProps.has(p.name) || !!needle;
+                    table.appendChild(objectRow(p, open, footer, () => {
+                        if (expandedProps.has(p.name)) expandedProps.delete(p.name); else expandedProps.add(p.name);
+                        renderRows(table, footer, data);
+                    }));
+                    if (open) {
+                        for (const child of childrenOf(p)) {
+                            const row = propertyRow(child, data, footer);
+                            row.classList.add('prop-child');
+                            table.appendChild(row);
+                        }
+                    }
+                } else {
+                    table.appendChild(propertyRow(p, data, footer));
+                }
             }
         }
+    }
+
+    function objectRow(p, open, footer, toggle) {
+        const tr = document.createElement('tr');
+        tr.className = 'prop-object';
+        tr.addEventListener('mouseenter', () => describe(footer, p));
+        const name = document.createElement('td');
+        name.className = 'prop-name' + (p.modified ? ' modified' : '');
+        const button = document.createElement('button');
+        button.className = `twisty codicon codicon-${open ? 'chevron-down' : 'chevron-right'}`;
+        button.setAttribute('aria-expanded', String(open));
+        button.setAttribute('aria-label', `${open ? 'Collapse' : 'Expand'} ${p.label || p.name}`);
+        button.addEventListener('click', toggle);
+        name.append(button, document.createTextNode(p.label || p.name));
+        name.addEventListener('dblclick', toggle);
+        tr.appendChild(name);
+        tr.appendChild(document.createElement('td'));
+        return tr;
     }
 
     function propertyRow(p, data, footer) {
@@ -599,10 +653,10 @@
         tr.addEventListener('mouseenter', () => describe(footer, p));
         const name = document.createElement('td');
         name.className = 'prop-name' + (p.modified ? ' modified' : '');
-        name.textContent = p.name;
+        name.textContent = p.label || p.name;
         if (p.modified) {
-            name.title = `${p.name} (changed from the default)`;
-            name.setAttribute('aria-label', `${p.name}, modified`);
+            name.title = `${p.label || p.name} (changed from the default)`;
+            name.setAttribute('aria-label', `${p.label || p.name}, modified`);
         }
         tr.appendChild(name);
         const cell = document.createElement('td');
@@ -638,6 +692,16 @@
 
     /** The … button: a label search (and create) or an element search, in VS Code's quick pick. */
     function pickerFor(p) {
+        // A report dataset's Query: Visual Studio's data provider / query / enum picker, then its fields.
+        if (p.name === 'Query' && lastProps && lastProps.type === 'AxReportDataSet') {
+            const button = document.createElement('button');
+            button.className = 'goto codicon codicon-ellipsis';
+            button.title = 'Select the data source and its fields (Alt+Down)';
+            button.setAttribute('aria-label', button.title);
+            const type = (lastProps.properties.find(x => x.name === 'DataSourceType') || {}).value || 'Query';
+            button.addEventListener('click', () => selectedPath && send('pickReportQuery', { path: selectedPath, dataSourceType: type }));
+            return button;
+        }
         const isLabel = LabelProps.test(p.name);
         const types = PickTypes[p.name] || (p.reference && p.reference.objectType && p.reference.objectType !== 'AxLabelFile' ? [p.reference.objectType] : null);
         if (!isLabel && !types) {
@@ -697,10 +761,12 @@
         if (p.options) {
             input = document.createElement('select');
             const options = p.value === '' ? [''].concat(p.options) : p.options;
+            // Report designer enums read as in Visual Studio ("Report Data Provider"); the value stays the enum name.
+            const spaced = !!(lastProps && /^AxReport/.test(lastProps.type));
             for (const o of options) {
                 const opt = document.createElement('option');
                 opt.value = o;
-                opt.textContent = o;
+                opt.textContent = spaced ? o.replace(/([a-z])([A-Z])/g, '$1 $2') : o;
                 opt.selected = o === p.value;
                 input.appendChild(opt);
             }

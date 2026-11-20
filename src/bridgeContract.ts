@@ -11,6 +11,7 @@ export const BridgeActions = [
     'list_packages', 'dump_element', 'complete_source', 'export_project', 'inspect_project_package', 'import_project', 'table_data_shape', 'analyze_performance', 'extension_compatibility', 'wrapper_drift', 'extension_collisions', 'checkpoint_entries', 'revert_checkpoint', 'best_practice', 'create_package', 'sync_tables', 'replace_references',
     'where_used', 'list_tags', 'tag_references', 'label_usage', 'element_dependencies',
     'project_references', 'add_reference', 'remove_reference',
+    'report_info', 'get_report_design', 'set_report_design', 'render_report', 'create_precision_design', 'add_report_data_region', 'report_datasource_schema', 'set_report_dataset_query',
 ] as const;
 
 export type BridgeAction = typeof BridgeActions[number];

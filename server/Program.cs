@@ -61,6 +61,7 @@ namespace XppVsCode.Server
                 DataShape = new TableDataShapeService(bridge),
                 Performance = new PerformanceAnalysisService(bridge),
                 Compatibility = new ExtensionCompatibilityService(bridge, bridge),
+                Reports = bridge,
                 AgentWrites = ActivityLog.Enabled ? bridge : null,
                 Checkpoints = allowData ? bridge : null,
             };

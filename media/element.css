@@ -84,6 +84,8 @@ table.props td { border-bottom: 1px solid var(--vscode-panel-border); padding: 2
 .prop-name.modified { color: var(--vscode-foreground); font-weight: 600; }
 .prop-name.modified::before { content: '\25CF'; margin-right: 4px; color: var(--vscode-gitDecoration-modifiedResourceForeground, var(--vscode-focusBorder)); font-size: 0.7em; vertical-align: middle; }
 tr.prop-category th { text-align: left; font-weight: 600; padding: 4px 6px 2px; background: var(--vscode-sideBarSectionHeader-background, transparent); border-bottom: 1px solid var(--vscode-panel-border); }
+tr.prop-object .twisty { background: none; border: none; color: inherit; padding: 0 2px 0 0; cursor: pointer; vertical-align: middle; }
+tr.prop-child .prop-name { padding-left: 22px; }
 .props-toolbar { display: flex; gap: 4px; align-items: center; padding: 4px 8px; border-bottom: 1px solid var(--vscode-panel-border); }
 .props-toolbar input[type=search] { flex: 1; min-width: 0; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); padding: 2px 4px; font: inherit; }
 .props-toolbar button.toggle { padding: 2px 4px; background: transparent; color: var(--vscode-icon-foreground); border: 1px solid transparent; }

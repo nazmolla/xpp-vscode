@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace XppVsCode.Server.Tools
@@ -352,6 +353,16 @@ namespace XppVsCode.Server.Tools
             string content = @"{ ""type"": ""text"", ""text"": """ + escaped + @""" }";
             string result = @"{ ""content"": [" + content + @"], ""isError"": " + (isError ? "true" : "false") + " }";
             return BuildResult(idToken, result);
+        }
+
+        /// <summary>A tool result with text and PNG images (MCP image content), for tools whose answer is a picture.</summary>
+        public static string BuildToolResultWithImages(string idToken, string text, IEnumerable<byte[]> pngImages)
+        {
+            var content = new StringBuilder(@"{ ""type"": ""text"", ""text"": """ + EscapeJsonString(text) + @""" }");
+            foreach (byte[] png in pngImages ?? Enumerable.Empty<byte[]>())
+                if (png != null && png.Length > 0)
+                    content.Append(@", { ""type"": ""image"", ""mimeType"": ""image/png"", ""data"": """).Append(Convert.ToBase64String(png)).Append(@""" }");
+            return BuildResult(idToken, @"{ ""content"": [" + content + @"], ""isError"": false }");
         }
     }
 }
