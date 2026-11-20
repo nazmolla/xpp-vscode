@@ -2052,6 +2052,327 @@
           "objectType"
         ]
       }
+    },
+    {
+      "name": "xpp_get_report_design",
+      "description": "Reads an SSRS report: its designs, datasets with fields and types, parameters, and for a precision design the page geometry, every report item with its position in mm on the page (as designed, before growth), layout warnings (body wider than the page, fonts the cloud doesn't have, items outside the body) and the RDL text to edit. Use before changing a report layout, and to learn how a standard report (Cheque_US, SalesInvoice, PurchPurchaseOrder) builds a layout.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reportName": {
+            "type": "string",
+            "description": "The report (AxReport)."
+          },
+          "designName": {
+            "type": "string",
+            "description": "The design. Default: the first design."
+          },
+          "includeRdl": {
+            "type": "boolean",
+            "description": "Include the RDL text. Default true; false for the summary only."
+          }
+        },
+        "required": [
+          "reportName"
+        ]
+      }
+    },
+    {
+      "name": "xpp_set_report_design",
+      "description": "Saves the RDL of a precision design (AxReportPrecisionDesign.Text) of a report in your model, through the metadata API, as Visual Studio's report designer does; creates the design when it doesn't exist. Images embedded in the RDL become the report's embedded images. Keep the RDL namespace of the design you read; positions and sizes take units (mm, cm, in, pt). Returns layout warnings. To change a standard report's layout (standard reports can't be changed in place), pass duplicateOf (the standard report) and modelName to copy it into your model under reportName first, with or without rdl. Build (xpp_build) compiles the report for deployment.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reportName": {
+            "type": "string",
+            "description": "The report (AxReport) in your model."
+          },
+          "designName": {
+            "type": "string",
+            "description": "The precision design to save or create."
+          },
+          "rdl": {
+            "type": "string",
+            "description": "The complete RDL document (<Report xmlns=\"http://schemas.microsoft.com/sqlserver/reporting/2016/01/reportdefinition\">...)."
+          },
+          "duplicateOf": {
+            "type": "string",
+            "description": "Copy this report (e.g. a standard SalesInvoice or Cheque_US) into your model as reportName first; its datasets keep using the standard data provider."
+          },
+          "modelName": {
+            "type": "string",
+            "description": "Your model for the copy; required with duplicateOf."
+          },
+          "fromAutoDesign": {
+            "type": "string",
+            "description": "Instead of rdl: create designName as a precision design from this auto design of the report, with Microsoft's report generator (Visual Studio's Create Precision Design). The auto design stays; start from it for a quick layout, then read and adjust the result."
+          }
+        },
+        "required": [
+          "reportName"
+        ]
+      }
+    },
+    {
+      "name": "xpp_render_report",
+      "description": "Renders a precision design with Microsoft's SSRS report engine (the engine behind the Report Viewer; same hard page layout as PDF and print) using sample or given data, and returns the pages as images, the item positions in mm and warnings. Labels resolve in the chosen language; D365FO report functions that need the environment are shown empty and named. Optionally writes a PDF. Needs the report preview runtime (VS Code command 'F&O Studio: Install Report Preview Runtime').",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reportName": {
+            "type": "string",
+            "description": "The report (AxReport)."
+          },
+          "designName": {
+            "type": "string",
+            "description": "The precision design. Default: the first design."
+          },
+          "rdl": {
+            "type": "string",
+            "description": "Render this RDL instead of the saved design (to try a change before saving it)."
+          },
+          "data": {
+            "type": "object",
+            "description": "Rows per dataset: {\"DatasetName\": [{\"Field\": value, ...}, ...]}. Use the values printed on the scanned sample so the layout shows real widths. Datasets left out get sampleRows generated rows (field names as text, 12345.67 for amounts)."
+          },
+          "sampleRows": {
+            "type": "number",
+            "description": "Generated rows for datasets without data. Default 1."
+          },
+          "parameters": {
+            "type": "object",
+            "description": "Report parameter values by name."
+          },
+          "language": {
+            "type": "string",
+            "description": "Label and format language, e.g. en-US. Default en-US."
+          },
+          "company": {
+            "type": "string",
+            "description": "AX_CompanyName for the preview. Default USMF."
+          },
+          "firstPage": {
+            "type": "number",
+            "description": "First page to return. Default 1."
+          },
+          "maxPages": {
+            "type": "number",
+            "description": "Pages to return as images, 1-4. Default 1."
+          },
+          "dpi": {
+            "type": "number",
+            "description": "Image resolution, 48-300. Default 96."
+          },
+          "pdfPath": {
+            "type": "string",
+            "description": "Also write the whole report as PDF to this path (.pdf, in an existing folder). An existing file is only replaced with overwrite true."
+          },
+          "includeItems": {
+            "type": "boolean",
+            "description": "List the items with their positions. Default true."
+          },
+          "overwrite": {
+            "type": "boolean",
+            "description": "Replace pdfPath when the file exists. Default false."
+          }
+        },
+        "required": [
+          "reportName"
+        ]
+      }
+    },
+    {
+      "name": "xpp_measure_image",
+      "description": "Measures a scanned or photographed form (PNG, JPEG, TIFF, BMP) for a precision report design: calibrates the scale (whole sheet of a paper size, scan dpi, or two reference points), straightens it, finds ruled lines and boxes, reads the text with Windows' built-in OCR (on this machine, nothing is uploaded) with each line's position and height, and returns a picture of the image or a cropped area with rulers and a millimetre grid. All positions are in mm from the sheet's top-left corner. Crop to an area for finer readings.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "imagePath": {
+            "type": "string",
+            "description": "Full path of the image (export a PDF page as a 300 dpi image first)."
+          },
+          "paper": {
+            "type": "string",
+            "description": "The scan shows the whole sheet of this size: Letter, Legal, A4, A5, Executive, or WIDTHxHEIGHT with mm, cm or in (e.g. 8.5x3.5in for a cheque). Default: from the image's dpi when it has one, else the paper size closest to the image's proportions."
+          },
+          "dpi": {
+            "type": "number",
+            "description": "The scan's resolution, when the image is not the whole sheet and has no dpi of its own."
+          },
+          "referencePoints": {
+            "type": "object",
+            "description": "Two points on the image (pixels) and their real distance in mm, e.g. the ends of a printed ruler or of a box edge you measured on the paper. Most precise for partial scans.",
+            "properties": {
+              "x1": {
+                "type": "number"
+              },
+              "y1": {
+                "type": "number"
+              },
+              "x2": {
+                "type": "number"
+              },
+              "y2": {
+                "type": "number"
+              },
+              "distanceMm": {
+                "type": "number"
+              }
+            }
+          },
+          "deskew": {
+            "type": "boolean",
+            "description": "Straighten a skewed scan (up to 3 degrees). Default true."
+          },
+          "language": {
+            "type": "string",
+            "description": "OCR language, e.g. en-US (Windows needs that OCR language installed). Default: the user's languages."
+          },
+          "crop": {
+            "type": "object",
+            "description": "Only this area, in mm: {x, y, width, height}; the picture zooms in with a finer grid.",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "width": {
+                "type": "number"
+              },
+              "height": {
+                "type": "number"
+              }
+            }
+          },
+          "gridMm": {
+            "type": "number",
+            "description": "Grid step in mm for the picture. Default by zoom (1, 2 or 5)."
+          },
+          "imageWidth": {
+            "type": "number",
+            "description": "Picture width in pixels, 600-2000. Default 1400."
+          },
+          "minLineMm": {
+            "type": "number",
+            "description": "Shortest ruled line to report, in mm. Default 10."
+          },
+          "ocr": {
+            "type": "boolean",
+            "description": "Read the text. Default true."
+          }
+        },
+        "required": [
+          "imagePath"
+        ]
+      }
+    },
+    {
+      "name": "xpp_compare_layout",
+      "description": "Compares a rendered report page with a scanned sample of the form: places the calibrated scan on the report's page, renders the design with Microsoft's report engine, and returns an overlay (scan ink red, report ink blue, both black) plus, for the words that read the same on both, the overall shift and each report textbox's offset in mm. Render with data that shows the values printed on the sample. Repeat after each change until every item is within tolerance.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "imagePath": {
+            "type": "string",
+            "description": "Full path of the scanned sample (whole sheet)."
+          },
+          "paper": {
+            "type": "string",
+            "description": "The scan shows the whole sheet of this size: Letter, Legal, A4, A5, Executive, or WIDTHxHEIGHT with mm, cm or in (e.g. 8.5x3.5in for a cheque). Default: from the image's dpi when it has one, else the paper size closest to the image's proportions."
+          },
+          "dpi": {
+            "type": "number",
+            "description": "Comparison resolution, 72-200. Default 120."
+          },
+          "scanDpi": {
+            "type": "number",
+            "description": "The scan's own resolution (dots per inch), when the image doesn't record it and you know it. Not needed with paper or referencePoints."
+          },
+          "referencePoints": {
+            "type": "object",
+            "description": "Two points on the image (pixels) and their real distance in mm, e.g. the ends of a printed ruler or of a box edge you measured on the paper. Most precise for partial scans.",
+            "properties": {
+              "x1": {
+                "type": "number"
+              },
+              "y1": {
+                "type": "number"
+              },
+              "x2": {
+                "type": "number"
+              },
+              "y2": {
+                "type": "number"
+              },
+              "distanceMm": {
+                "type": "number"
+              }
+            }
+          },
+          "deskew": {
+            "type": "boolean",
+            "description": "Straighten a skewed scan (up to 3 degrees). Default true."
+          },
+          "language": {
+            "type": "string",
+            "description": "Label language of the render and OCR language of both images, e.g. en-US."
+          },
+          "reportName": {
+            "type": "string",
+            "description": "The report (AxReport)."
+          },
+          "designName": {
+            "type": "string",
+            "description": "The precision design. Default: the first design."
+          },
+          "rdl": {
+            "type": "string",
+            "description": "Render this RDL instead of the saved design (to try a change before saving it)."
+          },
+          "data": {
+            "type": "object",
+            "description": "Rows per dataset: {\"DatasetName\": [{\"Field\": value, ...}, ...]}. Use the values printed on the scanned sample so the layout shows real widths. Datasets left out get sampleRows generated rows (field names as text, 12345.67 for amounts)."
+          },
+          "sampleRows": {
+            "type": "number",
+            "description": "Generated rows for datasets without data. Default 1."
+          },
+          "parameters": {
+            "type": "object",
+            "description": "Report parameter values by name."
+          },
+          "company": {
+            "type": "string",
+            "description": "AX_CompanyName for the preview. Default USMF."
+          },
+          "page": {
+            "type": "number",
+            "description": "Report page to compare. Default 1."
+          },
+          "toleranceMm": {
+            "type": "number",
+            "description": "Offsets up to this are reported as ok. Default 0.5."
+          },
+          "scanOffsetMm": {
+            "type": "object",
+            "description": "Where the scan's top-left corner sits on the page, in mm, when the scan does not start at the sheet's corner: {x, y}.",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "required": [
+          "imagePath",
+          "reportName"
+        ]
+      }
     }
   ]
 }

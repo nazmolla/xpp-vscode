@@ -38,6 +38,12 @@ namespace XppVsCode.Server.MetaModel
             ["AxDataEntityView"] = new[] { "ViewMetadata", "DataSources", "Fields", "FieldGroups", "Keys", "Relations", "Ranges", "DeleteActions", "StateMachines", "Mappings", "Methods" },
             ["AxForm"] = new[] { "Methods", "DataSources", "Parts", "Design" },
             ["AxEdtString"] = new[] { "ArrayElements", "Relations", "TableReferences" },
+            ["AxReportTable"] = new[] { "Groupings", "Sorting", "Filters", "Data" },
+            ["AxReportList"] = new[] { "Groupings", "Sorting", "Filters", "Data" },
+            ["AxReportMatrix"] = new[] { "RowGroupings", "ColumnGroupings", "Filters", "Data" },
+            ["AxReportChart"] = new[] { "Series", "Filters", "Data" },
+            ["AxReport"] = new[] { "DataSets", "Designs", "EmbeddedImages", "DefaultParameterGroup" },
+            ["AxReportDataSet"] = new[] { "Fields", "FieldGroups", "Parameters" },
         };
 
         private static string[] NodeOrderFor(Type type)
@@ -56,15 +62,50 @@ namespace XppVsCode.Server.MetaModel
             (collection == "Methods" && owner.Name.StartsWith("AxClass", StringComparison.Ordinal))
             || (collection == "EnumValues" && owner.Name.StartsWith("AxEnum", StringComparison.Ordinal))
             || (collection == "ViewMetadata" && owner.Name.StartsWith("AxDataEntityView", StringComparison.Ordinal))
-            || (collection == "Controls" && owner.Name.StartsWith("AxForm", StringComparison.Ordinal));
+            || (collection == "Controls" && owner.Name.StartsWith("AxForm", StringComparison.Ordinal))
+            // Reports as Visual Studio: data regions directly under the auto design, fields directly under Data.
+            || (collection == "DataRegions" && owner.Name == "AxReportAutoDesign")
+            || (collection == "DetailData" && owner.Name == "AxReportTableData")
+            || (collection == "Fields" && owner.Name == "AxReportListData")
+            // The report's Parameters node lists the default parameter group's parameters.
+            || (collection == "ReportParameterBases" && owner.Name == "AxReportParameterGroup");
 
         // Collections the designer tree leaves out, like Visual Studio (they stay in metadata dumps and compares).
         private static bool HiddenTreeNode(Type owner, string collection, List<string> path) =>
             (collection == "Implements" && owner.Name.StartsWith("AxClass", StringComparison.Ordinal))
-            || (collection == "Methods" && path.Count == 1 && path[0] == "ViewMetadata");
+            || (collection == "Methods" && path.Count == 1 && path[0] == "ViewMetadata")
+            || (collection == "DisableIndividualTransformation" && owner.Name.StartsWith("AxReport", StringComparison.Ordinal))
+            // Visual Studio's report designer has no Data Methods node (legacy; they stay in the metadata).
+            || (collection == "DataMethods" && owner.Name == "AxReport");
 
-        private static string TreeLabel(Type owner, string collection) =>
-            collection == "Relations" && owner.Name.StartsWith("AxEdt", StringComparison.Ordinal) ? "Table Relations" : SplitWords(collection);
+        // Properties Visual Studio's Properties window doesn't show: a precision design's Text is its whole RDL (edited in the Report Designer).
+        private static bool HiddenProperty(Type owner, string property) =>
+            property == "Text" && owner.Name == "AxReportPrecisionDesign";
+
+        private static readonly HashSet<string> ReportNodeObjects = new HashSet<string>(StringComparer.Ordinal) { "Data", "Header", "Footer", "DefaultParameterGroup" };
+
+        /// <summary>
+        /// Report sub-objects (page size, margin, padding, style, aggregation...) are expandable properties in Visual Studio,
+        /// not tree nodes: their properties are listed as "PageSize.Width" in the parent's Properties grid.
+        /// </summary>
+        private static bool ReportSubObject(Type owner, PropertyInfo prop) =>
+            owner.Name.StartsWith("AxReport", StringComparison.Ordinal) && !ReportNodeObjects.Contains(prop.Name)
+            && prop.PropertyType != typeof(string) && !typeof(IEnumerable).IsAssignableFrom(prop.PropertyType) && prop.PropertyType.IsClass
+            && HasAttribute(prop, "AxCollectionPropertyAttribute");
+
+        private static string TreeLabel(Type owner, string collection)
+        {
+            if (collection == "Relations" && owner.Name.StartsWith("AxEdt", StringComparison.Ordinal)) return "Table Relations";
+            // Visual Studio's report designer labels.
+            if (owner.Name == "AxReport")
+            {
+                if (collection == "DataSets") return "Datasets";
+                if (collection == "EmbeddedImages") return "Images";
+                if (collection == "DefaultParameterGroup") return "Parameters";
+            }
+            if (collection == "Sorting" && (owner.Name == "AxReportTable" || owner.Name == "AxReportList")) return "Sortings";
+            return SplitWords(collection);
+        }
 
         private string _elementCacheKey;
         private object _elementCacheObject;
@@ -149,6 +190,25 @@ namespace XppVsCode.Server.MetaModel
             object node = WalkElementPath(element, path, out string error);
             if (node == null)
                 return json.Serialize(Failure(error));
+
+            // "PageSize.Width": a property of a report sub-object, created when the report doesn't have it yet.
+            int dot = property.IndexOf('.');
+            if (dot > 0)
+            {
+                var subProp = node.GetType().GetProperty(property.Substring(0, dot), BindingFlags.Public | BindingFlags.Instance);
+                if (subProp == null || !ReportSubObject(node.GetType(), subProp))
+                    return json.Serialize(Failure("'" + property + "' is not an editable property of " + node.GetType().Name + "."));
+                object sub = subProp.GetValue(node);
+                if (sub == null)
+                {
+                    sub = subProp.PropertyType.GetConstructor(Type.EmptyTypes) != null ? Activator.CreateInstance(subProp.PropertyType) : null;
+                    if (sub == null || !subProp.CanWrite)
+                        return json.Serialize(Failure("'" + property + "' can't be set here."));
+                    subProp.SetValue(node, sub);
+                }
+                node = sub;
+                property = property.Substring(dot + 1);
+            }
 
             var prop = node.GetType().GetProperty(property, BindingFlags.Public | BindingFlags.Instance);
             if (prop == null || !prop.CanWrite || !IsDesignerProperty(prop) || prop.Name == "Name")
@@ -263,7 +323,7 @@ namespace XppVsCode.Server.MetaModel
                 catch { continue; }
 
                 var childPath = new List<string>(path) { prop.Name };
-                if (HiddenTreeNode(obj.GetType(), prop.Name, path)) continue;
+                if (HiddenTreeNode(obj.GetType(), prop.Name, path) || ReportSubObject(obj.GetType(), prop)) continue;
                 if (value is IEnumerable items && !(value is string))
                 {
                     var folder = new List<object>();
@@ -299,7 +359,7 @@ namespace XppVsCode.Server.MetaModel
                 }
                 else if (value != null)
                 {
-                    var itemNode = ElementNode(value, SplitWords(prop.Name), value.GetType().Name, childPath, "item", ref count);
+                    var itemNode = ElementNode(value, TreeLabel(obj.GetType(), prop.Name), value.GetType().Name, childPath, "item", ref count);
                     if (InlineFolder(obj.GetType(), prop.Name)) itemNode["inline"] = true;
                     children.Add(itemNode);
                 }
@@ -336,57 +396,155 @@ namespace XppVsCode.Server.MetaModel
 
         private List<Dictionary<string, object>> DescribeProperties(object node)
         {
+            if (node.GetType().Name.StartsWith("AxReport", StringComparison.Ordinal))
+                return DescribeReportProperties(node);
             var result = new List<Dictionary<string, object>>();
             object defaults = DefaultInstance(node.GetType());
             foreach (var prop in PublicProperties(node.GetType())
-                .Where(p => p.GetIndexParameters().Length == 0 && (IsDesignerProperty(p) || p.Name == "Name"))
+                .Where(p => p.GetIndexParameters().Length == 0 && (IsDesignerProperty(p) || p.Name == "Name") && !HiddenProperty(node.GetType(), p.Name))
                 .GroupBy(p => p.Name).Select(g => g.First())
                 .OrderBy(p => p.Name == "Name" ? 0 : 1).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
             {
-                object value;
-                try { value = prop.GetValue(node); }
-                catch { continue; }
-
-                Type type = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
-                string kind = type.IsEnum ? "enum"
-                    : type == typeof(bool) ? "bool"
-                    : type == typeof(string) ? "string"
-                    : IsNumeric(type) ? "number"
-                    : "other";
-                var entry = new Dictionary<string, object>
-                {
-                    ["name"] = prop.Name,
-                    ["value"] = FormatValue(value),
-                    ["kind"] = kind,
-                    ["readOnly"] = !prop.CanWrite || kind == "other" || prop.Name == "Name",
-                    ["category"] = PropertyCategory(prop),
-                };
-                string description = AttributeText(prop, "DescriptionAttribute");
-                if (!string.IsNullOrEmpty(description))
-                    entry["description"] = description;
-                if (defaults != null && prop.Name != "Name")
-                {
-                    try { entry["modified"] = FormatValue(value) != FormatValue(prop.GetValue(defaults)); }
-                    catch { }
-                }
-                if (type.IsEnum)
-                    entry["options"] = Enum.GetNames(type);
-                else if (type == typeof(bool))
-                    entry["options"] = new[] { "False", "True" };
-                if (value is string text && text.StartsWith("@", StringComparison.Ordinal))
-                    entry["resolved"] = ResolveLabel(text);
-                if (value is string target && kind == "string")
-                {
-                    var reference = PropertyReference(node, prop.Name, target, out string key);
-                    if (reference != null)
-                    {
-                        reference["key"] = key;
-                        entry["reference"] = reference;
-                    }
-                }
-                result.Add(entry);
+                var entry = DescribeProperty(node, prop, defaults, null);
+                if (entry != null) result.Add(entry);
             }
             return result;
+        }
+
+        private sealed class VsProperty
+        {
+            public string Display;
+            public string Category;
+            public bool Shown;
+        }
+
+        private static Dictionary<string, VsProperty> _vsReportProperties;
+
+        /// <summary>Visual Studio's report designer table (Resources/ReportDesignerProperties.txt): "Class/Property" without "Ax".</summary>
+        private static Dictionary<string, VsProperty> VsReportProperties()
+        {
+            if (_vsReportProperties != null) return _vsReportProperties;
+            var table = new Dictionary<string, VsProperty>(StringComparer.Ordinal);
+            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("XppVsCode.Server.ReportDesignerProperties.txt"))
+                if (stream != null)
+                    using (var reader = new System.IO.StreamReader(stream))
+                        for (string line; (line = reader.ReadLine()) != null;)
+                        {
+                            var cols = line.Split('\t');
+                            if (cols.Length < 5 || line.StartsWith("#", StringComparison.Ordinal)) continue;
+                            table[cols[0] + "/" + cols[1]] = new VsProperty { Display = cols[2], Category = cols[3], Shown = cols[4] == "shown" };
+                        }
+            return _vsReportProperties = table;
+        }
+
+        /// <summary>The property as Visual Studio's report designer shows it, looked up on the type and its report base types.</summary>
+        private static VsProperty VsReportProperty(Type owner, string property)
+        {
+            var table = VsReportProperties();
+            for (Type t = owner; t != null && t.Name.StartsWith("AxReport", StringComparison.Ordinal); t = t.BaseType)
+                if (table.TryGetValue(t.Name.Substring(2) + "/" + property, out var found)) return found;
+            // Name and Tags come from the designer's shared base class; Visual Studio lists them under Data.
+            if (property == "Name" || property == "Tags") return new VsProperty { Display = property, Category = "Data", Shown = true };
+            return null;
+        }
+
+        /// <summary>
+        /// Report nodes as Visual Studio's Properties window shows them: its display names and categories, only the properties it
+        /// shows, and sub-objects (Page Size, Margin, Padding, Style...) as expandable rows under Misc with their own properties.
+        /// </summary>
+        private List<Dictionary<string, object>> DescribeReportProperties(object node)
+        {
+            var result = new List<Dictionary<string, object>>();
+            Type type = node.GetType();
+            object defaults = DefaultInstance(type);
+            foreach (var prop in PublicProperties(type)
+                .Where(p => p.GetIndexParameters().Length == 0 && (IsDesignerProperty(p) || p.Name == "Name"))
+                .GroupBy(p => p.Name).Select(g => g.First()))
+            {
+                var vs = VsReportProperty(type, prop.Name);
+                if (vs == null || !vs.Shown) continue;
+                var entry = DescribeProperty(node, prop, defaults, null);
+                if (entry == null) continue;
+                entry["label"] = vs.Display;
+                entry["category"] = vs.Category;
+                result.Add(entry);
+            }
+            foreach (var sub in PublicProperties(type).Where(p => p.GetIndexParameters().Length == 0 && ReportSubObject(type, p))
+                .GroupBy(p => p.Name).Select(g => g.First()))
+            {
+                object value;
+                try { value = sub.GetValue(node) ?? DefaultInstance(sub.PropertyType); }
+                catch { continue; }
+                if (value == null) continue;
+                object subDefaults = DefaultInstance(sub.PropertyType);
+                var children = new List<Dictionary<string, object>>();
+                foreach (var prop in PublicProperties(sub.PropertyType)
+                    .Where(p => p.GetIndexParameters().Length == 0 && IsDesignerProperty(p) && p.Name != "Name" && p.Name != "Tags")
+                    .GroupBy(p => p.Name).Select(g => g.First()))
+                {
+                    var vs = VsReportProperty(sub.PropertyType, prop.Name);
+                    if (vs != null && !vs.Shown) continue;
+                    var entry = DescribeProperty(value, prop, subDefaults, sub.Name);
+                    if (entry == null) continue;
+                    entry["label"] = vs?.Display ?? SplitWords(prop.Name);
+                    entry["category"] = "Misc";
+                    entry["parent"] = sub.Name;
+                    children.Add(entry);
+                }
+                result.Add(new Dictionary<string, object>
+                {
+                    ["name"] = sub.Name, ["label"] = SplitWords(sub.Name), ["value"] = "", ["kind"] = "object", ["readOnly"] = true,
+                    ["category"] = "Misc", ["modified"] = children.Any(c => c.TryGetValue("modified", out object m) && m is bool b && b),
+                });
+                result.AddRange(children.OrderBy(c => (string)c["label"], StringComparer.OrdinalIgnoreCase));
+            }
+            return result.OrderBy(e => e.ContainsKey("parent") ? 1 : 0).ThenBy(e => (string)e["label"], StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        private Dictionary<string, object> DescribeProperty(object node, PropertyInfo prop, object defaults, string prefix)
+        {
+            object value;
+            try { value = prop.GetValue(node); }
+            catch { return null; }
+
+            Type type = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+            string kind = type.IsEnum ? "enum"
+                : type == typeof(bool) ? "bool"
+                : type == typeof(string) ? "string"
+                : IsNumeric(type) ? "number"
+                : "other";
+            var entry = new Dictionary<string, object>
+            {
+                ["name"] = prefix == null ? prop.Name : prefix + "." + prop.Name,
+                ["value"] = FormatValue(value),
+                ["kind"] = kind,
+                ["readOnly"] = !prop.CanWrite || kind == "other" || prop.Name == "Name",
+                ["category"] = prefix == null ? PropertyCategory(prop) : SplitWords(prefix),
+            };
+            string description = AttributeText(prop, "DescriptionAttribute");
+            if (!string.IsNullOrEmpty(description))
+                entry["description"] = description;
+            if (defaults != null && prop.Name != "Name")
+            {
+                try { entry["modified"] = FormatValue(value) != FormatValue(prop.GetValue(defaults)); }
+                catch { }
+            }
+            if (type.IsEnum)
+                entry["options"] = Enum.GetNames(type);
+            else if (type == typeof(bool))
+                entry["options"] = new[] { "False", "True" };
+            if (value is string text && text.StartsWith("@", StringComparison.Ordinal))
+                entry["resolved"] = ResolveLabel(text);
+            if (prefix == null && value is string target && kind == "string")
+            {
+                var reference = PropertyReference(node, prop.Name, target, out string key);
+                if (reference != null)
+                {
+                    reference["key"] = key;
+                    entry["reference"] = reference;
+                }
+            }
+            return entry;
         }
 
         /// <summary>

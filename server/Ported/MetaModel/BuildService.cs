@@ -236,6 +236,25 @@ namespace XppVsCode.Server.MetaModel
             var blocking = diagnostics.Where(d => IsBlocking(d.Severity)).ToList();
             bool success = exit == 0 && blocking.Count == 0 && assemblyWritten;
 
+            // As Visual Studio: reports compile to <package>\Reports\*.rdl after X++, which the AOS reads at run time.
+            string reportNote = null;
+            if (success)
+            {
+                var reportLog = new StringBuilder();
+                bool hasReports = Host.ReportCompiler.ReportNames(packageFolder).Count > 0;
+                int reportExit = Host.ReportCompiler.Compile(config, package, packageFolder, logDir, reportLog, out string reportXml);
+                var reportDiagnostics = hasReports && File.Exists(reportXml) ? ParseBuildDiagnostics(reportXml).Where(d => !string.Equals(d.Severity, "Informational", StringComparison.OrdinalIgnoreCase)).ToList() : new List<BuildDiagnostic>();
+                foreach (var d in reportDiagnostics.Where(d => d.ObjectType == null)) { d.ObjectType = "AxReport"; d.ObjectName = ReportNameOf(d.Message); }
+                diagnostics.AddRange(reportDiagnostics);
+                blocking.AddRange(reportDiagnostics.Where(d => IsBlocking(d.Severity)));
+                success = reportExit == 0 && blocking.Count == 0;
+                if (hasReports)
+                    reportNote = reportExit == 0 ? "Reports compiled to " + Path.Combine(packageFolder, "Reports") + "."
+                        : "Report compilation (reportsc) exited with " + reportExit + ".\n" + Tail(reportLog.ToString(), 2000);
+                else if (reportLog.Length > 0)
+                    reportNote = reportLog.ToString().TrimEnd();
+            }
+
             HashSet<string> projectKeys = null;
             if (projectOnly)
                 projectKeys = new HashSet<string>(project.GetItems().Select(i => i.ObjectType + "/" + i.Name), StringComparer.OrdinalIgnoreCase);
@@ -263,6 +282,8 @@ namespace XppVsCode.Server.MetaModel
                 text.AppendLine("... " + (lines.Count - MaxReportedDiagnostics) + " more in " + xmlLog);
             if (!success && blocking.Count == 0)
                 text.AppendLine(Tail(log.ToString(), 2000));
+            if (reportNote != null)
+                text.AppendLine(reportNote);
 
             if (syncDatabase)
                 text.AppendLine(success ? SyncDatabase(config, package, log) : "Database sync skipped because the build failed.");
@@ -281,6 +302,13 @@ namespace XppVsCode.Server.MetaModel
 
         private static bool IsBlocking(string severity) =>
             string.Equals(severity, "Error", StringComparison.OrdinalIgnoreCase) || string.Equals(severity, "Fatal", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>reportsc's messages name the report ("... report MyReport ..."); its diagnostics carry no path.</summary>
+        private static string ReportNameOf(string message)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(message ?? "", @"report '?(\w+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            return match.Success ? match.Groups[1].Value : null;
+        }
 
         private static string FormatDiagnostic(BuildDiagnostic d)
         {

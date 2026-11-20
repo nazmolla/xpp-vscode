@@ -23,6 +23,7 @@ namespace XppVsCode.Server.MetaModel
         private readonly ITableDataShape _dataShape;
         private readonly IPerformanceAnalysis _performance;
         private readonly IExtensionCompatibility _compatibility;
+        private readonly IReportDesigns _reports;
         private readonly object _gate = new object();
 
         private static readonly string BridgeLogPath =
@@ -54,6 +55,7 @@ namespace XppVsCode.Server.MetaModel
             _dataShape = services.DataShape ?? throw new ArgumentNullException(nameof(services.DataShape));
             _performance = services.Performance ?? throw new ArgumentNullException(nameof(services.Performance));
             _compatibility = services.Compatibility ?? throw new ArgumentNullException(nameof(services.Compatibility));
+            _reports = services.Reports ?? throw new ArgumentNullException(nameof(services.Reports));
             _policy = services.Policy ?? throw new ArgumentNullException(nameof(services.Policy));
             _agentWrites = services.AgentWrites;
             _checkpoints = services.Checkpoints;
@@ -111,6 +113,13 @@ namespace XppVsCode.Server.MetaModel
         }
 
         private static string Str(string body, string key) => ExtractJsonString(body, key);
+
+        /// <summary>A string member read with a full JSON parser (long texts such as RDL, with every escape).</summary>
+        private static string FullString(string body, string key)
+        {
+            var values = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue }.Deserialize<Dictionary<string, object>>(body ?? "{}");
+            return values != null && values.TryGetValue(key, out object value) ? value as string : null;
+        }
         private static string[] Strings(string body, string key) => ExtractJsonStringArray(body, key);
         private static bool Flag(string body, string key) => "true".Equals(ExtractJsonString(body, key), StringComparison.OrdinalIgnoreCase);
         private static bool IsProjectScope(string body) => string.Equals(ExtractJsonString(body, "scope"), "project", StringComparison.OrdinalIgnoreCase);
@@ -177,6 +186,25 @@ namespace XppVsCode.Server.MetaModel
             a.Add("extension_compatibility", b => _compatibility.ExtensionCompatibilityJson(Str(b, "modelName")));
             a.Add("wrapper_drift", b => _compatibility.WrapperDriftJson(Str(b, "modelName"), Str(b, "previousFolder")));
             a.Add("extension_collisions", b => _compatibility.ExtensionCollisionsJson(Str(b, "modelName")));
+
+            // Reports: designs, precision design text (RDL) and the local preview
+            a.Add("report_info", b => _reports.ReportInfoJson(Str(b, "reportName")));
+            a.Add("get_report_design", b => _reports.GetReportDesignJson(Str(b, "reportName"), Str(b, "designName")));
+            // objectType AxReport / objectName = the report, so the write policy checks the report belongs to a custom model.
+            a.Add("set_report_design", WriteKind.Edit, b => !string.Equals(Str(b, "objectType"), "AxReport", StringComparison.Ordinal)
+                ? SerializeResult(new MetaModelResult { Success = false, Message = "set_report_design needs objectType AxReport and objectName (the report)." })
+                : _reports.SetReportDesignJson(Str(b, "objectName"), Str(b, "designName"), FullString(b, "rdl")));
+            a.Add("render_report", b => _reports.RenderReportJson(b));
+            a.Add("create_precision_design", WriteKind.Edit, b => !string.Equals(Str(b, "objectType"), "AxReport", StringComparison.Ordinal)
+                ? SerializeResult(new MetaModelResult { Success = false, Message = "create_precision_design needs objectType AxReport and objectName (the report)." })
+                : _reports.CreatePrecisionDesignJson(Str(b, "objectName"), Str(b, "designName"), Str(b, "newDesignName")));
+            a.Add("add_report_data_region", WriteKind.Edit, b => !string.Equals(Str(b, "objectType"), "AxReport", StringComparison.Ordinal)
+                ? SerializeResult(new MetaModelResult { Success = false, Message = "add_report_data_region needs objectType AxReport and objectName (the report)." })
+                : _reports.AddReportDataRegionJson(Str(b, "objectName"), Str(b, "designName"), Str(b, "dataSet"), Str(b, "layout")));
+            a.Add("report_datasource_schema", b => _reports.ReportDataSourceSchemaJson(Str(b, "dataSourceType"), Str(b, "source")));
+            a.Add("set_report_dataset_query", WriteKind.Edit, b => !string.Equals(Str(b, "objectType"), "AxReport", StringComparison.Ordinal)
+                ? SerializeResult(new MetaModelResult { Success = false, Message = "set_report_dataset_query needs objectType AxReport and objectName (the report)." })
+                : _reports.SetReportDataSetQueryJson(Str(b, "objectName"), Str(b, "dataSet"), Str(b, "dataSourceType"), Str(b, "source"), Strings(b, "fields")));
 
             // The agent's checkpoints
             a.Add("checkpoint_entries", b => _checkpoints == null ? NotAvailable : _checkpoints.CheckpointEntriesJson(Str(b, "id")));

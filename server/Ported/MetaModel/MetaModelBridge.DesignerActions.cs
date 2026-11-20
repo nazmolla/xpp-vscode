@@ -63,6 +63,12 @@ namespace XppVsCode.Server.MetaModel
 
             object item = Activator.CreateInstance(type);
             type.GetProperty("Name")?.SetValue(item, name);
+            // As Visual Studio: a new precision design starts as an empty page the report designer opens.
+            if (item is AxReportPrecisionDesign precision && string.IsNullOrEmpty(precision.Text))
+                precision.Text = XppVsCode.Server.Host.Reports.RdlPreview.BlankDesign;
+            // As Visual Studio: a new dataset has dynamic filters off until the developer turns them on.
+            if (item is AxReportDataSet newDataSet)
+                newDataSet.DynamicFilters = false;
             if (properties != null)
             {
                 foreach (var kvp in properties)
@@ -283,7 +289,9 @@ namespace XppVsCode.Server.MetaModel
         private static Dictionary<string, object> DescribeCollection(string[] path, Type itemType)
         {
             var types = MetadataTypes()
-                .Where(t => itemType.IsAssignableFrom(t) && !t.IsAbstract && t.IsPublic && t.GetConstructor(Type.EmptyTypes) != null)
+                .Where(t => itemType.IsAssignableFrom(t) && !t.IsAbstract && t.IsPublic && t.GetConstructor(Type.EmptyTypes) != null
+                    // Designs: Visual Studio offers Auto Design and Precision Design, not the base class.
+                    && t.Name != "AxReportDesign")
                 .Select(t => new Dictionary<string, object> { ["typeName"] = t.Name, ["label"] = TypeLabel(t, itemType), ["hasDataField"] = t.GetProperty("DataField") != null })
                 .OrderBy(t => (string)t["label"], StringComparer.OrdinalIgnoreCase)
                 .ToList();
@@ -299,6 +307,9 @@ namespace XppVsCode.Server.MetaModel
         {
             if (type == baseType)
                 return SplitWords(type.Name.StartsWith("Ax", StringComparison.Ordinal) ? type.Name.Substring(2) : type.Name);
+            // Report nodes as Visual Studio's New menu names them: Auto Design, Precision Design, Table, List...
+            if (type.Name.StartsWith("AxReport", StringComparison.Ordinal) && type.Name.Length > "AxReport".Length)
+                return SplitWords(type.Name.Substring("AxReport".Length));
             string name = type.Name;
             // AxTableFieldString under AxTableField -> "String"; AxFormStringControl under AxFormControl -> "String".
             string prefix = baseType.Name.EndsWith("Control", StringComparison.Ordinal) ? baseType.Name.Substring(0, baseType.Name.Length - "Control".Length) : baseType.Name;

@@ -131,6 +131,29 @@ const markup = '<?xml version="1.0"?>';
     r = await bridge('remove_reference', { modelName: 'ApplicationSuite', objectType: 'AxReference', objectName: 'Microsoft.Dynamics.AX.Xpp.Support', name: 'Microsoft.Dynamics.AX.Xpp.Support' });
     verdict('D39', 'remove_reference refuses a standard model', !ok(r), msgOf(r));
 
+    // Reports: designs of standard reports are never written; files are read and written only where the caller may.
+    const notRdl = '<NotAReport/>';
+    r = await bridge('set_report_design', { objectType: 'AxReport', objectName: 'Cheque_US', designName: 'Report', rdl: notRdl });
+    verdict('D40', 'set_report_design refuses a standard report', guarded(r), msgOf(r));
+    r = await bridge('set_report_design', { objectType: 'AxClass', objectName: 'Global', designName: 'Report', rdl: notRdl });
+    verdict('D41', 'set_report_design refuses a non-report target', !ok(r), msgOf(r));
+    t = await tool('xpp_set_report_design', { reportName: 'XvsDastCheque', duplicateOf: 'Cheque_US', modelName: 'Foundation' });
+    verdict('D42', 'MCP xpp_set_report_design does not copy into a standard model', /can't|not one of your custom models/i.test(t.text), t.text);
+    const xxe = '<?xml version="1.0"?><!DOCTYPE r [<!ENTITY x SYSTEM "file:///C:/Windows/win.ini">]><Report xmlns="http://schemas.microsoft.com/sqlserver/reporting/2016/01/reportdefinition">&x;</Report>';
+    r = await bridge('render_report', { reportName: 'Cheque_US', rdl: xxe });
+    verdict('D43', 'render_report refuses DTDs (no external entities read)', !ok(r) && !/fonts|extensions|16-bit/i.test(msgOf(r)), msgOf(r));
+    t = await tool('xpp_measure_image', { imagePath: 'C:\\Windows\\win.ini' });
+    verdict('D44', 'xpp_measure_image reads images only', /must be a PNG/i.test(t.text), t.text);
+    t = await tool('xpp_measure_image', { imagePath: '\\\\127.0.0.1\\c$\\Windows\\Web\\Screen\\img100.png' });
+    verdict('D45', 'xpp_measure_image refuses network paths', /network path/i.test(t.text), t.text);
+    const existingPdf = path.join(require('os').tmpdir(), 'xvs-dast-existing.pdf');
+    fs.writeFileSync(existingPdf, 'keep');
+    r = await bridge('render_report', { reportName: 'Cheque_US', pdfPath: existingPdf });
+    verdict('D46', 'render_report does not overwrite an existing file unasked', !ok(r) && fs.readFileSync(existingPdf, 'utf8') === 'keep', msgOf(r));
+    fs.rmSync(existingPdf, { force: true });
+    r = await bridge('render_report', { reportName: 'Cheque_US', pdfPath: '\\\\127.0.0.1\\c$\\xvs.pdf' });
+    verdict('D47', 'render_report refuses a network PDF path', !ok(r) && /network path/i.test(msgOf(r)), msgOf(r));
+
     // Agent tools: SQL injection, regex time-outs, URL allow-list.
     t = await tool('xpp_find_references', { objectType: 'AxTable', objectName: "CustTable' OR 1=1 --" });
     verdict('D25', 'xpp_find_references treats SQL as data', !/syntax|SqlException|incorrect/i.test(t.text), t.text);

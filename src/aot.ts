@@ -106,7 +106,7 @@ export function elementContextValue(objectType: string, isCustom = false): strin
         objectType === 'AxClass' || objectType === 'AxTable' ? 'hier' : '', objectType === 'AxClass' ? 'class' : '',
         objectType.startsWith('AxMenuItem') ? 'menuitem' : '', objectType === 'AxDataEntityView' ? 'entity' : '', objectType === 'AxService' ? 'service' : '',
         objectType === 'AxSecurityRole' ? 'role' : '', objectType === 'AxSecurityDuty' ? 'duty' : '',
-        objectType === 'AxSecurityPrivilege' ? 'privilege' : '',
+        objectType === 'AxSecurityPrivilege' ? 'privilege' : '', objectType === 'AxReport' ? 'report' : '',
         ExtensionBaseTypes[objectType] ? 'ext' : '', ElementIntrinsics[objectType] ? 'xstr' : '',
         isCustom ? 'custom' : '',
     ].filter(Boolean).join(' ');

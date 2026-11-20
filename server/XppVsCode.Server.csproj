@@ -29,6 +29,9 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <!-- Report preview: compiled against Microsoft's Report Viewer runtime, never shipped. The extension downloads it after the
+         user accepts Microsoft's licence and the server loads it only when its files match Host/Reports/ReportRuntime.cs. -->
+    <PackageReference Include="Microsoft.ReportingServices.ReportViewerControl.Winforms" Version="150.1652.0" ExcludeAssets="runtime" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
@@ -39,9 +42,13 @@
     <EmbeddedResource Include="Resources\XppCopilotSystemPrompt.txt" LogicalName="XppVsCode.Server.SystemPrompt.txt" />
     <EmbeddedResource Include="Resources\XppCopilotGuide.txt" LogicalName="XppVsCode.Server.Guide.txt" />
     <EmbeddedResource Include="Resources\Tools.json" LogicalName="XppVsCode.Server.Tools.json" />
+    <EmbeddedResource Include="Resources\ReportFonts.txt" LogicalName="XppVsCode.Server.ReportFonts.txt" />
+    <EmbeddedResource Include="Resources\ReportDesignerProperties.txt" LogicalName="XppVsCode.Server.ReportDesignerProperties.txt" />
   </ItemGroup>
 
   <ItemGroup>
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Web.Extensions" />
     <Reference Include="System.Data" />
     <Reference Include="System.IO.Compression" />

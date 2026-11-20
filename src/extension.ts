@@ -43,6 +43,7 @@ import { addNumberSequence, newBusinessEvent, newFeature } from './scaffolding/l
 import { exportLabels, findUnusedLabels, importLabels, translateMissingLabels } from './labels';
 import { linkWorkItem, openPipelines, openWorkItem } from './devops';
 import { registerTraceAnalyzer } from './traceAnalyzer';
+import { registerReportDesigner } from './reports/reportDesigner';
 import { registerReferenceCommands } from './references';
 import { clrDefinition, clrHover, clrIndex, CSharpToXppDefinitions } from './clrNavigation';
 import { XppRename } from './rename';
@@ -327,6 +328,7 @@ export function activate(context: vscode.ExtensionContext): void {
     command('xpp.devops.openWorkItem', (id?: number) => openWorkItem(typeof id === 'number' ? id : undefined));
     command('xpp.devops.openPipelines', () => openPipelines());
     registerTraceAnalyzer(context, command, server);
+    registerReportDesigner(context, command, server);
     registerReferenceCommands(command, server, projects, buildOutput, () => projectTree.refresh());
     command('xpp.syncTables', async (arg?: ElementRef, selected?: ElementRef[]) => {
         const picked = (selected?.length ? selected : arg ? [arg] : []).map(a => treeElementOf(a)).filter(e => e?.objectType === 'AxTable');

@@ -10,6 +10,7 @@ import { discoverLocalAos, restartLocalAos } from './localAos';
 import { packageFolders } from './packageStore';
 import { convertPackagePdbs } from './portablePdb';
 import { readProject } from './project';
+import { reportCompilerArgs } from './reports/reportCompiler';
 import { compilerLineToDocumentLine } from './xppSource';
 
 /** The package (folder in the custom metadata store) holding a model; a package name resolves to itself. */
@@ -156,17 +157,42 @@ export class XppBuilder {
         const isBlocking = (d: CompilerDiagnostic) => ['error', 'fatal'].includes(d.severity.toLowerCase());
         const errors = found.filter(isBlocking).length;
         const assemblyWritten = existsSync(assembly) && (await fs.stat(assembly)).mtimeMs > assemblyBefore;
-        const ok = compiled && !all.some(isBlocking) && assemblyWritten;
+        let ok = compiled && !all.some(isBlocking) && assemblyWritten;
         const reason = !compiled ? ' (xppc exited with an error)' : !assemblyWritten && errors === 0 ? ' (no assembly was produced)' : '';
+        let reportErrors = 0;
+        if (ok) {
+            reportErrors = await this.compileReports(env, pkg, packageFolder, logDir, token);
+            ok = reportErrors === 0;
+        }
         if (ok && this.pdb2pdb) {
             await this.portablePdbs(path.join(packageFolder, 'bin'));
         }
         if (ok && env.local) {
             await this.restartAos();
         }
-        this.output.appendLine(`=== ${model}${scope ? ' (project items)' : ''}: ${ok ? 'BUILD SUCCEEDED' : 'BUILD FAILED' + reason} - ${errors} error(s), ${found.length - errors} warning(s) ===`);
-        this.finished.fire({ model, ok, errors, warnings: found.length - errors, projectOnly: !!scope, time: new Date() });
+        this.output.appendLine(`=== ${model}${scope ? ' (project items)' : ''}: ${ok ? 'BUILD SUCCEEDED' : 'BUILD FAILED' + reason + (reportErrors ? ' (report compilation)' : '')} - ${errors + reportErrors} error(s), ${found.length - errors} warning(s) ===`);
+        this.finished.fire({ model, ok, errors: errors + reportErrors, warnings: found.length - errors, projectOnly: !!scope, time: new Date() });
         return ok;
+    }
+
+    /**
+     * As Visual Studio's build: reports compile to <package>\Reports\*.rdl after X++ (reportsc), which the AOS reads at run
+     * time. Returns the number of errors.
+     */
+    private async compileReports(env: XppEnvironment, pkg: string, packageFolder: string, logDir: string, token?: vscode.CancellationToken): Promise<number> {
+        const xmlLog = path.join(logDir, `Dynamics.AX.${pkg}.reportsc.xml`);
+        const args = await reportCompilerArgs(env, pkg, packageFolder, logDir, xmlLog, line => this.output.appendLine(line));
+        if (!args) {
+            return 0;
+        }
+        await fs.rm(xmlLog, { force: true });
+        const compiled = await this.run(path.join(env.binDirectory, 'reportsc.exe'), args, token);
+        const found = existsSync(xmlLog) ? parseDiagnostics(await fs.readFile(xmlLog, 'utf8')).filter(d => d.severity.toLowerCase() !== 'informational') : [];
+        for (const d of found) {
+            this.output.appendLine(`  ${d.severity.toUpperCase()} ${d.message}`);
+        }
+        const errors = found.filter(d => ['error', 'fatal'].includes(d.severity.toLowerCase())).length;
+        return errors || (compiled ? 0 : 1);
     }
 
     /**

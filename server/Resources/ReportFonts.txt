@@ -1,0 +1,276 @@
+# Font families available to SSRS reports rendered by finance and operations apps (cloud), from
+# https://learn.microsoft.com/dynamics365/fin-ops-core/dev-itpro/analytics/supported-fonts (application 8.3 / PU32 or later, page of 2025-10-29).
+# "The service doesn't support installing custom fonts in customer environments."
+Agency FB
+Algerian
+Arial
+Arial Black
+Arial Narrow
+Arial Rounded MT Bold
+Baskerville Old Face
+Bauhaus 93
+BC C128 HD Medium
+BC C128 HD Narrow
+BC C128 HD Wide
+BC C128 Medium
+BC C128 Narrow
+BC C128 Wide
+BC C39 2 to 1 HD Medium
+BC C39 2 to 1 HD Narrow
+BC C39 2 to 1 HD Wide
+BC C39 2 to 1 Medium
+BC C39 2 to 1 Narrow
+BC C39 2 to 1 Wide
+BC C39 3 to 1 HD Medium
+BC C39 3 to 1 HD Narrow
+BC C39 3 to 1 HD Wide
+BC C39 3 to 1 Medium
+BC C39 3 to 1 Narrow
+BC C39 3 to 1 Wide
+BC CBar 2 to 1 HD Medium
+BC CBar 2 to 1 HD Narrow
+BC CBar 2 to 1 HD Wide
+BC CBar 2 to 1 Medium
+BC CBar 2 to 1 Narrow
+BC CBar 2 to 1 Wide
+BC CBar 3 to 1 HD Medium
+BC CBar 3 to 1 HD Narrow
+BC CBar 3 to 1 HD Wide
+BC CBar 3 to 1 Medium
+BC CBar 3 to 1 Narrow
+BC CBar 3 to 1 Wide
+BC I25 HD Medium
+BC I25 HD Narrow
+BC I25 HD Wide
+BC I25 Medium
+BC I25 Narrow
+BC I25 Wide
+BC Postnet
+BC UPC HD Medium
+BC UPC HD Narrow
+BC UPC HD Wide
+BC UPC Medium
+BC UPC Narrow
+BC UPC Wide
+Bell MT
+Berlin Sans FB
+Berlin Sans FB Demi
+Bernard MT Condensed
+Blackadder ITC
+Bodoni MT
+Bodoni MT Black
+Bodoni MT Condensed
+Bodoni MT Poster Compres
+Book Antiqua
+Bookman Old Style
+Bookshelf Symbol 7
+Bradley Hand ITC
+Britannic Bold
+Broadway
+Brush Script MT
+Buxton Sketch
+Calibri
+Calibri Light
+Californian FB
+Calisto MT
+Cambria
+Cambria Math
+Candara
+Castellar
+Centaur
+Century
+Century Gothic
+Century Schoolbook
+Chiller
+Colonna MT
+Comic Sans MS
+Consolas
+Constantia
+Cooper Black
+Copperplate Gothic Bold
+Copperplate Gothic Light
+Corbel
+Courier New
+Curlz MT
+DengXian
+Dotum
+DotumChe
+Ebrima
+Edwardian Script ITC
+Elephant
+Engravers MT
+Eras Bold ITC
+Eras Demi ITC
+Eras Light ITC
+Eras Medium ITC
+Felix Titling
+Footlight MT Light
+Forte
+Franklin Gothic Book
+Franklin Gothic Demi
+Franklin Gothic Demi Con
+Franklin Gothic Heavy
+Franklin Gothic Medium
+Franklin Gothic Medium C
+Freestyle Script
+French Script MT
+Gabriola
+Gadugi
+Garamond
+Georgia
+Gigi
+Gill Sans MT
+Gill Sans MT Condensed
+Gill Sans MT Ext Condens
+Gill Sans Ultra Bold
+Gill Sans Ultra Bold Con
+Gloucester MT Extra Cond
+Goudy Old Style
+Goudy Stout
+Gulim
+GulimChe
+Haettenschweiler
+Harlow Solid Italic
+Harrington
+High Tower Text
+IDAutomationMICR
+Impact
+Imprint MT Shadow
+Informal Roman
+Javanese Text
+Jokerman
+Juice ITC
+Kristen ITC
+Kunstler Script
+Leelawadee
+Leelawadee UI
+Leelawadee UI Semilight
+Lucida Bright
+Lucida Calligraphy
+Lucida Console
+Lucida Fax
+Lucida Handwriting
+Lucida Sans
+Lucida Sans Typewriter
+Lucida Sans Unicode
+Magneto
+Maiandra GD
+Malgun Gothic
+Malgun Gothic Semilight
+Marlett
+Matura MT Script Capital
+MICR E13B 2.1
+Microsoft Himalaya
+Microsoft JhengHei
+Microsoft JhengHei Light
+Microsoft JhengHei UI
+Microsoft JhengHei UI Li
+Microsoft MHei
+Microsoft NeoGothic
+Microsoft New Tai Lue
+Microsoft PhagsPa
+Microsoft Sans Serif
+Microsoft Tai Le
+Microsoft Uighur
+Microsoft YaHei
+Microsoft YaHei Light
+Microsoft YaHei UI
+Microsoft YaHei UI Light
+Microsoft Yi Baiti
+MingLiU
+MingLiU-ExtB
+MingLiU_HKSCS
+MingLiU_HKSCS-ExtB
+Mistral
+Modern No. 20
+Mongolian Baiti
+Monotype Corsiva
+MS Gothic
+MS Outlook
+MS PGothic
+MS Reference Sans Serif
+MS Reference Specialty
+MS UI Gothic
+MT Extra
+MV Boli
+Myanmar Text
+Niagara Engraved
+Niagara Solid
+Nirmala UI
+Nirmala UI Semilight
+NSimSun
+OCR A Extended
+OCRB
+Old English Text MT
+Onyx
+Palace Script MT
+Palatino Linotype
+Papyrus
+Parchment
+Perpetua
+Perpetua Titling MT
+Playbill
+PMingLiU
+PMingLiU-ExtB
+Poor Richard
+Pristina
+Rage Italic
+Ravie
+Rockwell
+Rockwell Condensed
+Rockwell Extra Bold
+Script MT Bold
+Segoe Marker
+Segoe MDL2 Assets
+Segoe Print
+Segoe Script
+Segoe UI
+Segoe UI Black
+Segoe UI Emoji
+Segoe UI Historic
+Segoe UI Light
+Segoe UI Semibold
+Segoe UI Semilight
+Segoe UI Symbol
+Segoe WP
+Segoe WP Black
+Segoe WP Light
+Segoe WP Semibold
+Segoe WP SemiLight
+Showcard Gothic
+SimSun
+SimSun-ExtB
+Sitka Banner
+Sitka Display
+Sitka Heading
+Sitka Small
+Sitka Subheading
+Sitka Text
+SketchFlow Print
+Snap ITC
+Stencil
+Sylfaen
+Symbol
+Tahoma
+Tempus Sans ITC
+Times New Roman
+Trebuchet MS
+Tw Cen MT
+Tw Cen MT Condensed
+Tw Cen MT Condensed Extr
+Verdana
+Viner Hand ITC
+Vivaldi
+Vladimir Script
+Webdings
+Wide Latin
+Wingdings
+Wingdings 2
+Wingdings 3
+Yu Gothic
+Yu Gothic Light
+Yu Gothic Medium
+Yu Gothic UI
+Yu Gothic UI Light
+Yu Gothic UI Semibold
+Yu Gothic UI Semilight
