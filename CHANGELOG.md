@@ -4,6 +4,11 @@ Release notes of F&O Studio for VS Code. They are generated from the "What's new
 
 ## 0.17
 
+### 0.17.1
+
+**Debugging the local AOS when the C# extension is disabled.**
+- Debugging a cloud-hosted or VHD environment uses the C# extension's .NET debugger. When that extension was installed but disabled, F&O Studio kept offering to install it and then asked to reload the window, again and again. It now says the extension is disabled and opens its page so you can enable it. It no longer reports an install it didn't see, and it shows the error when an install fails ([#16](https://github.com/nazmolla/xpp-vscode/issues/16)).
+
 ### 0.17.0
 
 **SSRS reports without Visual Studio: design them yourself, or let Copilot build them from a scanned form.** Reports were the last part of F&O development that needed Visual Studio. Cheques, purchase orders, invoices and other preprinted forms can now be laid out to the millimetre, previewed, built and deployed from VS Code.
