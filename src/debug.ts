@@ -905,17 +905,29 @@ function runningProxyPids(): Promise<Set<number>> {
  * debug type has no adapter, so debugging waits for the download instead of failing.
  */
 async function ensureClrDebugger(): Promise<boolean> {
-    const id = 'ms-dotnettools.csharp';
+    const id = CSharpExtensionId;
     let extension = vscode.extensions.getExtension(id);
     if (!extension) {
+        // getExtension can't see a disabled extension, and installing one that is already installed changes nothing.
+        if (await isExtensionInstalled(id)) {
+            showCSharpUnavailable('The C# extension (ms-dotnettools.csharp) is installed but disabled. Debugging the local AOS uses its .NET debugger: enable it, then start debugging again.');
+            return false;
+        }
         const choice = await vscode.window.showErrorMessage('Debugging the local AOS uses the C# extension\'s .NET debugger. Install the C# extension (ms-dotnettools.csharp)?', 'Install');
         if (!choice) {
             return false;
         }
-        await vscode.commands.executeCommand('workbench.extensions.installExtension', id);
-        extension = await waitFor(() => vscode.extensions.getExtension(id), 60_000);
+        try {
+            await vscode.commands.executeCommand('workbench.extensions.installExtension', id);
+        } catch (error) {
+            showCSharpUnavailable(`The C# extension could not be installed: ${(error as Error).message}`);
+            return false;
+        }
+        extension = await waitFor(() => vscode.extensions.getExtension(id), 15_000);
         if (!extension) {
-            vscode.window.showErrorMessage('The C# extension is installed. Reload the window, then start debugging again.');
+            showCSharpUnavailable(await isExtensionInstalled(id)
+                ? 'The C# extension is installed but not enabled. Enable it (or reload the window), then start debugging again.'
+                : 'The C# extension was not installed. Install ms-dotnettools.csharp from the Extensions view, then start debugging again.');
             return false;
         }
     }
@@ -933,6 +945,38 @@ async function ensureClrDebugger(): Promise<boolean> {
         }
         return !!ready;
     });
+}
+
+const CSharpExtensionId = 'ms-dotnettools.csharp';
+
+function showCSharpUnavailable(message: string): void {
+    void vscode.window.showErrorMessage(message, 'Show C# Extension').then(choice => {
+        if (choice) {
+            void vscode.commands.executeCommand('extension.open', CSharpExtensionId);
+        }
+    });
+}
+
+/**
+ * Whether the extension is installed in this profile, enabled or not: the extensions.json of the folders that hold
+ * the installed (non built-in) extensions.
+ */
+export async function isExtensionInstalled(id: string): Promise<boolean> {
+    const appRoot = path.resolve(vscode.env.appRoot).toLowerCase();
+    const folders = new Set(vscode.extensions.all
+        .map(e => path.dirname(e.extensionPath))
+        .filter(folder => !path.resolve(folder).toLowerCase().startsWith(appRoot)));
+    for (const folder of folders) {
+        try {
+            const entries = JSON.parse(await fs.readFile(path.join(folder, 'extensions.json'), 'utf8')) as { identifier?: { id?: string } }[];
+            if (Array.isArray(entries) && entries.some(e => e.identifier?.id?.toLowerCase() === id.toLowerCase())) {
+                return true;
+            }
+        } catch {
+            // No extensions.json here (e.g. an extension under development).
+        }
+    }
+    return false;
 }
 
 async function waitFor<T>(probe: () => T | undefined, timeoutMs: number, token?: vscode.CancellationToken): Promise<T | undefined> {
