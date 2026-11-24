@@ -1,5 +1,5 @@
 import { Dataverse } from './core';
-import { dataverseTokens } from './coreHost';
+import { dataverseTokens } from './ude';
 import { selectedEnvironmentUrl } from './environment';
 
 export { Dataverse };

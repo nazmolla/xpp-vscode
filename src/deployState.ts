@@ -1,9 +1,8 @@
 import * as vscode from 'vscode';
+import { deployStaleness, deployStateKey, ModelDeployState, ModelStaleness, staleDeployMessage } from './core';
 import { XppBuilder } from './build';
 import { readActiveEnvironment } from './environment';
 import { readProject } from './project';
-
-interface ModelState { builtAt?: number; deployedAt?: number }
 
 const StateKey = 'xpp.deployState';
 
@@ -38,16 +37,12 @@ export class DeployState implements vscode.Disposable {
     }
 
     /** Undefined on cloud-hosted/VHD environments and for models never built in this environment. */
-    async of(model: string): Promise<(ModelState & { stale: boolean }) | undefined> {
+    async of(model: string): Promise<ModelStaleness | undefined> {
         const env = await readActiveEnvironment().catch(() => undefined);
         if (!env || env.local) {
             return undefined;
         }
-        const state = this.all()[key(env.name, model)];
-        if (!state?.builtAt) {
-            return undefined;
-        }
-        return { ...state, stale: !state.deployedAt || state.builtAt > state.deployedAt };
+        return deployStaleness(this.all()[deployStateKey(env.name, model)]);
     }
 
     /**
@@ -73,32 +68,21 @@ export class DeployState implements vscode.Disposable {
         if (!project?.model) {
             return undefined;
         }
-        const state = await this.of(project.model);
-        if (!state?.stale) {
-            return undefined;
-        }
-        const built = new Date(state.builtAt!).toLocaleString();
-        return state.deployedAt
-            ? `${project.model} was built (${built}) after its last deploy (${new Date(state.deployedAt).toLocaleString()}).`
-            : `${project.model} was built (${built}) but not deployed from this machine yet.`;
+        return staleDeployMessage(project.model, await this.of(project.model));
     }
 
-    private all(): Record<string, ModelState> {
-        return this.context.globalState.get<Record<string, ModelState>>(StateKey, {});
+    private all(): Record<string, ModelDeployState> {
+        return this.context.globalState.get<Record<string, ModelDeployState>>(StateKey, {});
     }
 
-    private async record(model: string, update: ModelState): Promise<void> {
+    private async record(model: string, update: ModelDeployState): Promise<void> {
         const env = await readActiveEnvironment().catch(() => undefined);
         if (!env) {
             return;
         }
         const all = this.all();
-        const k = key(env.name, model);
+        const k = deployStateKey(env.name, model);
         await this.context.globalState.update(StateKey, { ...all, [k]: { ...all[k], ...update } });
         this.changed.fire();
     }
-}
-
-function key(environment: string, model: string): string {
-    return `${environment}/${model}`.toLowerCase();
 }

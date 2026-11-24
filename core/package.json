@@ -21,6 +21,7 @@
   ],
   "scripts": {
     "build": "tsc -p .",
+    "prepack": "tsc -p .",
     "test": "node --test"
   }
 }

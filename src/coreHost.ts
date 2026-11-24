@@ -1,11 +1,5 @@
+// The host side of @fno-studio/core in VS Code: cancellation tokens become AbortSignals (sign-in: ude.ts dataverseTokens).
 import * as vscode from 'vscode';
-import { TokenProvider } from './core';
-import { getDataverseToken, getDataverseTokenSilently } from './ude';
-
-/** The core's sign-in: VS Code's Microsoft account, interactive or silent (scopes and client id as before, see ude.ts). */
-export const dataverseTokens: TokenProvider = {
-    getToken: (resource, { interactive }) => interactive ? getDataverseToken(resource) : getDataverseTokenSilently(resource),
-};
 
 /** An AbortSignal that follows a cancellation token; call dispose when the operation ends. */
 export function abortSignalOf(token: vscode.CancellationToken | undefined): { signal: AbortSignal | undefined; dispose(): void } {

@@ -1,0 +1,38 @@
+[
+  {
+    "request": { "method": "POST", "url": "^https://contoso\\.crm\\.dynamics\\.com/api/data/v9\\.2/RetrieveFinanceAndOperationsIntegrationDetails$" },
+    "response": { "status": 200, "headers": { "Content-Type": "application/json" }, "body": { "@odata.context": "https://contoso.crm.dynamics.com/api/data/v9.2/$metadata#Microsoft.Dynamics.CRM.RetrieveFinanceAndOperationsIntegrationDetailsResponse", "Id": "8a7b6c5d-4e3f-4a1b-9c8d-7e6f5a4b3c2d", "TenantId": "11111111-2222-3333-4444-555555555555", "Url": "https://contoso.operations.dynamics.com" } }
+  },
+  {
+    "request": { "method": "POST", "url": "/api/data/v9\\.2/msprov_getfinopsapplicationdetails$" },
+    "response": { "status": 404, "headers": { "Content-Type": "application/json" }, "body": { "error": { "code": "0x8006088a", "message": "Resource not found for the segment 'msprov_getfinopsapplicationdetails'." } } }
+  },
+  {
+    "request": { "method": "GET", "url": "/api/data/v9\\.2/msprov_getfinopsapplicationdetails\\(\\)$" },
+    "response": { "status": 200, "headers": { "Content-Type": "application/json" }, "body": { "applicationdeploymenttype": "OnlineDev", "applicationversion": "10.0.2790.108", "platformversion": "7.0.7996.141", "finopsenvironmentid": "e1d2c3b4-a5f6-4789-8abc-def012345678" } }
+  },
+  {
+    "request": { "method": "GET", "url": "^https://developertools\\.powerplatform\\.microsoft\\.com/api/clientmetadata/systemmetadata\\?version=10-0-2790-108$" },
+    "response": { "status": 200, "body": "\"https://assets.blob.core.windows.net/metadata/PackagesLocalDirectory.zip?sv=2024&sig=redacted\"" }
+  },
+  {
+    "request": { "method": "HEAD", "url": "^https://assets\\.blob\\.core\\.windows\\.net/metadata/PackagesLocalDirectory\\.zip" },
+    "response": { "status": 200, "headers": { "Content-Length": "9126805504" } }
+  },
+  {
+    "request": { "method": "GET", "url": "/api/clientmetadata/crossreference\\?version=10-0-2790-108$" },
+    "response": { "status": 200, "body": "\"https://assets.blob.core.windows.net/xref/DYNAMICSXREFDB.bak?sv=2024&sig=redacted\"" }
+  },
+  {
+    "request": { "method": "HEAD", "url": "DYNAMICSXREFDB\\.bak" },
+    "response": { "status": 403 }
+  },
+  {
+    "request": { "method": "GET", "url": "/api/clientmetadata/finopsvsix22\\?version=10-0-2790-108$" },
+    "response": { "status": 200, "body": "\"https://assets.blob.core.windows.net/tools/Microsoft.Dynamics.FinOps.ToolsVS2022.vsix?sv=2024&sig=redacted\"" }
+  },
+  {
+    "request": { "method": "HEAD", "url": "ToolsVS2022\\.vsix" },
+    "response": { "status": 200, "headers": { "Content-Length": "536870912" } }
+  }
+]

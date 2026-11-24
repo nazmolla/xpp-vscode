@@ -6,6 +6,7 @@ node_modules/**
 core/src/**
 core/test/**
 core/tsconfig.json
+core/README.md
 tsconfig.json
 **/*.map
 .gitignore
