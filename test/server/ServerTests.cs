@@ -1,9 +1,11 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Remoting.Messaging;
 using System.Runtime.Remoting.Proxies;
 using System.Web.Script.Serialization;
+using System.Reflection;
 using XppVsCode.Server.Analysis;
 using XppVsCode.Server.Host;
 using XppVsCode.Server.Host.Reports;
@@ -86,6 +88,69 @@ namespace XppVsCode.Server.Tests
             LabelService.SplitLabelReference(ref fileIn, ref idIn);
             Assert.Equal(file, fileIn);
             Assert.Equal(id, idIn);
+        }
+    }
+
+    public class TypedFormMetadataTests
+    {
+        [Fact]
+        public void PolymorphicFormControlsAreAppliedFromTypedMetadata()
+        {
+            Type axFormType = Type.GetType(
+                "Microsoft.Dynamics.AX.Metadata.MetaModel.AxForm, Microsoft.Dynamics.AX.Metadata",
+                throwOnError: true);
+            Type axFormDesignType = Type.GetType(
+                "Microsoft.Dynamics.AX.Metadata.MetaModel.AxFormDesign, Microsoft.Dynamics.AX.Metadata",
+                throwOnError: true);
+            var form = Activator.CreateInstance(axFormType);
+
+            string json = @"{
+              ""Name"":""ExampleReviewIssue"",
+              ""DataSources"":[{""Name"":""ExampleReviewIssue"",""Table"":""ExampleReviewIssue"",""AllowCreate"":""No""}],
+              ""Design"":{""Name"":""Design"",""Pattern"":""SimpleList"",""Controls"":[
+                {""Name"":""ReviewActionPane"",""Type"":""ActionPane""},
+                {""Name"":""ReviewGrid"",""Type"":""Grid"",""DataSource"":""ExampleReviewIssue"",""Controls"":[
+                  {""Name"":""RunId"",""Type"":""String"",""DataSource"":""ExampleReviewIssue"",""DataField"":""RunId""},
+                  {""Name"":""Severity"",""Type"":""ComboBox"",""DataSource"":""ExampleReviewIssue"",""DataField"":""Severity""}
+                ]}
+              ]}
+            }";
+
+            System.Reflection.MethodInfo apply = typeof(MetaModelBridge).GetMethod(
+                "ApplyTypedMetadataGraph",
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            Exception exception = null;
+            try
+            {
+                apply.Invoke(null, new object[] { form, "AxForm", json });
+            }
+            catch (TargetInvocationException ex)
+            {
+                exception = ex.InnerException ?? ex;
+            }
+            catch (Exception ex)
+            {
+                exception = ex;
+            }
+
+            Assert.Null(exception);
+            Assert.Equal("ExampleReviewIssue", axFormType.GetProperty("Name").GetValue(form));
+
+            object design = axFormType.GetProperty("Design").GetValue(form);
+            var controls = (IEnumerable)axFormDesignType.GetProperty("Controls").GetValue(design);
+            object grid = controls.Cast<object>().FirstOrDefault(c =>
+                Convert.ToString(c.GetType().GetProperty("Name")?.GetValue(c)) == "ReviewGrid");
+            Assert.NotNull(grid);
+            Assert.Equal("AxFormGridControl", grid.GetType().Name);
+            Assert.Equal("ExampleReviewIssue", grid.GetType().GetProperty("DataSource")?.GetValue(grid));
+
+            var runId = (IEnumerable)grid.GetType().GetProperty("Controls")?.GetValue(grid);
+            object runIdControl = runId?.Cast<object>().FirstOrDefault(c =>
+                Convert.ToString(c.GetType().GetProperty("Name")?.GetValue(c)) == "RunId");
+            Assert.NotNull(runIdControl);
+            Assert.Equal("AxFormStringControl", runIdControl.GetType().Name);
+            Assert.Equal("RunId", runIdControl.GetType().GetProperty("DataField")?.GetValue(runIdControl));
         }
     }
 

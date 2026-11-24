@@ -4,6 +4,13 @@ Release notes of F&O Studio for VS Code. They are generated from the "What's new
 
 ## 0.17
 
+### 0.17.2
+
+**Copilot can create forms with typed, nested controls.**
+- `xpp_create_object` now accepts form controls such as grids, action panes and bound fields in `typedMetadata`, including nested controls and their data sources and fields ([#17](https://github.com/nazmolla/xpp-vscode/issues/17)).
+- Environment discovery and setup, deployment and database sync, database access and SysTest runs now use the reusable, VS Code-free `@fno-studio/core` package. Existing F&O Studio behavior is unchanged.
+- The GitHub release includes a standalone server package and its SHA-256 checksum for MCP hosts outside VS Code.
+
 ### 0.17.1
 
 **Debugging the local AOS when the C# extension is disabled.**

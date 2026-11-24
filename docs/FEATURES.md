@@ -10,6 +10,11 @@ Develop Dynamics 365 Finance & Operations X++ code in VS Code, without Visual St
 
 ## What's new in 0.17
 
+**0.17.2: Copilot can create forms with typed, nested controls.**
+- `xpp_create_object` now accepts form controls such as grids, action panes and bound fields in `typedMetadata`, including nested controls and their data sources and fields ([#17](https://github.com/nazmolla/xpp-vscode/issues/17)).
+- Environment discovery and setup, deployment and database sync, database access and SysTest runs now use the reusable, VS Code-free `@fno-studio/core` package. Existing F&O Studio behavior is unchanged.
+- The GitHub release includes a standalone server package and its SHA-256 checksum for MCP hosts outside VS Code.
+
 **0.17.1: Debugging the local AOS when the C# extension is disabled.**
 - Debugging a cloud-hosted or VHD environment uses the C# extension's .NET debugger. When that extension was installed but disabled, F&O Studio kept offering to install it and then asked to reload the window, again and again. It now says the extension is disabled and opens its page so you can enable it. It no longer reports an install it didn't see, and it shows the error when an install fails ([#16](https://github.com/nazmolla/xpp-vscode/issues/16)).
 

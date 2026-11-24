@@ -43,6 +43,7 @@ namespace XppVsCode.Server.MetaModel
                 { "CommandButton", typeof(AxFormCommandButtonControl) },
                 { "MenuFunctionButton", typeof(AxFormMenuFunctionButtonControl) },
                 { "MenuButton", typeof(AxFormMenuButtonControl) },
+                { "ActionPane", typeof(AxFormActionPaneControl) },
                 { "ActionPaneTab", typeof(AxFormActionPaneTabControl) }
             };
 

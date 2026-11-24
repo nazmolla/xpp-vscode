@@ -320,6 +320,12 @@ namespace XppVsCode.Server.MetaModel
                 var dict = parsed as Dictionary<string, object>;
                 if (dict == null) return;
 
+                if (target is AxForm form)
+                {
+                    ApplyFormTypedMetadata(form, dict);
+                    return;
+                }
+
                 // AxQuery needs concrete root/embedded datasource creation semantics.
                 // These keys are handled by the specialized method and must be excluded
                 // from the generic ApplyObjectNode pass to prevent double-clear wiping them.
@@ -339,6 +345,75 @@ namespace XppVsCode.Server.MetaModel
             }
         }
 
+        private static void ApplyFormTypedMetadata(AxForm form, Dictionary<string, object> node)
+        {
+            var handled = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "DataSources", "Design" };
+            ApplyObjectNode(form, node, handled);
+
+            object dsNode = GetNodeValue(node, "DataSources", "dataSources");
+            var dsValues = ToObjectArray(dsNode);
+            if (dsValues != null)
+            {
+                var dsProp = form.GetType().GetProperty("DataSources", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                if (dsProp?.GetValue(form) is System.Collections.ICollection dsCollection)
+                {
+                    ClearCollectionIfPossible(dsCollection);
+                    PopulateCollectionFromNode(dsCollection, dsValues);
+                }
+            }
+
+            var designNode = ToDictionary(GetNodeValue(node, "Design", "design"));
+            if (designNode == null) return;
+            var designProperty = form.GetType().GetProperty("Design", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            object design = designProperty?.GetValue(form);
+            if (design == null && designProperty?.CanWrite == true)
+            {
+                design = CreateNodeInstance(designProperty.PropertyType, designNode);
+                designProperty.SetValue(form, design);
+            }
+            if (design == null) return;
+
+            var designHandled = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Controls" };
+            ApplyObjectNode(design, designNode, designHandled);
+
+            var controlNodes = ToObjectArray(GetNodeValue(designNode, "Controls", "controls"));
+            if (controlNodes == null) return;
+            var controlsProperty = design.GetType().GetProperty("Controls", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (!(controlsProperty?.GetValue(design) is KeyedObjectCollection<AxFormControl> controls)) return;
+            ClearCollectionIfPossible(controls);
+            foreach (object entry in controlNodes)
+                if (ToDictionary(entry) is Dictionary<string, object> controlNode)
+                    if (CreateFormControl(controlNode) is AxFormControl control)
+                        controls.Add(control);
+        }
+
+        private static AxFormControl CreateFormControl(Dictionary<string, object> node)
+        {
+            string controlType = Convert.ToString(GetNodeValue(node, "Type", "type"));
+            if (string.IsNullOrWhiteSpace(controlType) || !FormControlClasses.TryGetValue(controlType, out Type concreteType))
+                throw new InvalidOperationException("Form control '" + Convert.ToString(GetNodeValue(node, "Name", "name"))
+                    + "' needs a supported Type (for example Grid, String, ComboBox, Group).");
+
+            var control = (AxFormControl)Activator.CreateInstance(concreteType);
+            var skipped = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Controls", "Type" };
+            ApplyObjectNode(control, node, skipped);
+
+            var childNodes = ToObjectArray(GetNodeValue(node, "Controls", "controls"));
+            if (childNodes != null)
+            {
+                var controlsProp = control.GetType().GetProperty("Controls", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                if (controlsProp?.GetValue(control) is KeyedObjectCollection<AxFormControl> children)
+                {
+                    ClearCollectionIfPossible(children);
+                    foreach (object entry in childNodes)
+                        if (ToDictionary(entry) is Dictionary<string, object> childNode)
+                            if (CreateFormControl(childNode) is AxFormControl child)
+                                children.Add(child);
+                }
+            }
+            return control;
+        }
+
         private static object ParseTypedMetadataToNode(string objectType, string typedMetadataJson)
         {
             var serializer = new JavaScriptSerializer
@@ -346,6 +421,12 @@ namespace XppVsCode.Server.MetaModel
                 MaxJsonLength = int.MaxValue,
                 RecursionLimit = 64
             };
+
+            // AxFormControl is polymorphic: the generated base control proxy cannot represent
+            // grid/container children or bound-control properties such as DataSource/DataField.
+            // Keep the raw graph so form control Type discriminators can create concrete controls.
+            if (string.Equals(objectType, "AxForm", StringComparison.OrdinalIgnoreCase))
+                return serializer.DeserializeObject(typedMetadataJson);
 
             // Proxies model only the base types; "$type" (as written by xpp_read_object) names a subtype whose
             // extra properties (e.g. DataField of AxDataEntityViewMappedField) the proxy would drop.
@@ -735,6 +816,12 @@ namespace XppVsCode.Server.MetaModel
         private static void CollectUnknownKeys(Type type, Dictionary<string, object> node, string path, List<string> unknown, int depth)
         {
             if (type == null || node == null || depth > 12) return;
+            if (typeof(AxFormControl).IsAssignableFrom(type))
+            {
+                string controlType = Convert.ToString(GetNodeValue(node, "Type", "type"));
+                if (!string.IsNullOrWhiteSpace(controlType) && FormControlClasses.TryGetValue(controlType, out Type concreteControl))
+                    type = concreteControl;
+            }
             string typeName = Convert.ToString(GetNodeValue(node, "$type", "__type"));
             if (!string.IsNullOrWhiteSpace(typeName))
             {
