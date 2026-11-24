@@ -8,3 +8,6 @@ export * from './dataverse';
 export * from './packages';
 export * from './deploy';
 export * from './tests';
+export * from './data/credentials';
+export * from './data/client';
+export * from './data/insights';

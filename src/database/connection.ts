@@ -1,23 +1,10 @@
 import * as vscode from 'vscode';
 import { onDidChangeEnvironment, readActiveEnvironment, XppEnvironment } from '../environment';
-import { CredentialStore, DatabaseCredentials, requestCredentials } from './credentials';
+import { DatabaseTarget } from '../core';
+import { CredentialStore, requestCredentials } from './credentials';
 
-/** Where business data comes from: the local AxDB (Windows authentication) or a unified environment's Azure SQL database. */
-export interface DatabaseTarget {
-    environment: string;
-    server: string;
-    database: string;
-    cloud: boolean;
-    /** Unified environments only. */
-    credentials?: DatabaseCredentials;
-}
-
-/** What the data service needs to connect; sent with each request, never stored by the server. */
-export function connectionOf(target: DatabaseTarget): object {
-    return target.credentials
-        ? { server: target.server, database: target.database, user: target.credentials.user, password: target.credentials.password }
-        : { server: target.server, database: target.database, windowsAuthentication: true };
-}
+export { connectionOf } from '../core';
+export type { DatabaseTarget } from '../core';
 
 /**
  * The business database of the active environment, for the data browser, the query panel and the agent tool. Cloud-hosted

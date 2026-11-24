@@ -1,0 +1,20 @@
+[
+  {
+    "request": { "method": "POST", "url": "/api/data/v9\\.2/msprov_getfinopssqljitaccessasync$" },
+    "response": {
+      "status": 200,
+      "headers": { "Content-Type": "application/json; odata.metadata=minimal" },
+      "body": {
+        "@odata.context": "https://contoso.crm.dynamics.com/api/data/v9.2/$metadata#Microsoft.Dynamics.CRM.msprov_getfinopssqljitaccessasyncResponse",
+        "ServerName": "spartan-srv-nam-d365opsprod-1a2b3c4d5e6f.database.windows.net ",
+        "DatabaseName": "db_d365opsprod_contoso_ax_20261124_01234567_abcd",
+        "SqlJitUserName": "JIT-a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+        "SqlJitPassword": "recorded-password-redacted",
+        "SqlJitRole": "Reader",
+        "SqlJitExpiration": "2026-11-25T02:43:53Z",
+        "IpAddress": "203.0.113.10",
+        "OperationHistoryId": "4c3b2a19-0817-4f6e-9d5c-4b3a29180716"
+      }
+    }
+  }
+]

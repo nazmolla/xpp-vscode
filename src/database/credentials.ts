@@ -1,30 +1,12 @@
 import * as vscode from 'vscode';
+import { DatabaseCredentials, isExpired, publicAddress, requestSqlCredentials, SqlRole, validateAddressRange } from '../core';
 import { withAbortSignal } from '../coreHost';
 import { selectedDataverse } from '../dataverse';
-import { httpFetch } from '../ude';
 
-/** Just-in-time SQL credentials of a unified environment's database, as Visual Studio's Power Platform Tools request them. */
-export interface DatabaseCredentials {
-    server: string;
-    database: string;
-    user: string;
-    password: string;
-    role: SqlRole;
-    /** Expiry as the service wrote it. */
-    expiration: string;
-    /** Expiry in ms since 1970, when the service's text is a date. */
-    expiresAt?: number;
-    allowedAddresses: string;
-    /** When they were issued (ms since 1970). */
-    requestedAt?: number;
-}
+export { isExpired, toCredentials, validateAddressRange } from '../core';
+export type { DatabaseCredentials, SqlRole } from '../core';
 
-export type SqlRole = 'Reader' | 'Writer';
-
-const RequestAction = 'msprov_getfinopssqljitaccessasync';
-const PublicIpService = 'https://checkip.amazonaws.com/';
 const SecretPrefix = 'xpp.database.';
-
 /** Credentials per environment in VS Code's secret storage (Windows Credential Manager), never in settings or logs. */
 export class CredentialStore {
     constructor(private readonly secrets: vscode.SecretStorage) {}
@@ -57,40 +39,6 @@ export class CredentialStore {
 
     onDidChange(listener: () => void): vscode.Disposable {
         return this.secrets.onDidChange(e => e.key.startsWith(SecretPrefix) ? listener() : undefined);
-    }
-}
-
-export function isExpired(credentials: DatabaseCredentials, now = Date.now()): boolean {
-    return credentials.expiresAt !== undefined && credentials.expiresAt <= now;
-}
-
-const Octet = '(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)';
-const Ipv4 = new RegExp(`^${Octet}(\\.${Octet}){3}$`);
-
-/** An IPv4 address or a range "first-last" (first not above last); undefined when valid. */
-export function validateAddressRange(value: string): string | undefined {
-    const parts = value.trim().split('-').map(p => p.trim());
-    if (parts.length > 2 || parts.some(p => !Ipv4.test(p))) {
-        return 'Enter an IPv4 address (203.0.113.10) or a range (203.0.113.1-203.0.113.50).';
-    }
-    if (parts.length === 2 && toNumber(parts[0]) > toNumber(parts[1])) {
-        return 'The first address of the range must not be above the last.';
-    }
-    return undefined;
-}
-
-function toNumber(address: string): number {
-    return address.split('.').reduce((n, octet) => n * 256 + Number(octet), 0);
-}
-
-/** This machine's public address as Azure SQL's firewall sees it, from the service Visual Studio uses; undefined offline. */
-async function publicAddress(): Promise<string | undefined> {
-    try {
-        const response = await httpFetch(PublicIpService, { signal: AbortSignal.timeout(5000) });
-        const text = (await response.text()).trim();
-        return response.ok && Ipv4.test(text) ? text : undefined;
-    } catch {
-        return undefined;
     }
 }
 
@@ -131,40 +79,6 @@ export async function requestCredentials(environment: string, hasValidCredential
     return vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Requesting database credentials for ${environment}…`, cancellable: true },
         async (_progress, token) => {
             const dataverse = await selectedDataverse();
-            const result = await withAbortSignal(token, signal => dataverse.action(RequestAction, {
-                sqljitclientipaddress: addresses.trim(),
-                sqljitreason: reason.trim(),
-                sqljitrole: role.label,
-            }, signal));
-            return toCredentials(result, role.label, addresses.trim());
+            return withAbortSignal(token, signal => requestSqlCredentials(dataverse, { reason, addresses, role: role.label }, signal));
         });
-}
-
-/** Maps the action's output parameters (names compared without case, as Dataverse returns them). */
-export function toCredentials(result: Record<string, unknown>, role: SqlRole, addresses: string): DatabaseCredentials {
-    const value = (name: string) => {
-        const key = Object.keys(result ?? {}).find(k => k.toLowerCase() === name);
-        const v = key ? result[key] : undefined;
-        return typeof v === 'string' ? v.trim() : v === undefined || v === null ? '' : String(v);
-    };
-    const credentials: DatabaseCredentials = {
-        server: value('servername'),
-        database: value('databasename'),
-        user: value('sqljitusername'),
-        password: value('sqljitpassword'),
-        role: (value('sqljitrole') as SqlRole) || role,
-        expiration: value('sqljitexpiration'),
-        allowedAddresses: value('ipaddress') || addresses,
-        requestedAt: Date.now(),
-    };
-    if (!credentials.server || !credentials.database || !credentials.user || !credentials.password) {
-        const operation = value('operationhistoryid');
-        throw new Error('The environment did not return database credentials. Database access needs the System administrator role in a unified developer or sandbox environment.'
-            + (operation ? ` Operation: ${operation}.` : ''));
-    }
-    const expiresAt = Date.parse(credentials.expiration);
-    if (!Number.isNaN(expiresAt)) {
-        credentials.expiresAt = expiresAt;
-    }
-    return credentials;
 }
