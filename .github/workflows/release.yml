@@ -132,6 +132,35 @@ jobs:
             "::warning::Signing is not configured (variable SIGNPATH_ORGANIZATION_ID); the server ships unsigned."
           }
 
+      # The server on its own (server/bin, with the signed exe when signing is configured) for hosts outside VS Code,
+      # such as the Claude Code plugin, with its SHA-256. Never with a Microsoft assembly.
+      - name: Package the server
+        shell: pwsh
+        run: |
+          $zip = "fno-studio-server-${{ steps.version.outputs.version }}.zip"
+          $foreign = Get-ChildItem server/bin -Recurse -File | Where-Object { $_.Extension -ieq '.dll' -or $_.Name -like 'Microsoft.Dynamics.*' }
+          if ($foreign) { throw "server/bin must hold only F&O Studio's own files: $($foreign.Name -join ', ')" }
+          Compress-Archive -Path server/bin/* -DestinationPath $zip -CompressionLevel Optimal
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip))
+          try {
+            $names = $archive.Entries.FullName
+            if ($names | Where-Object { $_ -like '*.dll' -or $_ -like '*Microsoft.Dynamics.*' }) { throw "$zip contains Microsoft assemblies." }
+            if ($names -notcontains 'XppVsCode.Server.exe') { throw "$zip has no XppVsCode.Server.exe." }
+            "Server zip: $($names -join ', ')"
+          } finally { $archive.Dispose() }
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText("$PWD/$zip.sha256", "$hash  $zip`n")
+          "SHA-256: $hash"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: server-zip
+          path: |
+            fno-studio-server-${{ steps.version.outputs.version }}.zip
+            fno-studio-server-${{ steps.version.outputs.version }}.zip.sha256
+          if-no-files-found: error
+
       - name: Package the VSIX
         shell: pwsh
         run: |
@@ -175,6 +204,18 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: vsix
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: server-zip
+
+      - name: The server zip matches its SHA-256
+        shell: pwsh
+        run: |
+          $zip = "fno-studio-server-$env:VERSION.zip"
+          $expected = ((Get-Content "$zip.sha256" -Raw) -split '\s+')[0]
+          $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "$zip has SHA-256 $actual, expected $expected." }
 
       - name: The VSIX holds the signed server
         shell: pwsh
@@ -220,14 +261,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $assets = "xpp-vscode-$env:VERSION.vsix", "fno-studio-server-$env:VERSION.zip", "fno-studio-server-$env:VERSION.zip.sha256"
           gh release view $env:GITHUB_REF_NAME 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
             # Re-running a tag's workflow updates its release instead of failing.
-            gh release upload $env:GITHUB_REF_NAME "xpp-vscode-$env:VERSION.vsix" --clobber
+            gh release upload $env:GITHUB_REF_NAME @assets --clobber
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             gh release edit $env:GITHUB_REF_NAME --title "F&O Studio $env:VERSION" --notes-file release-notes.md
           } else {
-            gh release create $env:GITHUB_REF_NAME "xpp-vscode-$env:VERSION.vsix" --title "F&O Studio $env:VERSION" --notes-file release-notes.md --verify-tag --latest
+            gh release create $env:GITHUB_REF_NAME @assets --title "F&O Studio $env:VERSION" --notes-file release-notes.md --verify-tag --latest
           }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
