@@ -7,3 +7,4 @@ export * from './http';
 export * from './dataverse';
 export * from './packages';
 export * from './deploy';
+export * from './tests';

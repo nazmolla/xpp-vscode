@@ -1,0 +1,34 @@
+[
+  {
+    "request": { "method": "POST", "url": "/api/data/v9\\.2/msprov_unittestsuites$" },
+    "response": { "status": 204, "headers": { "OData-EntityId": "https://contoso.crm.dynamics.com/api/data/v9.2/msprov_unittestsuites(3e2d1c0b-9a8f-4e7d-a6c5-b4a392817f6e)" } }
+  },
+  {
+    "request": { "method": "PATCH", "url": "/api/data/v9\\.2/msprov_unittestsuites\\(3e2d1c0b-9a8f-4e7d-a6c5-b4a392817f6e\\)/msprov_unittestsuiteconfig$" },
+    "response": { "status": 204 }
+  },
+  {
+    "request": { "method": "POST", "url": "/api/data/v9\\.2/msprov_unittestexecutiononfinopsasync$" },
+    "response": { "status": 200, "headers": { "Content-Type": "application/json" }, "body": { "@odata.context": "https://contoso.crm.dynamics.com/api/data/v9.2/$metadata#Microsoft.Dynamics.CRM.msprov_unittestexecutiononfinopsasyncResponse", "asyncoperationid": { "@odata.type": "#Microsoft.Dynamics.CRM.asyncoperation", "asyncoperationid": "7d6c5b4a-3928-4170-b6e5-d4c3b2a19087" } } }
+  },
+  {
+    "request": { "method": "GET", "url": "/api/data/v9\\.2/asyncoperations\\(7d6c5b4a-3928-4170-b6e5-d4c3b2a19087\\)" },
+    "response": { "status": 200, "body": { "statecode": 2, "statuscode": 20, "statuscode@OData.Community.Display.V1.FormattedValue": "In Progress" } }
+  },
+  {
+    "request": { "method": "GET", "url": "/api/data/v9\\.2/msprov_unittestsuites\\(3e2d1c0b-9a8f-4e7d-a6c5-b4a392817f6e\\)\\?\\$select=statecode,statuscode" },
+    "response": { "status": 200, "body": { "statecode": 0, "statecode@OData.Community.Display.V1.FormattedValue": "Active", "statuscode": 1, "statuscode@OData.Community.Display.V1.FormattedValue": "Running" } }
+  },
+  {
+    "request": { "method": "GET", "url": "/api/data/v9\\.2/asyncoperations\\(7d6c5b4a-3928-4170-b6e5-d4c3b2a19087\\)" },
+    "response": { "status": 200, "body": { "statecode": 3, "statuscode": 30, "statuscode@OData.Community.Display.V1.FormattedValue": "Succeeded" } }
+  },
+  {
+    "request": { "method": "GET", "url": "/api/data/v9\\.2/msprov_unittestsuites\\(3e2d1c0b-9a8f-4e7d-a6c5-b4a392817f6e\\)\\?\\$select=statecode,statuscode" },
+    "response": { "status": 200, "body": { "statecode": 1, "statecode@OData.Community.Display.V1.FormattedValue": "Inactive", "statuscode": 2, "statuscode@OData.Community.Display.V1.FormattedValue": "Completed" } }
+  },
+  {
+    "request": { "method": "GET", "url": "/api/data/v9\\.2/msprov_unittestsuites\\(3e2d1c0b-9a8f-4e7d-a6c5-b4a392817f6e\\)/msprov_unittestresult/\\$value$" },
+    "response": { "status": 200, "headers": { "Content-Type": "application/octet-stream" }, "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?><TestRun id=\"1\" xmlns=\"http://microsoft.com/schemas/VisualStudio/TeamTest/2010\"><Results><UnitTestResult executionId=\"a\" testId=\"b\" testName=\"XvsCoreLiveTest.testAddition\" computerName=\"AOS\" duration=\"00:00:00.0310000\" outcome=\"Passed\" /><UnitTestResult executionId=\"c\" testId=\"d\" testName=\"XvsCoreLiveTest.testFails\" duration=\"00:00:00.0120000\" outcome=\"Failed\"><Output><ErrorInfo><Message><![CDATA[assertEquals failed: 3 &lt;&gt; 2]]></Message></ErrorInfo><infolog><line>Error: Value is wrong</line></infolog></Output></UnitTestResult></Results></TestRun>" }
+  }
+]
