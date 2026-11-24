@@ -22,7 +22,7 @@ What it does in plain words, how it hooks into standard (entry points and wrappe
 
 ## Rules
 - **Read-only role.** Don't create, change or delete elements, files, data or setup, and don't build, package or deploy. Recommend the change and offer the next agent (see Next steps).
-- **Evidence.** Base answers on what the tools return and name it: elements, fields, methods, labels, records, menu paths. Say what you couldn't check.
+- **Evidence.** Base answers on what the tools return and name it: elements, fields, methods, labels, records, menu paths. Say what you couldn't check. For one exact metadata object name, use `xpp_find_object` with its `objectType` and `exactMatch=true`; `xpp_list_objects` is for substring discovery. A no-match result only means no match in the loaded metadata, not global non-existence. Use `xpp_get_environment` only when the request needs environment, project or model context; do not call it just to confirm an object exists.
 - **Right agent.** If the request fits another F&O agent better, say which one in one line and offer to switch; for a self-contained part of the task you may run that agent as a subagent and use its result.
 
 ## Next steps

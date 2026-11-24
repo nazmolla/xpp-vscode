@@ -1072,7 +1072,7 @@
     },
     {
       "name": "xpp_find_object",
-      "description": "Security roles, duties and privileges (objectType AxSecurityRole/AxSecurityDuty/AxSecurityPrivilege, partial match) are also found by their label text, e.g. 'Sales manager' or 'Maintain fixed assets'; each match shows its label, and when no label has all the words the closest labels are listed. Searches for D365FO metadata objects by name across ALL loaded models and packages using the MetaModel API. CRITICAL: Always use this instead of Get-ChildItem/dir/file searches on metadata folders. NEVER search the file system for X++ objects. Returns matching objects with type, model, and editability. Searches scan the loaded metadata and block other tool calls while they run: search for ONE specific object at a time, always pass objectType, and use exactMatch=true when you know the full name. Partial names must be at least 3 characters. Scans stop after a few seconds and return PARTIAL results with a message — if that happens, narrow the search instead of retrying the same query.",
+      "description": "Searches for D365FO metadata objects by name across all loaded models and packages using the MetaModel API. Prefer this tool for one exact/full object name; pass objectType and exactMatch=true. Use xpp_list_objects only for substring discovery. Security roles, duties and privileges (objectType AxSecurityRole/AxSecurityDuty/AxSecurityPrivilege, partial match) are also found by their label text, e.g. 'Sales manager' or 'Maintain fixed assets'; each match shows its label, and when no label has all the words the closest labels are listed. CRITICAL: Always use this instead of Get-ChildItem/dir/file searches on metadata folders. NEVER search the file system for X++ objects. Returns matching objects with type, model, and editability. Searches scan the loaded metadata and block other tool calls while they run: search for ONE specific object at a time, always pass objectType, and use exactMatch=true when you know the full name. A no-match result means no matching object was found in loaded metadata; do not infer global non-existence. Partial names must be at least 3 characters. Scans stop after a few seconds and return PARTIAL results with a message — if that happens, narrow the search instead of retrying the same query.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1100,7 +1100,7 @@
     },
     {
       "name": "xpp_list_objects",
-      "description": "Lists a HANDFUL of D365FO metadata objects whose names contain a specific substring. NOT for enumerating whole models or types — use xpp_list_model_objects for that. CRITICAL: Always use this instead of Get-ChildItem/dir/file searches on metadata folders. Scans block other tool calls while they run: nameFilter must be at least 3 characters and specific (e.g. 'CustTable', not 'a'); always pass objectType; objectType is REQUIRED when modelName is set. Scans stop after a few seconds and return PARTIAL results with a message — if that happens, narrow the filter instead of retrying.",
+      "description": "Lists a HANDFUL of D365FO metadata objects whose names contain a specific substring. Use only for substring discovery; for one exact/full object name, use xpp_find_object. NOT for enumerating whole models or types — use xpp_list_model_objects for that. CRITICAL: Always use this instead of Get-ChildItem/dir/file searches on metadata folders. Scans block other tool calls while they run: nameFilter must be at least 3 characters and specific (e.g. 'CustTable', not 'a'); always pass objectType; objectType is REQUIRED when modelName is set. Scans stop after a few seconds and return PARTIAL results with a message — if that happens, narrow the filter instead of retrying.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1521,7 +1521,7 @@
     },
     {
       "name": "xpp_get_environment",
-      "description": "Returns the D365FO development environment info: metadata folders, active project, active model name/ID/layer. Use this to understand the project context. CRITICAL RULE: In D365FO/X++ projects, NEVER use terminal commands to create, read, update, search, or list metadata files. Always use the xpp_* tools — they use the MetaModel API which correctly registers objects, maintains cross-references, and respects model boundaries.",
+      "description": "Returns D365FO development environment information, including metadata folders, active project, and active model name/ID/layer. Use only when the user asks for this context or the task cannot be completed without it; do not call this merely to confirm whether a metadata object exists. CRITICAL RULE: In D365FO/X++ projects, NEVER use terminal commands to create, read, update, search, or list metadata files. Always use the xpp_* tools — they use the MetaModel API which correctly registers objects, maintains cross-references, and respects model boundaries.",
       "inputSchema": {
         "type": "object",
         "properties": {},

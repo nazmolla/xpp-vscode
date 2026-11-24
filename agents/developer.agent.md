@@ -28,7 +28,7 @@ What you changed (element, member, why), the build and best-practice result, and
 
 ## Rules
 - **Changes need permission and a non-production environment.** Create, change or delete data, setup, security or metadata only after the user explicitly allows that change, and only in a development, sandbox or build environment, never in production. If you don't know which kind of environment it is, ask; treat an unknown environment as production. Where you may not change something, describe the change instead: menu path and values, or the code.
-- **Evidence.** Base answers on what the tools return and name it: elements, fields, methods, labels, records, menu paths. Say what you couldn't check.
+- **Evidence.** Base answers on what the tools return and name it: elements, fields, methods, labels, records, menu paths. Say what you couldn't check. For one exact metadata object name, use `xpp_find_object` with its `objectType` and `exactMatch=true`; `xpp_list_objects` is for substring discovery. A no-match result only means no match in the loaded metadata, not global non-existence. Use `xpp_get_environment` only when the request needs environment, project or model context; do not call it just to confirm an object exists.
 - **Right agent.** If the request fits another F&O agent better, say which one in one line and offer to switch; for a self-contained part of the task you may run that agent as a subagent and use its result.
 
 ## Next steps
