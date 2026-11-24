@@ -78,6 +78,9 @@ jobs:
         run: |
           npm run compile
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # @fno-studio/core (core/): no VS Code in it, and its unit tests (fake sign-in, recorded HTTP responses).
+          npm run test:core
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           foreach ($test in 'scripts/source-test.js', 'scripts/form-preview-test.js', 'scripts/xpp-config-test.js', 'scripts/vs-tools-test.js') {
             node $test
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -186,7 +189,7 @@ jobs:
             [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $exe, $true)
             $foreign = $zip.Entries | Where-Object Name -like 'Microsoft.Dynamics.*.dll'
             if ($foreign) { throw "$vsix contains Microsoft assemblies: $($foreign.Name -join ', ')" }
-            foreach ($required in 'extension/tools/pdb2pdb/Pdb2Pdb.exe', 'extension/changelog.md', 'extension/server/bin/XppVsCode.Server.exe.config') {
+            foreach ($required in 'extension/tools/pdb2pdb/Pdb2Pdb.exe', 'extension/changelog.md', 'extension/server/bin/XppVsCode.Server.exe.config', 'extension/core/dist/index.js') {
               if (-not ($zip.Entries | Where-Object FullName -eq $required)) { throw "$vsix is missing $required." }
             }
           } finally { $zip.Dispose() }

@@ -1,0 +1,26 @@
+{
+  "name": "@fno-studio/core",
+  "version": "0.1.0",
+  "description": "F&O Studio's cloud operations for Dynamics 365 Finance & Operations unified developer environments, without VS Code: deploy, database sync, SysTest runs, database access and environment setup.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nazmolla/xpp-vscode.git",
+    "directory": "core"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "win32"
+  ],
+  "scripts": {
+    "build": "tsc -p .",
+    "test": "node --test"
+  }
+}

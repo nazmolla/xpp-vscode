@@ -2755,7 +2755,8 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p .",
+    "compile": "tsc -p core && tsc -p .",
+    "test:core": "node scripts/check-core.js && npm --prefix core test",
     "watch": "tsc -watch -p .",
     "build:server": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-server.ps1",
     "test:server": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-server.ps1 -Test && node scripts/check-bridge-actions.js",

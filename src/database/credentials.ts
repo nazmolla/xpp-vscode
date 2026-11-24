@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { Dataverse } from '../dataverse';
+import { withAbortSignal } from '../coreHost';
+import { selectedDataverse } from '../dataverse';
 import { httpFetch } from '../ude';
 
 /** Just-in-time SQL credentials of a unified environment's database, as Visual Studio's Power Platform Tools request them. */
@@ -129,12 +130,12 @@ export async function requestCredentials(environment: string, hasValidCredential
 
     return vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Requesting database credentials for ${environment}…`, cancellable: true },
         async (_progress, token) => {
-            const dataverse = await Dataverse.forSelectedEnvironment();
-            const result = await dataverse.action(RequestAction, {
+            const dataverse = await selectedDataverse();
+            const result = await withAbortSignal(token, signal => dataverse.action(RequestAction, {
                 sqljitclientipaddress: addresses.trim(),
                 sqljitreason: reason.trim(),
                 sqljitrole: role.label,
-            }, token);
+            }, signal));
             return toCredentials(result, role.label, addresses.trim());
         });
 }

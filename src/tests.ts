@@ -3,7 +3,7 @@ import { promises as fs } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { Dataverse } from './dataverse';
+import { selectedDataverse } from './dataverse';
 import { readActiveEnvironment } from './environment';
 import { findActiveProject, readProject } from './project';
 import { XppServerClient } from './serverClient';
@@ -181,7 +181,7 @@ export async function runTests(server: XppServerClient, request: TestRunRequest,
         return { summary: 'No tests found. Test classes must extend SysTestCase (or a subclass) and test methods must be public and start with "test" or carry [SysTestMethod].', results: [] };
     }
 
-    const dv = await Dataverse.forSelectedEnvironment();
+    const dv = await selectedDataverse();
     const dataverseUrl = dv.url;
 
     const runtimeRoot = env.runtimePackagesDirectory ?? env.frameworkDirectory;

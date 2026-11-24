@@ -1,0 +1,18 @@
+[
+  {
+    "request": { "method": "GET", "url": "/api/data/v9\\.2/solutions\\?" },
+    "response": { "status": 200, "headers": { "Content-Type": "application/json" }, "body": { "value": [ { "solutionid": "6f1d2c3b-0a9e-4f8d-b7c6-5e4d3c2b1a09" } ] } }
+  },
+  {
+    "request": { "method": "POST", "url": "/api/data/v9\\.2/msprov_dbsynctofinopsasync$" },
+    "response": { "status": 200, "headers": { "Content-Type": "application/json" }, "body": { "@odata.context": "https://contoso.crm.dynamics.com/api/data/v9.2/$metadata#Microsoft.Dynamics.CRM.msprov_dbsynctofinopsasyncResponse", "asyncoperationid": "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d" } }
+  },
+  {
+    "request": { "method": "GET", "url": "/api/data/v9\\.2/asyncoperations\\(5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d\\)" },
+    "response": { "status": 200, "headers": { "Content-Type": "application/json" }, "body": { "statecode": 2, "statuscode": 20, "statuscode@OData.Community.Display.V1.FormattedValue": "In Progress" } }
+  },
+  {
+    "request": { "method": "GET", "url": "/api/data/v9\\.2/asyncoperations\\(5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d\\)" },
+    "response": { "status": 200, "headers": { "Content-Type": "application/json" }, "body": { "statecode": 3, "statuscode": 31, "statuscode@OData.Community.Display.V1.FormattedValue": "Failed", "message": "Database synchronization failed.", "friendlymessage": "Table XvsTest: field Foo has no extended data type." } }
+  }
+]

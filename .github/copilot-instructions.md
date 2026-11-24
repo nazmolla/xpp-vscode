@@ -9,6 +9,7 @@ Target environments: unified developer environments (UDE, Power Platform hosted)
 - `src/` — TypeScript extension.
   - `environment.ts` reads the active D365FO configuration: registry `HKCU\Software\Microsoft\Dynamics\AX7\Development\Configurations` → `CurrentMetadataConfig` (JSON under `%LOCALAPPDATA%\Microsoft\Dynamics365\XPPConfig`). Shared with Visual Studio.
   - `mcpProvider.ts` registers the MCP server via `vscode.lm.registerMcpServerDefinitionProvider` (`contributes.mcpServerDefinitionProviders` id `xpp.mcp`). Launches `server/bin/XppVsCode.Server.exe --config <json> [--project <rnrproj>]`. Project = `xpp.project` setting, else first `**/*.rnrproj`.
+- `core/` — `@fno-studio/core`: the cloud operations without VS Code (Dataverse client, deploy and DB sync), shared with the Claude Code plugin (nazmolla/D365FO-for-Claude). Builds to `core/dist` (JS + .d.ts, Node 20+); the extension imports it only through `src/core.ts` and supplies the host pieces (`src/coreHost.ts`: `TokenProvider` over VS Code's Microsoft sign-in, cancellation token → `AbortSignal`). Never import `vscode` in core/ (`node scripts/check-core.js`); hosts pass sign-in, `Log`, `Progress`, `AbortSignal` and settings in.
 - `server/` — .NET Framework 4.8 x64 MCP server (stdio, one JSON-RPC message per line; stdout is protocol only, logs go to stderr).
   - `Program.cs` sets `AssemblyResolve` to `<FrameworkDirectory>\bin` BEFORE touching D365FO types (`Run` is `NoInlining`).
   - `McpStdioServer.cs` transport; `initialize` returns the embedded `Resources/XppCopilotSystemPrompt.txt` as instructions.
@@ -31,7 +32,8 @@ Target environments: unified developer environments (UDE, Power Platform hosted)
 - Work directly on `main`; releases are tags (`vX.Y.Z`), not branches. No long-lived, per-fix or `release/*` branches: a short feature branch is fine only if it is merged and deleted right away. Keep `gh-pages` (it serves GitHub Pages); never merge it into `main`.
 
 ## Build and test
-- `npm install`, then `npm run build` (= `build:server` + `compile`).
+- `npm install`, then `npm run build` (= `build:server` + `compile`; `compile` builds `core/` first).
+- `npm run test:core`: the no-VS Code guard and core's unit tests (`node --test` in core/, fake `TokenProvider`, recorded HTTP responses in `core/test/fixtures`). Release CI runs it.
 - `scripts/build-server.ps1` finds `PackagesLocalDirectory\bin` from the active configuration and passes it as `D365BinPath`.
 - `scripts/smoke-test.ps1` starts the server over stdio with `TestProj.rnrproj` and runs 16 read-only tool calls with a timeout; all must PASS. Run it after every server change.
 - `node scripts/security-probes.js` (DAST: ownership, traversal, SQL, regex, URL allow-list, protocol) must report every probe PASS after server changes. Probes on standard objects must carry a payload that fails before saving; never point a write probe at a real standard object.

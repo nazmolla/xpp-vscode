@@ -1,8 +1,10 @@
 import { randomUUID } from 'crypto';
-import { promises as dns } from 'dns';
 import * as vscode from 'vscode';
+import { httpFetch, resolveDataverseUrl, validateDataverseUrl } from './core';
 import { orgName, selectedEnvironmentUrl, useEnvironment } from './environment';
 import { showReportableError } from './reportProblem';
+
+export { httpFetch, normalizeDataverseUrl, resolveDataverseUrl, validateDataverseUrl } from './core';
 
 const DevToolsService = 'https://developertools.powerplatform.microsoft.com';
 
@@ -119,74 +121,6 @@ async function blobSize(sasUrl: string): Promise<number | undefined> {
     const response = await httpFetch(sasUrl, { method: 'HEAD' });
     const length = response.headers.get('content-length');
     return response.ok && length ? Number(length) : undefined;
-}
-
-const NetworkHints: Record<string, string> = {
-    ENOTFOUND: 'the host name does not resolve; check the URL, DNS or proxy',
-    ECONNREFUSED: 'the connection was refused; check the proxy and firewall',
-    ECONNRESET: 'the connection was reset; check the proxy and firewall',
-    ETIMEDOUT: 'the connection timed out; check the proxy and firewall',
-    UND_ERR_CONNECT_TIMEOUT: 'the connection timed out; check the proxy and firewall',
-    UNABLE_TO_GET_ISSUER_CERT_LOCALLY: 'a proxy inspects TLS with a certificate this machine does not trust',
-    SELF_SIGNED_CERT_IN_CHAIN: 'a proxy inspects TLS with a certificate this machine does not trust',
-};
-
-/** fetch whose network errors name the host and the cause; Node's own message is only "fetch failed". */
-export async function httpFetch(url: string, init?: RequestInit): Promise<Response> {
-    try {
-        return await fetch(url, init);
-    } catch (err) {
-        if ((err as Error).name === 'AbortError') {
-            throw err;
-        }
-        const cause = (err as { cause?: { code?: string; message?: string } }).cause;
-        const code = cause?.code ?? '';
-        // Only the host: download URLs carry a SAS token.
-        throw new Error(`Cannot reach ${new URL(url).host}: ${NetworkHints[code] ?? cause?.message ?? (err as Error).message}${code ? ` (${code})` : ''}.`);
-    }
-}
-
-export function validateDataverseUrl(input: string): string | undefined {
-    let host: string;
-    try {
-        host = new URL(normalizeDataverseUrl(input)).hostname.toLowerCase();
-    } catch {
-        return 'Enter a URL such as https://yourorg.crm.dynamics.com';
-    }
-    if (/(^|\.)(powerplatform\.microsoft\.com|powerapps\.com)$/.test(host)) {
-        return 'That is a portal page. Copy the environment\'s "Environment URL" (https://yourorg.crm.dynamics.com) from the Power Platform admin center.';
-    }
-    return undefined;
-}
-
-export function normalizeDataverseUrl(input: string): string {
-    const trimmed = input.trim().replace(/\/+$/, '');
-    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-}
-
-const DataverseRegions = ['crm', 'crm2', 'crm3', 'crm4', 'crm5', 'crm6', 'crm7', 'crm8', 'crm9', 'crm11', 'crm12', 'crm14', 'crm15', 'crm16', 'crm17', 'crm19', 'crm20', 'crm21'];
-
-/** A unified developer environment's F&O host shares its org name with Dataverse; finds the regional Dataverse host. */
-export async function resolveDataverseUrl(input: string): Promise<string> {
-    const url = new URL(normalizeDataverseUrl(input));
-    const match = /^([^.]+)\.operations\.dynamics\.com$/i.exec(url.hostname);
-    if (!match) {
-        return url.origin;
-    }
-    const found = await Promise.all(DataverseRegions.map(async region => {
-        const host = `${match[1]}.${region}.dynamics.com`;
-        try {
-            await dns.lookup(host);
-            return host;
-        } catch {
-            return undefined;
-        }
-    }));
-    const host = found.find(h => h);
-    if (!host) {
-        throw new Error(`No Dataverse environment found for ${url.hostname}. Enter the Dataverse URL (https://<org>.crm.dynamics.com) from the Power Platform admin center.`);
-    }
-    return `https://${host}`;
 }
 
 /** F&O Studio: Check Environment Connection — sign in and run every read-only step of the setup. */

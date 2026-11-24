@@ -3,6 +3,9 @@ server/**
 !server/bin/XppVsCode.Server.exe
 !server/bin/XppVsCode.Server.exe.config
 node_modules/**
+core/src/**
+core/test/**
+core/tsconfig.json
 tsconfig.json
 **/*.map
 .gitignore

@@ -1,5 +1,6 @@
 node_modules/
 out/
+core/dist/
 *.vsix
 server/bin/
 server/obj/

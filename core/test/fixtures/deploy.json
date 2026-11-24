@@ -1,0 +1,31 @@
+[
+  {
+    "request": { "method": "GET", "url": "/api/data/v9\\.2/solutions\\?\\$filter=uniquename eq 'msprov_fnouploadersolution'" },
+    "response": { "status": 200, "headers": { "Content-Type": "application/json; odata.metadata=minimal" }, "body": { "@odata.context": "https://contoso.crm.dynamics.com/api/data/v9.2/$metadata#solutions(solutionid)", "value": [ { "@odata.etag": "W/\"1234567\"", "solutionid": "6f1d2c3b-0a9e-4f8d-b7c6-5e4d3c2b1a09" } ] } }
+  },
+  {
+    "request": { "method": "POST", "url": "/api/data/v9\\.2/msprov_fnopackages$" },
+    "response": { "status": 204, "headers": { "OData-EntityId": "https://contoso.crm.dynamics.com/api/data/v9.2/msprov_fnopackages(0b7e8a52-3c1d-4f6e-9a8b-7c6d5e4f3a21)", "OData-Version": "4.0" } }
+  },
+  {
+    "request": { "method": "PATCH", "url": "/api/data/v9\\.2/msprov_fnopackages\\(0b7e8a52-3c1d-4f6e-9a8b-7c6d5e4f3a21\\)/msprov_packagepayload$" },
+    "response": { "status": 204, "headers": { "OData-Version": "4.0" } }
+  },
+  {
+    "request": { "method": "POST", "url": "/api/data/v9\\.2/msprov_deploypackagetofinopsasync$" },
+    "response": { "status": 200, "headers": { "Content-Type": "application/json; odata.metadata=minimal" }, "body": { "@odata.context": "https://contoso.crm.dynamics.com/api/data/v9.2/$metadata#Microsoft.Dynamics.CRM.msprov_deploypackagetofinopsasyncResponse", "asyncoperationid": { "@odata.type": "#Microsoft.Dynamics.CRM.asyncoperation", "asyncoperationid": "9c8b7a65-4d3e-2f1a-0b9c-8d7e6f5a4b3c" } } }
+  },
+  {
+    "request": { "method": "GET", "url": "/api/data/v9\\.2/asyncoperations\\(9c8b7a65-4d3e-2f1a-0b9c-8d7e6f5a4b3c\\)\\?\\$select=statecode,statuscode,message,friendlymessage" },
+    "response": { "status": 200, "headers": { "Content-Type": "application/json" }, "body": { "statecode": 1, "statecode@OData.Community.Display.V1.FormattedValue": "Suspended", "statuscode": 10, "statuscode@OData.Community.Display.V1.FormattedValue": "Waiting", "message": null, "friendlymessage": null } }
+  },
+  {
+    "request": { "method": "GET", "url": "/api/data/v9\\.2/asyncoperations\\(9c8b7a65-4d3e-2f1a-0b9c-8d7e6f5a4b3c\\)" },
+    "repeat": 2,
+    "response": { "status": 200, "headers": { "Content-Type": "application/json" }, "body": { "statecode": 2, "statecode@OData.Community.Display.V1.FormattedValue": "Locked", "statuscode": 20, "statuscode@OData.Community.Display.V1.FormattedValue": "In Progress", "message": null, "friendlymessage": null } }
+  },
+  {
+    "request": { "method": "GET", "url": "/api/data/v9\\.2/asyncoperations\\(9c8b7a65-4d3e-2f1a-0b9c-8d7e6f5a4b3c\\)" },
+    "response": { "status": 200, "headers": { "Content-Type": "application/json" }, "body": { "statecode": 3, "statecode@OData.Community.Display.V1.FormattedValue": "Completed", "statuscode": 30, "statuscode@OData.Community.Display.V1.FormattedValue": "Succeeded", "message": null, "friendlymessage": null } }
+  }
+]

@@ -112,10 +112,7 @@ export class PacCommands {
                     const converted = await convertPackagePdbs(this.pdb2pdb, path.join(projectPackageFolder, 'bin'));
                     converted.failed.forEach(f => output.appendLine(`Warning: ${path.basename(f.file)} was not converted to a portable PDB: ${f.error}`));
                 }
-                await deployPackages(packages, sync, line => {
-                    output.appendLine(line);
-                    progress.report({ message: line.trim() });
-                }, token);
+                await deployPackages(packages, sync, { line: line => output.appendLine(line) }, { report: message => progress.report({ message }) }, token);
             });
         output.appendLine('Deployed.');
         vscode.window.showInformationMessage(`Deployed ${packages.map(p => p.name).join(', ')}.`);
@@ -148,10 +145,7 @@ export class PacCommands {
         output.appendLine(`Synchronizing the database (${mode}${modules.length ? `: ${modules.join(', ')}` : ''})…`);
         await vscode.window.withProgress(
             { location: vscode.ProgressLocation.Notification, title: 'Synchronizing the database', cancellable: true },
-            (progress, token) => syncUdeDatabase(mode, modules, line => {
-                output.appendLine(line);
-                progress.report({ message: line.trim() });
-            }, token));
+            (progress, token) => syncUdeDatabase(mode, modules, { line: line => output.appendLine(line) }, { report: message => progress.report({ message }) }, token));
         output.appendLine('Database synchronized.');
     }
 
