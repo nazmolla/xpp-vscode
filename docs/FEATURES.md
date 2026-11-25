@@ -2,6 +2,8 @@
 
 Develop Dynamics 365 Finance & Operations X++ code in VS Code, without Visual Studio. F&O Studio is for X++ developers on Windows who work on unified developer environments (UDE), cloud-hosted environments or VHD environments.
 
+Documentation for every feature, with end-to-end scenarios: [nazmolla.github.io/xpp-vscode/docs](https://nazmolla.github.io/xpp-vscode/docs/).
+
 - **No Visual Studio needed.** You get the Application Explorer, element and form designers, the SSRS report designer, X++ code navigation (including Chain of Command implementations), build, best practice checks, deployment packages, deploy, database sync and the debugger. They use the same metadata API, compiler and scripts as Visual Studio, and projects (`.rnrproj`, `.axpp`) open in both.
 - **Copilot works on the real metadata.** The agent tools read, create, extend and build elements through the metadata API. They change only your own models, every write is all or nothing, and you can revert a whole Copilot session.
 - **Tools Visual Studio doesn't have:** a report preview with Microsoft's report engine and a scanned-form overlay, an agent that builds reports from a scanned form, table data and SQL with query plans, static and live performance analysis, a built-in trace (`.etl`) analyzer, license and segregation-of-duties analysis, upgrade readiness and a pre-deploy checklist.
