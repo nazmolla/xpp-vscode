@@ -1,0 +1,82 @@
+name: Bug report
+description: Something in F&O Studio doesn't work as expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Tip: **F&O Studio: Report a Problem…** in VS Code fills in versions and recent errors for you (paths, URLs and names removed).
+        Don't paste credentials, tokens, customer data or environment URLs.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Application Explorer
+        2. Right-click CustTable > Browse Table Data
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Application Explorer / projects
+        - Element designer / form preview
+        - Code editor / code intelligence
+        - Build / best practice
+        - Deploy / database sync
+        - Debugger
+        - Tests
+        - Data (Browse Table Data, SQL)
+        - Performance / trace analysis
+        - Reports / Report Designer
+        - Security and licensing
+        - Environment setup (Connect to Environment)
+        - Copilot agents / MCP tools
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment type
+      options:
+        - Unified developer environment (UDE)
+        - Cloud-hosted environment (CHE)
+        - VHD
+        - Not set up yet
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: F&O Studio version
+      description: Extensions view, or F&O Studio's output.
+      placeholder: "0.17.2"
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: Application version
+      placeholder: "10.0.2790.108"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output / error messages
+      description: From the Output panel (F&O Studio / X++ channels) or the error notification.
+      render: text
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Optional. Drag images here.

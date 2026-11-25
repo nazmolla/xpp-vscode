@@ -1,0 +1,9 @@
+# Blank issues stay enabled: Report a Problem in the extension opens issues/new with a prefilled body.
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation (wiki)
+    url: https://github.com/nazmolla/xpp-vscode/wiki
+    about: How to set up and use F&O Studio.
+  - name: Feature reference
+    url: https://github.com/nazmolla/xpp-vscode/blob/main/docs/FEATURES.md
+    about: The full list of features and settings.

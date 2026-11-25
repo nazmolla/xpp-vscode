@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest a new feature or an improvement.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The task or problem, as a D365FO developer or consultant would describe it.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like F&O Studio to do?
+    validations:
+      required: true
+  - type: textarea
+    id: visual-studio
+    attributes:
+      label: How does Visual Studio do it today?
+      description: Optional. The Visual Studio menu, window or behaviour this would match.
+  - type: dropdown
+    id: role
+    attributes:
+      label: You are a
+      options:
+        - Developer
+        - Functional consultant
+        - Solution architect
+        - Other
