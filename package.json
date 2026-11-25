@@ -1429,7 +1429,7 @@
       },
       {
         "command": "xpp.addReference",
-        "title": "Add Reference?",
+        "title": "Add Reference…",
         "category": "F&O Studio",
         "icon": "$(add)"
       },
@@ -1441,7 +1441,7 @@
       },
       {
         "command": "xpp.newCSharpProject",
-        "title": "New C# Project?",
+        "title": "New C# Project…",
         "category": "F&O Studio",
         "icon": "$(file-code)"
       },
