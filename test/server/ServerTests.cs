@@ -152,6 +152,29 @@ namespace XppVsCode.Server.Tests
             Assert.Equal("AxFormStringControl", runIdControl.GetType().Name);
             Assert.Equal("RunId", runIdControl.GetType().GetProperty("DataField")?.GetValue(runIdControl));
         }
+
+        [Fact]
+        public void FormControlsNamedByClassAreApplied()
+        {
+            // "$type" as xpp_read_object writes it and as the New Table with Form wizard sends it.
+            Type axFormType = Type.GetType("Microsoft.Dynamics.AX.Metadata.MetaModel.AxForm, Microsoft.Dynamics.AX.Metadata", throwOnError: true);
+            var form = Activator.CreateInstance(axFormType);
+            string json = @"{""Design"":{""Controls"":[
+                {""$type"":""AxFormActionPaneControl"",""Name"":""ActionPane""},
+                {""$type"":""AxFormGroupControl"",""Name"":""Filter"",""Controls"":[{""$type"":""AxFormControl"",""Name"":""QuickFilter""}]},
+                {""$type"":""AxFormGridControl"",""Name"":""Grid"",""DataSource"":""T"",""Controls"":[{""$type"":""AxFormStringControl"",""Name"":""Grid_Id"",""DataSource"":""T"",""DataField"":""Id""}]}
+            ]}}";
+            System.Reflection.MethodInfo apply = typeof(MetaModelBridge).GetMethod("ApplyTypedMetadataGraph", BindingFlags.NonPublic | BindingFlags.Static);
+            try { apply.Invoke(null, new object[] { form, "AxForm", json }); }
+            catch (TargetInvocationException ex) { throw ex.InnerException ?? ex; }
+
+            object design = axFormType.GetProperty("Design").GetValue(form);
+            var controls = ((IEnumerable)design.GetType().GetProperty("Controls").GetValue(design)).Cast<object>().ToList();
+            Assert.Equal(new[] { "AxFormActionPaneControl", "AxFormGroupControl", "AxFormGridControl" }, controls.Select(c => c.GetType().Name));
+            object field = ((IEnumerable)controls[2].GetType().GetProperty("Controls").GetValue(controls[2])).Cast<object>().Single();
+            Assert.Equal("AxFormStringControl", field.GetType().Name);
+            Assert.Equal("Id", field.GetType().GetProperty("DataField").GetValue(field));
+        }
     }
 
     public class WritePolicyTests

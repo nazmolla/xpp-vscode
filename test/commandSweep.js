@@ -160,7 +160,7 @@ async function run() {
             { objectType: 'AxTable', objectName: 'CustTable' },
             { objectType: 'AxClass', objectName: 'SalesFormLetter' },
             { objectType: 'AxForm', objectName: 'CustTable' },
-            { objectType: 'AxTable', objectName: process.env.XPP_SWEEP_CUSTOM_TABLE || 'XvsDemoReasonTable' },
+            { objectType: 'AxTable', objectName: process.env.XPP_SWEEP_CUSTOM_TABLE || 'XvsDemoGroup' },
         ];
         for (const target of targets) {
             for (const id of elementCommands) {

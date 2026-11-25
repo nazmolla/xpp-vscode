@@ -5,8 +5,7 @@ Keep this file current so a new session can resume from it (the original chat st
 ## Goal
 
 Fix every issue in [ai-tools-test-log.md](./ai-tools-test-log.md), re-test, build, commit and push to
-`https://github.com/nazmolla/xpp-vscode.git` (git identity `nazmyeg@gmail.com`). Then re-run the end-to-end scenario
-(`the design document`, model `testcust`) with the fixed tools.
+`https://github.com/nazmolla/xpp-vscode.git` (git identity `nazmyeg@gmail.com`). Then re-run the end-to-end scenario (model `testcust`) with the fixed tools.
 
 ## Status (2026-10-21)
 
@@ -33,9 +32,9 @@ Still to check by hand inside Visual Studio: delete/exclude/select through DTE a
 2. Run `xpp_run_tests` / Run Tests once against a deployed package (#31). Local (no deploy) test runtime: experimental, see [experimental/local-runtime](../experimental/local-runtime/README.md) — kernel boots in-process; blocked on table security.
 3. Re-run the end-to-end scenario in `testcust` with the fixed tools. Known fixes for objects created before this
    round (the last `xpp_build` reports them):
-   - `XvsDemoOrderType`, `XvsDemoReason`: set `UseEnumValue = No` (build errors).
+   - Enums created before the fix: set `UseEnumValue = No` (build errors).
    - Tab pages in the form extensions need a pattern; field-group-bound controls need their fields (warnings).
-   - Remaining design items: label file `testcust` labels in en-US and fr-CA applied to captions, a SysTest test class
+   - Remaining design items: labels in every language applied to captions, a SysTest test class
      for the validator/message/processor logic, then a clean build.
 
 ## Round 2 (2026-10-22): open items #37-#46, XRef note, U6-U10
@@ -107,7 +106,7 @@ Published to the VS Code Marketplace as `MNazmi.xpp-vscode` (0.5.0, then 0.5.1 w
 | Designer tree looks like VS | Done | Codicons per node type (bundled media/codicons), chevrons (the gray blob was formPreview.css's .toggle switch style), VS node order per element type, inline class methods / enum values / child controls / entity view metadata, Name (Control Type), root Name [Model], no counts. |
 | AOT categories in VS order; AI > Skills | Done | Data Types, Data Model, Code, User Interface, AI (Skills = AxSkill), Analytics, Reports, Business Process and Workflow, Label Files, Resources, Configuration, Security, References, Services. Folder names corrected (AxWorkflowTemplate, report templates, providers, direct access permissions). System Documentation (kernel) not available. |
 
-### Open (reported 2026-10-22 14:25, fix after the user's design test run finishes; do not reinstall or reload VS Code during the run)
+### Open (reported 2026-10-22 14:25, fix after the user's end-to-end test run finishes; do not reinstall or reload VS Code during the run)
 
 | Item | Status | Notes |
 |---|---|---|
@@ -147,11 +146,11 @@ User request: tools developers use in other languages; above all "find a similar
 
 0.8.0 released (round 6).
 
-## Round 7 (2026-10-23): design run 3 findings (0.8.0, all tools)
+## Round 7 (2026-10-23): end-to-end run 3 findings (0.8.0, all tools)
 
-Run: the session; end-to-end built as 46 objects, build 0 errors / 93 warnings (all ReferencedObjectIsObsolete from
+Run: the design built as 46 objects, build 0 errors / 93 warnings (all ReferencedObjectIsObsolete from
 the dual-write header entity chain). Precedent step worked (every object named its OOB precedent and reuse/extend/copy).
-Chat dump: c:\Users\Mohamed the session chat history; stats in the session's files\tool_stats.txt.
+Chat dump and tool statistics kept with the session.
 
 | # | Tool | Finding | Status |
 |---|---|---|---|

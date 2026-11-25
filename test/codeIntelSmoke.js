@@ -99,7 +99,7 @@ async function run() {
         '    CustTable::find(',
         '    letter.',
         '    NoYes x = NoYes::',
-        '    s = "@XvsRem";',
+        '    s = "@XvsDemo";',
         '}',
     ].join('\n');
     const doc = await untitled(code);
@@ -120,8 +120,8 @@ async function run() {
         const items = list.items.filter(i => i.kind !== vscode.CompletionItemKind.Text).map(i => ({ label: typeof i.label === 'string' ? i.label : i.label.label, owner: typeof i.label === 'string' ? '' : i.label.description }));
         return { count: items.length, owners: [...new Set(items.map(i => i.owner))].slice(0, 8) };
     });
-    await check('completion(labels "@XvsRem)', async () => {
-        const list = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, positionOf(doc, '"@XvsRem', 7), '@');
+    await check('completion(labels "@XvsDemo)', async () => {
+        const list = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri, positionOf(doc, '"@XvsDemo', 9), '@');
         const labelItems = list.items.filter(i => typeof i.label !== 'string' && String(i.label.label).startsWith('@'));
         return { count: labelItems.length, sample: labelItems.slice(0, 3).map(i => typeof i.label === 'string' ? i.label : i.label.label + ' ' + i.label.description) };
     });

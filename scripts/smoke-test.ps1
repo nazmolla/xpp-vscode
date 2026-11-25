@@ -1,5 +1,5 @@
 param(
-    [string]$Project = 'C:\Users\Mohamed Nazmi\source\repos\TestProj\TestProj.rnrproj',
+    [string]$Project = 'C:\Users\Mohamed Nazmi\source\repos\XvsDemo\XvsDemo.rnrproj',
     [int]$TimeoutSeconds = 300
 )
 $ErrorActionPreference = 'Stop'
@@ -21,8 +21,8 @@ $calls = @(
     @('xpp_find_references', @{ objectType = 'AxClass'; objectName = 'SalesFormLetter'; memberName = 'construct' }, 'SalesFormLetter'),
     @('xpp_read_label', @{ labelFileId = 'AccountsPayable'; labelId = 'AccountField' }, 'Account'),
     @('xpp_read_label', @{ labelFileId = 'AccountsPayable'; searchText = 'Vendor balance'; maxResults = 3 }, 'AccountsPayable'),
-    @('xpp_list_project_items', @{}, 'XvsDemoProcessor'),
-    @('xpp_validate_object', @{ objectType = 'AxClass'; objectName = 'XvsDemoProcessor' }, 'XvsDemoProcessor'),
+    @('xpp_list_project_items', @{}, 'XvsDemoPostService'),
+    @('xpp_validate_object', @{ objectType = 'AxClass'; objectName = 'XvsDemoPostService' }, 'XvsDemoPostService'),
     @('xpp_get_object_type_schema', @{ objectType = 'AxEnum' }, 'EnumValues')
 )
 

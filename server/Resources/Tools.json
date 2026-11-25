@@ -1442,7 +1442,7 @@
           },
           "labelId": {
             "type": "string",
-            "description": "The label ID to create (letters and digits, e.g. XvsDemoStatus). Omit when using labels."
+            "description": "The label ID to create (letters and digits, e.g. MyOrderStatus). Omit when using labels."
           },
           "text": {
             "type": "string",

@@ -390,12 +390,14 @@ namespace XppVsCode.Server.MetaModel
         private static AxFormControl CreateFormControl(Dictionary<string, object> node)
         {
             string controlType = Convert.ToString(GetNodeValue(node, "Type", "type"));
-            if (string.IsNullOrWhiteSpace(controlType) || !FormControlClasses.TryGetValue(controlType, out Type concreteType))
+            // "$type" is the metadata class name, as xpp_read_object writes it (e.g. AxFormGridControl, or AxFormControl for custom controls).
+            Type concreteType = ResolveFormControlClass(Convert.ToString(GetNodeValue(node, "$type")));
+            if (concreteType == null && (string.IsNullOrWhiteSpace(controlType) || !FormControlClasses.TryGetValue(controlType, out concreteType)))
                 throw new InvalidOperationException("Form control '" + Convert.ToString(GetNodeValue(node, "Name", "name"))
                     + "' needs a supported Type (for example Grid, String, ComboBox, Group).");
 
             var control = (AxFormControl)Activator.CreateInstance(concreteType);
-            var skipped = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Controls", "Type" };
+            var skipped = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Controls", "Type", "$type" };
             ApplyObjectNode(control, node, skipped);
 
             var childNodes = ToObjectArray(GetNodeValue(node, "Controls", "controls"));
@@ -412,6 +414,14 @@ namespace XppVsCode.Server.MetaModel
                 }
             }
             return control;
+        }
+
+        private static Type ResolveFormControlClass(string className)
+        {
+            if (string.IsNullOrWhiteSpace(className)) return null;
+            string name = className.Contains(".") ? className : typeof(AxFormControl).Namespace + "." + className;
+            Type type = typeof(AxFormControl).Assembly.GetType(name, false, true);
+            return type != null && !type.IsAbstract && typeof(AxFormControl).IsAssignableFrom(type) ? type : null;
         }
 
         private static object ParseTypedMetadataToNode(string objectType, string typedMetadataJson)

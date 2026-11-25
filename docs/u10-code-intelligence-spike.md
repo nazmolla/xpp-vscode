@@ -70,7 +70,7 @@ Effort: S (days), M (1-2 weeks), L (several weeks). Risk: how likely the approac
 | P1 | Completion after `.` / `::` with static types (10) + signature help (12) | U9 resolver | Members of `CustTable custTable; custTable.` include fields and methods incl. inherited; `CustTable::` lists static methods. |
 | P1 | Hover for labels, EDTs, enums (7) | - | Hover on `"@SYS7149"` shows the text; on an EDT its base type and size. |
 | P2 | Diagnostics on save via xppc (8) | - | Errors of the saved object appear in Problems within ~15 s; setting to disable. |
-| P2 | Workspace symbols (2) | - | Ctrl+T `XvsRem` finds objects and methods across models in under 1 s. |
+| P2 | Workspace symbols (2) | - | Ctrl+T `XvsDemo` finds objects and methods across models in under 1 s. |
 | P2 | Type hierarchy (5) + ERD and extension map visualizations (17) | - | ERD of `SalesTable` depth 2 renders as Mermaid; extension map lists table/form extensions and CoC classes. |
 | P2 | Label/EDT/table completion in literals (11) | label index | Typing `"@` offers labels of the project's label files with text. |
 | P3 | Live syntax diagnostics with the compiler front end (9) | capability spike | Syntax errors appear while typing without a build; no measurable typing lag. |

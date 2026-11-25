@@ -145,7 +145,7 @@ namespace XppVsCode.Server.MetaModel
                 string id = label.LabelId?.Trim();
                 if (string.IsNullOrEmpty(id) || !LabelIdPattern.IsMatch(id))
                 {
-                    lines.Add("FAILED '" + label.LabelId + "': the label ID must be letters, digits or _ (e.g. XvsDemoStatus).");
+                    lines.Add("FAILED '" + label.LabelId + "': the label ID must be letters, digits or _ (e.g. MyOrderStatus).");
                     failed = true;
                     continue;
                 }

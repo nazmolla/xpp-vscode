@@ -11,7 +11,7 @@ const [outFile, flag, baselineFile] = process.argv.slice(2);
 if (!outFile) { console.log('Usage: node scripts/golden-master.js <outputFile> [--compare <baselineFile>]'); process.exit(2); }
 const reg = execSync('reg query "HKCU\\Software\\Microsoft\\Dynamics\\AX7\\Development\\Configurations" /v CurrentMetadataConfig', { encoding: 'utf8' });
 const config = /CurrentMetadataConfig\s+REG_SZ\s+(.+)/.exec(reg)?.[1]?.trim();
-const project = 'C:\\Users\\Mohamed Nazmi\\source\\repos\\TestProj\\TestProj.rnrproj';
+const project = 'C:\\Users\\Mohamed Nazmi\\source\\repos\\XvsDemo\\XvsDemo.rnrproj';
 const temp = path.join(os.tmpdir(), 'xpp-golden');
 fs.rmSync(temp, { recursive: true, force: true });
 fs.mkdirSync(temp, { recursive: true });
@@ -113,10 +113,10 @@ const steps = [
     ...[['AxForm', 'CustGroup'], ['AxEdt', 'CustGroupId'], ['AxView', 'CustTableCube'], ['AxQuery', 'CustTable'], ['AxDataEntityView', 'CustCustomerGroupEntity'],
         ['AxMenu', 'AccountsReceivable'], ['AxMenuItemDisplay', 'CustGroup'], ['AxMenuItemOutput', 'CustAgingBalance'], ['AxMenuItemAction', 'CustCollectionLetterPost'],
         ['AxSecurityDuty', 'CredManCreditLimitCustGroupView'], ['AxSecurityRole', 'FMClerk'], ['AxService', 'CustRecurrenceInvoicePostService'],
-        ['AxServiceGroup', 'WHSServices'], ['AxTile', 'CustTableListPageTile'], ['AxConfigurationKey', 'LedgerBasic'], ['AxTableExtension', 'AssetTable.XvsDemoLabels'],
+        ['AxServiceGroup', 'WHSServices'], ['AxTile', 'CustTableListPageTile'], ['AxConfigurationKey', 'LedgerBasic'], ['AxTableExtension', 'AssetBook.AppSuite_TR_Extension'],
         ['AxEnumExtension', 'SalesPurchCopy.TAMDeduction'], ['AxEdtExtension', 'NoSuchEdtXvs.Extension'], ['AxFormExtension', 'CustGroup.SubBillDeferralExtension'],
-        ['AxDataEntityViewExtension', 'SalesOrderHeaderV2Entity.XvsDemoLabels'], ['AxSecurityDutyExtension', 'LedgerEntitiesView.Extension'],
-        ['AxSecurityRoleExtension', 'LedgerAccountant.XvsDemoLabels'], ['AxMenuExtension', 'AccountsReceivable.XvsDemoLabels'],
+        ['AxDataEntityViewExtension', 'BankAccountEntity.ApplicationSuite_IT_Extension'], ['AxSecurityDutyExtension', 'LedgerEntitiesView.Extension'],
+        ['AxSecurityRoleExtension', 'CustInvoiceAccountsReceivableManager.ApplicationSuite'], ['AxMenuExtension', 'AccountsReceivable.ApplicationSuiteExtension'],
         ['AxCompositeDataEntityView', 'SalesOrderV2Entity'], ['AxMap', 'TradePostalAddress'], ['AxReport', 'CustAgingReport'], ['AxWorkflowCategory', 'CustCategory'],
         ['AxLabelFile', 'XvsDemoLabels_en-US'], ['AxNoSuchType', 'X']]
         .flatMap(([objectType, objectName]) => [b('read_object', { objectType, objectName }), b('validate_object', { objectType, objectName })]),

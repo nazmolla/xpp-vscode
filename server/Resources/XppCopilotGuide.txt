@@ -792,7 +792,7 @@ DATA ENTITY EXTENSIONS — ENTITY AND STAGING TABLE TOGETHER (MANDATORY):
      an AxTableExtension first if it is new).
   2. xpp_read_object the entity (AxDataEntityView) to see its data sources and staging table.
   3. xpp_create_object objectType=AxDataEntityViewExtension, objectName='<Entity>.<Suffix>',
-     entityFields=[{"name":"XvsDemoOrderNumber","dataSource":"SalesTable","dataField":"XvsDemoOrderNumber"}].
+     entityFields=[{"name":"MyExternalReference","dataSource":"SalesTable","dataField":"MyExternalReference"}].
      Everything is validated before saving: the data source must be on the entity, the field must
      exist on its table or a table extension, and the name must be unused on the entity.
   4. The staging table extension '<StagingTable>.<Suffix>' is created (or updated) automatically
